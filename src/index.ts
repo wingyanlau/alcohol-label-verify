@@ -21,6 +21,10 @@ export interface Env {
   /** Set with `wrangler secret put MODEL_API_KEY`. Never present in config. */
   MODEL_API_KEY?: string
 
+  /** On-platform inference. Carries its own auth — no separate credential. */
+  AI?: Ai
+  /** Work distribution. One submission per message (B-D4). */
+  WORK?: Queue<WorkMessage>
   /** Transient submission content. Purged at job completion (B-D10). */
   STAGING?: R2Bucket
   /** The durable record and append-only transaction history (D32). */
@@ -35,6 +39,21 @@ export interface Env {
  * after the fact. Startup is the only cheap point to catch it.
  */
 const FLOATING_SUFFIXES = ['latest', 'preview', 'stable', 'current']
+
+/**
+ * One unit of work: a single submission. Deliberately carries only references —
+ * queue messages are capped at 128 KB, so content travels in R2 and its key
+ * travels here (batch design §15.1).
+ */
+export interface WorkMessage {
+  readonly jobId: string
+  readonly submissionId: string
+  readonly contentKey: string
+  readonly contentDigest: string
+}
+
+/** Providers whose credential is supplied by a binding rather than a secret. */
+const BINDING_AUTHED_PROVIDERS = new Set(['workers-ai'])
 
 export type ConfigProblem = { readonly setting: string; readonly problem: string }
 
@@ -51,8 +70,16 @@ export function validateConfig(env: Env): ConfigProblem[] {
     })
   }
 
-  if ((env.MODEL_PROVIDER ?? '').trim() === '' || env.MODEL_PROVIDER === 'unset') {
+  const provider = (env.MODEL_PROVIDER ?? '').trim()
+  if (provider === '' || provider === 'unset') {
     problems.push({ setting: 'MODEL_PROVIDER', problem: 'not set' })
+  } else if (!BINDING_AUTHED_PROVIDERS.has(provider) && !env.MODEL_API_KEY) {
+    // An external provider needs a credential; a binding-authed one does not.
+    // Requiring a key uniformly would report a healthy deployment as broken.
+    problems.push({
+      setting: 'MODEL_API_KEY',
+      problem: `provider "${provider}" needs a credential — set it with \`wrangler secret put MODEL_API_KEY\``,
+    })
   }
 
   const positiveInt = (name: keyof Env) => {
@@ -81,6 +108,7 @@ function bindings(env: Record<string, unknown>): Record<string, boolean> {
   return {
     staging: 'STAGING' in env,
     database: 'DB' in env,
+    inference: 'AI' in env,
     workQueue: 'WORK' in env,
     jobCoordinator: 'JOB' in env,
     modelApiKey: typeof env.MODEL_API_KEY === 'string' && env.MODEL_API_KEY.length > 0,
@@ -138,6 +166,34 @@ export default {
       )
     }
 
+    // Deployment probe, not application logic: confirms the inference binding
+    // is reachable and reports round-trip latency. Whether the model can read a
+    // 4.5pt warning statement is a different question, answered by the corpus
+    // (B-Q4), not by a health check.
+    if (pathname === '/health/inference') {
+      if (!env.AI) return json({ status: 'unavailable', reason: 'no AI binding' }, 503)
+      const started = Date.now()
+      try {
+        const out = (await env.AI.run(env.MODEL_ID as keyof AiModels, {
+          messages: [{ role: 'user', content: 'Reply with the single word: ready' }],
+          max_tokens: 8,
+        } as never)) as { response?: string }
+        return json({
+          status: 'ok',
+          model: env.MODEL_ID,
+          latencyMs: Date.now() - started,
+          reply: (out.response ?? '').trim().slice(0, 40),
+        })
+      } catch (e) {
+        return json({
+          status: 'error',
+          model: env.MODEL_ID,
+          latencyMs: Date.now() - started,
+          error: e instanceof Error ? e.message : String(e),
+        }, 502)
+      }
+    }
+
     if (pathname === '/') {
       return new Response(
         'TTB Label Check — deployment skeleton. No application yet.\n' +
@@ -148,4 +204,35 @@ export default {
 
     return json({ error: 'not_found', path: pathname }, 404)
   },
-} satisfies ExportedHandler<Env>
+
+  /**
+   * Work consumer — skeleton.
+   *
+   * One submission per invocation (B-D4): batching would serialise the two
+   * parallel extractions against the 6-connection cap. The verification
+   * pipeline is not built yet, so this validates the message shape and
+   * acknowledges.
+   *
+   * Retry is bounded and permitted here, unlike on the interactive path
+   * (§9.2): the agent is not waiting on any individual batch item, so a retry
+   * is invisible rather than a doubling of worst-case latency.
+   */
+  async queue(batch: MessageBatch<WorkMessage>, _env: Env): Promise<void> {
+    for (const message of batch.messages) {
+      const { jobId, submissionId, contentKey } = message.body ?? ({} as WorkMessage)
+      if (!jobId || !submissionId || !contentKey) {
+        // Malformed messages are not retried — redelivery cannot fix them.
+        console.log(JSON.stringify({
+          event: 'work.rejected', reason: 'malformed', messageId: message.id,
+        }))
+        message.ack()
+        continue
+      }
+      // Payload-free by policy (D20): identifiers and classifications only.
+      console.log(JSON.stringify({
+        event: 'work.received', jobId, submissionId, attempt: message.attempts,
+      }))
+      message.ack()
+    }
+  },
+} satisfies ExportedHandler<Env, WorkMessage>

@@ -24,8 +24,13 @@
     // Model identity must be fully qualified. The service refuses to start on a
     // floating alias such as "-latest" (D29): a mutable identifier silently
     // invalidates every audit record that cites it.
-    "MODEL_PROVIDER": "unset",
-    "MODEL_ID": "unset",
+    "MODEL_PROVIDER": "workers-ai",
+    // Fully qualified. Candidates for the corpus evaluation (test-plan §18.2):
+    //   @cf/meta/llama-4-scout-17b-16e-instruct    natively multimodal, tool calling
+    //   @cf/mistralai/mistral-small-3.1-24b-instruct  strong vision, 128k context
+    //   @cf/moondream/moondream3.1-9B-A2B          advertises OCR + structured output
+    // Which reads a 4.5pt warning statement best is a measurement, not an opinion.
+    "MODEL_ID": "@cf/meta/llama-4-scout-17b-16e-instruct",
 
     // Intake limits, enforced server-side regardless of client checks (§9.3).
     "MAX_UPLOAD_BYTES": "10485760",
@@ -59,28 +64,28 @@
     }
   ],
 
+  // On-platform inference. No separate credential: the binding carries auth,
+  // which is why /health does not require MODEL_API_KEY for this provider.
+  "ai": { "binding": "AI" },
+
+  "queues": {
+    "producers": [
+      { "binding": "WORK", "queue": "alcohol-label-verify-work" }
+    ],
+    "consumers": [
+      {
+        "queue": "alcohol-label-verify-work",
+        // One submission per invocation. Batching would serialise the two
+        // parallel extractions against the 6-connection cap (B-D4).
+        "max_batch_size": 1,
+        "max_retries": 3,
+        "dead_letter_queue": "alcohol-label-verify-dlq"
+      }
+    ]
+  },
+
   // ---------------------------------------------------------------------------
-  // Still to create:
-  //
-  //   npx wrangler queues create alcohol-label-verify-work
-  //   npx wrangler queues create alcohol-label-verify-dlq
-  //
-  // "queues": {
-  //   "producers": [
-  //     { "binding": "WORK", "queue": "alcohol-label-verify-work" }
-  //   ],
-  //   "consumers": [
-  //     {
-  //       "queue": "alcohol-label-verify-work",
-  //       // One submission per invocation. Batching would serialise the two
-  //       // parallel extractions against the 6-connection cap (B-D4).
-  //       "max_batch_size": 1,
-  //       "max_retries": 3,
-  //       "dead_letter_queue": "alcohol-label-verify-dlq"
-  //     }
-  //   ]
-  // },
-  //
+  // Still to enable:
   // // One coordinator per job: ledger, progress, and client fan-out (§15.3).
   // // It must never fetch or extract — its connection cap makes that a hard
   // // boundary, not a preference.
