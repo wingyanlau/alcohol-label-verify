@@ -1,0 +1,206 @@
+/**
+ * Contract tests for the extraction boundary.
+ *
+ * Test IDs refer to `docs/test-plan.md` §4.
+ *
+ * CT-10 is the guard test. It asserts structurally — not behaviourally — that
+ * application data cannot reach the extractor. A behavioural test would only
+ * show that it did not happen this time.
+ */
+
+import { describe, expect, expectTypeOf, it } from 'vitest'
+import {
+  ExtractionContractError,
+  type ExtractionRequest,
+  parseExtractionResponse,
+} from './extraction.js'
+import type { ApplicationData } from './types.js'
+
+const wellFormed = {
+  fields: {
+    brandName: { value: 'OLD TOM DISTILLERY', confidence: 0.97 },
+    classType: { value: 'Kentucky Straight Bourbon Whiskey', confidence: 0.95 },
+    alcoholContent: { value: '45% Alc./Vol.', confidence: 0.93 },
+    netContents: { value: '750 mL', confidence: 0.9 },
+  },
+  warningStatement: 'GOVERNMENT WARNING: (1) According to the Surgeon General…',
+}
+
+describe('CT — the extraction contract', () => {
+  it('CT-01 — a well-formed response is accepted', () => {
+    const e = parseExtractionResponse(wellFormed)
+    expect(e.fields.brandName.raw).toBe('OLD TOM DISTILLERY')
+    expect(e.fields.brandName.confidence).toBeCloseTo(0.97)
+    expect(e.warningStatement).toContain('GOVERNMENT WARNING')
+  })
+
+  it('CT-02 — a field explicitly reported absent is accepted', () => {
+    // Absence is a first-class answer, not the absence of an answer (§8.3.2).
+    const e = parseExtractionResponse({
+      ...wellFormed,
+      fields: { ...wellFormed.fields, netContents: { present: false } },
+    })
+    expect(e.fields.netContents.raw).toBeNull()
+    expect(e.fields.netContents.unreadable).toBe(false)
+  })
+
+  it('CT-03 — a field explicitly reported unreadable is accepted, and distinct from absent', () => {
+    const e = parseExtractionResponse({
+      ...wellFormed,
+      fields: { ...wellFormed.fields, netContents: { unreadable: true } },
+    })
+    expect(e.fields.netContents.unreadable).toBe(true)
+    expect(e.fields.netContents.raw).toBeNull()
+  })
+
+  it('CT-03b — a value reported alongside the unreadable flag is discarded', () => {
+    // A model under schema pressure may fill the slot and flag it. The flag
+    // wins: a guess must never reach the comparator as a reading.
+    const e = parseExtractionResponse({
+      ...wellFormed,
+      fields: { ...wellFormed.fields, netContents: { value: '700 mL', unreadable: true } },
+    })
+    expect(e.fields.netContents.raw).toBeNull()
+  })
+
+  it('CT-04 — a missing required key is rejected', () => {
+    const { netContents: _omitted, ...rest } = wellFormed.fields
+    expect(() => parseExtractionResponse({ ...wellFormed, fields: rest })).toThrow(
+      /missing required field "netContents"/,
+    )
+  })
+
+  it('CT-05 — a non-string value is rejected', () => {
+    expect(() =>
+      parseExtractionResponse({
+        ...wellFormed,
+        fields: { ...wellFormed.fields, alcoholContent: { value: 45 } },
+      }),
+    ).toThrow(/non-string value/)
+  })
+
+  it('CT-06 — unexpected extra keys are ignored, not rejected', () => {
+    const e = parseExtractionResponse({
+      ...wellFormed,
+      fields: { ...wellFormed.fields, vintage: { value: '2019' } },
+      somethingElse: true,
+    })
+    expect(e.fields.brandName.raw).toBe('OLD TOM DISTILLERY')
+  })
+
+  it('CT-07 — confidence outside 0..1 is rejected', () => {
+    for (const bad of [-0.1, 1.5]) {
+      expect(() =>
+        parseExtractionResponse({
+          ...wellFormed,
+          fields: { ...wellFormed.fields, brandName: { value: 'X', confidence: bad } },
+        }),
+      ).toThrow(/confidence is outside/)
+    }
+  })
+
+  it('CT-07b — a non-numeric confidence is rejected', () => {
+    expect(() =>
+      parseExtractionResponse({
+        ...wellFormed,
+        fields: { ...wellFormed.fields, brandName: { value: 'X', confidence: 'high' } },
+      }),
+    ).toThrow(/non-numeric confidence/)
+  })
+
+  it('CT-08 — an empty response is rejected', () => {
+    expect(() => parseExtractionResponse({})).toThrow(/no "fields" object/)
+  })
+
+  it('CT-09 — prose instead of structure is rejected, never parsed defensively', () => {
+    expect(() => parseExtractionResponse('The label says Old Tom Distillery, 45%.')).toThrow(
+      ExtractionContractError,
+    )
+  })
+
+  it('rejects a field that is not an object', () => {
+    expect(() =>
+      parseExtractionResponse({
+        ...wellFormed,
+        fields: { ...wellFormed.fields, brandName: 'OLD TOM' },
+      }),
+    ).toThrow(/not an object/)
+  })
+
+  it('rejects a non-string warning statement', () => {
+    expect(() => parseExtractionResponse({ ...wellFormed, warningStatement: 42 })).toThrow(
+      /warningStatement must be a string/,
+    )
+  })
+
+  it('treats a blank value as absence rather than an empty string', () => {
+    // An empty string could later compare equal to something. Absence cannot.
+    const e = parseExtractionResponse({
+      ...wellFormed,
+      fields: { ...wellFormed.fields, classType: { value: '   ' } },
+    })
+    expect(e.fields.classType.raw).toBeNull()
+  })
+
+  it('defaults confidence to 1 when the provider omits it', () => {
+    const e = parseExtractionResponse({
+      ...wellFormed,
+      fields: { ...wellFormed.fields, brandName: { value: 'X' } },
+    })
+    expect(e.fields.brandName.confidence).toBe(1)
+  })
+
+  it('omits the warning statement when it was not requested', () => {
+    const e = parseExtractionResponse(wellFormed, { includeWarning: false })
+    expect(e.warningStatement).toBeNull()
+  })
+
+  it('accepts a subset of fields when only that subset was requested', () => {
+    const e = parseExtractionResponse(
+      { fields: { brandName: { value: 'OLD TOM' } } },
+      { fields: ['brandName'], includeWarning: false },
+    )
+    expect(e.fields.brandName.raw).toBe('OLD TOM')
+  })
+})
+
+describe('CT-10 — blind extraction, enforced structurally (D4)', () => {
+  it('the request type has no slot for expected values', () => {
+    // This is the guard. If ExtractionRequest ever gains a field carrying
+    // application data, this assertion fails at compile time — which is the
+    // point. A runtime test could only show that anchoring did not happen on
+    // one occasion, not that it cannot happen.
+    expectTypeOf<ExtractionRequest>().toHaveProperty('region')
+    expectTypeOf<ExtractionRequest>().toHaveProperty('image')
+    expectTypeOf<ExtractionRequest>().toHaveProperty('fields')
+    expectTypeOf<ExtractionRequest>().not.toHaveProperty('application')
+    expectTypeOf<ExtractionRequest>().not.toHaveProperty('expected')
+    expectTypeOf<ExtractionRequest>().not.toHaveProperty('applicationData')
+  })
+
+  it('the request carries field NAMES, never field VALUES', () => {
+    // A job description, not an answer key. `fields` is a list of names, so
+    // there is nowhere for an expected value to travel.
+    expectTypeOf<ExtractionRequest['fields']>().toEqualTypeOf<
+      readonly ('brandName' | 'classType' | 'alcoholContent' | 'netContents')[]
+    >()
+  })
+
+  it('ApplicationData is not assignable to any part of the request', () => {
+    expectTypeOf<ApplicationData>().not.toMatchTypeOf<ExtractionRequest['fields']>()
+  })
+
+  it('a constructed request contains no application values at runtime', () => {
+    const request: ExtractionRequest = {
+      region: 'label',
+      image: new ArrayBuffer(8),
+      mimeType: 'image/png',
+      fields: ['brandName', 'classType', 'alcoholContent', 'netContents'],
+      includeWarning: true,
+    }
+    const serialised = JSON.stringify({ ...request, image: '<bytes>' })
+    for (const leak of ['Old Tom Distillery', '45%', '750 mL', 'Kentucky']) {
+      expect(serialised).not.toContain(leak)
+    }
+  })
+})
