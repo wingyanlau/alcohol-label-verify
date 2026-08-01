@@ -21,6 +21,8 @@ export interface Env {
   /** Set with `wrangler secret put MODEL_API_KEY`. Never present in config. */
   MODEL_API_KEY?: string
 
+  /** One coordinator per batch job (B-D12: it does no I/O beyond its storage). */
+  JOB?: DurableObjectNamespace<import('./job-coordinator.js').JobCoordinator>
   /** On-platform inference. Carries its own auth — no separate credential. */
   AI?: Ai
   /** Work distribution. One submission per message (B-D4). */
@@ -124,6 +126,8 @@ const json = (body: unknown, status = 200) =>
     },
   })
 
+export { JobCoordinator } from './job-coordinator.js'
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const { pathname } = new URL(request.url)
@@ -192,6 +196,57 @@ export default {
           error: e instanceof Error ? e.message : String(e),
         }, 502)
       }
+    }
+
+    // Coordinator probe. Exercises the ledger: open, claim every item, settle
+    // each, and confirm completion is detected exactly once.
+    //
+    // It does NOT prove the port is safe. A Durable Object serialises per
+    // object, so a read-modify-write implementation would pass this too. Port
+    // safety comes from the shape of the contract — single conditional
+    // statements (R3) — which is established by review, not by this test.
+    if (pathname === '/health/coordinator') {
+      if (!env.JOB) return json({ status: 'unavailable', reason: 'no JOB binding' }, 503)
+      const started = Date.now()
+      const jobId = `probe-${started}`
+      const stub = env.JOB.get(env.JOB.idFromName(jobId))
+
+      const N = 12
+      const items = Array.from({ length: N }, (_, i) => ({
+        itemId: `${jobId}-${i}`,
+        sourceName: `probe_${String(i).padStart(2, '0')}.pdf`,
+      }))
+      await stub.open(jobId, items)
+
+      // Drain the queue. Each claim must yield a distinct item.
+      const claimed: string[] = []
+      for (let i = 0; i < N + 2; i++) {
+        const ref = await stub.claimNextItem()
+        if (!ref) break
+        claimed.push(ref.itemId)
+      }
+
+      // Settle: eleven verdicts, one processing failure.
+      for (const id of claimed.slice(0, N - 1)) {
+        await stub.recordResult(id, 'CLEAR', 'Everything matches')
+      }
+      const last = claimed[N - 1]
+      const progress = last
+        ? await stub.recordFailure(last, 'probe: simulated failure')
+        : await stub.snapshot().then((s) => s.progress)
+
+      const unique = new Set(claimed).size
+      const exhausted = (await stub.claimNextItem()) === null
+
+      return json({
+        status:
+          unique === N && claimed.length === N && exhausted && progress.done ? 'ok' : 'unexpected',
+        elapsedMs: Date.now() - started,
+        claimed: claimed.length,
+        distinct: unique,
+        queueExhausted: exhausted,
+        progress,
+      })
     }
 
     if (pathname === '/') {

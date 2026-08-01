@@ -84,19 +84,16 @@
     ]
   },
 
-  // ---------------------------------------------------------------------------
-  // Still to enable:
-  // // One coordinator per job: ledger, progress, and client fan-out (§15.3).
-  // // It must never fetch or extract — its connection cap makes that a hard
-  // // boundary, not a preference.
-  // "durable_objects": {
-  //   "bindings": [
-  //     { "name": "JOB", "class_name": "JobCoordinator" }
-  //   ]
-  // },
-  //
-  // "migrations": [
-  //   { "tag": "v1", "new_sqlite_classes": ["JobCoordinator"] }
-  // ]
-  // ---------------------------------------------------------------------------
+  // One coordinator per job: ledger, progress, and client fan-out (§15.3).
+  // It never fetches or extracts — its connection cap makes that a hard
+  // boundary, not a preference (B-D12).
+  "durable_objects": {
+    "bindings": [
+      { "name": "JOB", "class_name": "JobCoordinator" }
+    ]
+  },
+
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["JobCoordinator"] }
+  ]
 }
