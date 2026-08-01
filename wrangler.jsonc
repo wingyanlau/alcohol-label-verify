@@ -66,6 +66,10 @@
   // which is why /health does not require MODEL_API_KEY for this provider.
   "ai": { "binding": "AI" },
 
+  // Server-side rasterisation for batch. The interactive path conditions in the
+  // client instead (§9.1), so this is not on the single-review critical path.
+  "browser": { "binding": "BROWSER" },
+
   "queues": {
     "producers": [{ "binding": "WORK", "queue": "alcohol-label-verify-work" }],
     "consumers": [

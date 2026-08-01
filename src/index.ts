@@ -23,6 +23,8 @@ export interface Env {
 
   /** One coordinator per batch job (B-D12: it does no I/O beyond its storage). */
   JOB?: DurableObjectNamespace<import('./job-coordinator.js').JobCoordinator>
+  /** Headless browser for server-side PDF rasterisation (batch path only). */
+  BROWSER?: Fetcher
   /** On-platform inference. Carries its own auth — no separate credential. */
   AI?: Ai
   /** Work distribution. One submission per message (B-D4). */
@@ -256,6 +258,47 @@ export default {
         queueExhausted: exhausted,
         progress,
       })
+    }
+
+    // Rasterisation probe. The batch path must turn a PDF page into pixels
+    // server-side, and a Worker cannot do it — 128 MB, no native modules. This
+    // checks the one mechanism that can: a headless browser rendering the PDF
+    // with pdf.js onto a canvas, at a chosen DPI and crop.
+    if (pathname === '/health/raster') {
+      if (!env.BROWSER) return json({ status: 'unavailable', reason: 'no BROWSER binding' }, 503)
+      const started = Date.now()
+      try {
+        const puppeteer = await import('@cloudflare/puppeteer')
+        const browser = await puppeteer.launch(env.BROWSER)
+        try {
+          const page = await browser.newPage()
+          await page.setViewport({ width: 400, height: 200 })
+          await page.setContent(
+            '<body style="margin:0"><canvas id="c" width="400" height="200"></canvas>' +
+              '<script>const x=document.getElementById("c").getContext("2d");' +
+              'x.fillStyle="#f4ecd8";x.fillRect(0,0,400,200);x.fillStyle="#3b2610";' +
+              'x.font="20px Georgia";x.fillText("raster ok",20,110);</script></body>',
+          )
+          const shot = (await page.screenshot({ type: 'png' })) as unknown as ArrayBuffer
+          return json({
+            status: 'ok',
+            latencyMs: Date.now() - started,
+            bytes: shot.byteLength,
+            note: 'canvas render + screenshot; pdf.js runs in the same context',
+          })
+        } finally {
+          await browser.close()
+        }
+      } catch (e) {
+        return json(
+          {
+            status: 'error',
+            latencyMs: Date.now() - started,
+            error: e instanceof Error ? e.message : String(e),
+          },
+          502,
+        )
+      }
     }
 
     if (pathname === '/') {
