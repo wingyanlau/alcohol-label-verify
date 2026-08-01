@@ -40,20 +40,30 @@
     // Extraction concurrency across a batch. Governed by the provider's rate
     // limit, not by platform capacity (batch design §6.1).
     "EXTRACT_CONCURRENCY": "5"
-  }
+  },
+
+  // Transient content: submission PDFs and rasterised regions, held for the
+  // life of a job and purged on completion (B-D10). The durable record lives
+  // in D1 and keeps only the digest.
+  "r2_buckets": [
+    { "binding": "STAGING", "bucket_name": "alcohol-label-verify-staging" }
+  ],
+
+  // The durable record: jobs, submissions, extractions, verdicts, and an
+  // append-only hash-chained transaction history (D32).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "alcohol-label-verify",
+      "database_id": "ac8a691b-3b4b-4518-9539-54fe81203529"
+    }
+  ],
 
   // ---------------------------------------------------------------------------
-  // Bindings below are declared as the design requires them, but are commented
-  // out until the underlying resources exist — Wrangler fails a deploy that
-  // references a missing resource. Create them, then uncomment.
+  // Still to create:
   //
-  //   npx wrangler r2 bucket create alcohol-label-verify-staging
   //   npx wrangler queues create alcohol-label-verify-work
   //   npx wrangler queues create alcohol-label-verify-dlq
-  //
-  // "r2_buckets": [
-  //   { "binding": "STAGING", "bucket_name": "alcohol-label-verify-staging" }
-  // ],
   //
   // "queues": {
   //   "producers": [

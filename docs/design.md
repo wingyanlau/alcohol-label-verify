@@ -83,7 +83,7 @@ must not be applied to the warning statement text.
 |---|---|---|---|
 | N1 | Integration with COLA | Marcus: separate authorisation regime, explicitly out of scope for the prototype | Procurement decision, "years away" |
 | N2 | User accounts, authentication, roles | No multi-user state to protect in a prototype; adds build cost with no evaluative value | Any real deployment |
-| N3 | Persisting applications, images, or results | Marcus: PII and retention obligations. Storing nothing is both faster to build and the correct privacy posture | Retention policy defined |
+| ~~N3~~ | ~~Persisting applications, images, or results~~ — **superseded by D32** | Was: storing nothing is faster and the correct privacy posture. Now: content is transient, the record is durable (§11.5.1) | **Revised 2026-08-01** |
 | N4 | Verifying warning statement font size and bold weight from the image | Type metrics inferred from a photograph are unreliable; false rejections here are worse than escalation to a human | Reliable type-metric extraction exists |
 | N5 | A complete TTB rule engine across all beverage classes | The full CFR ruleset is large and class-dependent; the brief asks for a prototype, not a compliance engine | Scope extends beyond prototype |
 | N6 | Non-English labels | No requirement stated; adds extraction and comparison complexity | Import volume justifies it |
@@ -155,7 +155,7 @@ is an intention, not a claim.
 | NFR-4 | Usability | Primary action and outcome legible at arm's length; large type, high contrast | Body text ≥ 16px, outcome not conveyed by colour alone | SRC-2, SRC-7 | Inspection |
 | NFR-5 | Reliability | No unhandled error reaches the user; every failure yields an actionable message | Zero raw stack traces or blank states | SRC-1 | Fault injection per §9.2 |
 | NFR-6 | Reliability | One failing item in a batch does not abort the batch | Remaining items complete | SRC-7 | Batch with a deliberately corrupt file |
-| NFR-7 | Privacy | No persistence of uploaded images or application data beyond the request | Nothing written to durable storage | SRC-3 | Code inspection; documented in README |
+| NFR-7 | Privacy | **Revised (D32).** Submission content is purged at job completion; the durable record holds extracted values and digests, never artwork | No artwork in durable storage; content purged | SRC-3 | Code inspection; documented in README |
 | NFR-8 | Security | Uploads bounded in size and type; input treated as untrusted | Documented limits enforced server-side | SRC-3, SRC-7 | Oversized and wrong-type upload attempts |
 | NFR-9 | Scalability | Batch sized to real peak-season submissions | 200–300 items without degradation or loss | SRC-2 | Large synthetic batch |
 | NFR-10 | Maintainability | Code organised for review by an evaluator unfamiliar with it | Explicit in evaluation criteria | SRC-1 | Reviewer judgment |
@@ -1773,6 +1773,63 @@ artefact rather than pursued, since the container runs there unmodified.
 
 ---
 
+### 11.5 Deployed Prototype
+
+| | |
+|---|---|
+| URL | **https://alcohol-label-verify.wing-lawrence.workers.dev** |
+| Platform | Cloudflare Workers (D31) |
+| Content staging | R2 — `alcohol-label-verify-staging` |
+| Durable record | D1 — `alcohol-label-verify` (`ac8a691b…`), schema v1 |
+| Health | `GET /health` — reports configuration problems as **503**, not a silent 200 |
+
+`/health` currently returns `misconfigured` because no model is wired. That is
+D29 working: the service refuses to present itself as healthy on an unset or
+floating model identifier, because a mutable identifier silently invalidates
+every audit record citing it.
+
+#### 11.5.1 What is now stored, and what is not
+
+D32 reverses N3. The position is no longer "store nothing" but a narrower and
+more defensible one:
+
+| Data | Where | Lifetime |
+|---|---|---|
+| Submission PDFs, rasterised regions | R2 | **Purged at job completion.** TTL is a backstop, not the mechanism (B-D10) |
+| Content digest, byte size, source name | D1 | Retained — identity without content |
+| Extraction: model identity, parameters, prompt version, raw response, latency | D1 | Retained — provenance, and the test fixture (test-plan §5) |
+| Verdicts, per-field states, both values, rule applied | D1 | Retained — the evidence an agent acted on (FR-10) |
+| Transaction history | D1, **append-only and hash-chained** | Retained |
+| **Label artwork itself** | **Nowhere, after purge** | — |
+
+**Why this is defensible.** §8.7.4 argued that a record should carry a digest
+rather than the artwork. That principle now governs the whole system: what is
+kept is what is needed to defend a decision — what was read, by what, under which
+rules — not the image it was read from. An agent challenged on a finding needs
+the values and the rule, not the pixels.
+
+**What it costs.** Retention is now a policy obligation rather than a
+non-question. Q-PRV-02 (is a verification result a federal record?) and Q-PRV-03
+(what schedule applies?) move from theoretical to blocking for any real
+deployment. `schema_meta.retention_policy` is deliberately set to `UNSET` so the
+gap is visible in the database itself.
+
+**The README must say this precisely.** The earlier claim — "nothing is stored" —
+is no longer true and repeating it would be worse than never having made it.
+
+#### 11.5.2 Tamper evidence
+
+`audit_event` is append-only, enforced by database triggers rather than by
+convention, and hash-chained: each row carries the digest of its predecessor.
+Altering or deleting a row breaks the chain from that point forward.
+
+Verified on the live database — an `UPDATE` is rejected with
+`audit_event is append-only`.
+
+This is §15.3's "tamper-evident audit storage", which was listed as production
+work. It arrived early because it costs almost nothing in SQLite and because an
+audit trail that can be silently edited is worth nothing to an auditor.
+
 ### 11.4 Access Control for the Sample Deployment (D14)
 
 The sample deployment is **unauthenticated**, and that is a decision rather than
@@ -1853,7 +1910,7 @@ plainly in the README, which is the correct handling of a known limitation.
 | D3 | Statutory text externalised as configuration (§3.6) | Embedding in code or prose | Regulation changes become config edits; single source of truth; version recorded in the audit trail | Easy |
 | D4 | Extraction is blind to expected values (§8.3.1) | Supplying them as context | Anchoring biases toward false matches — the dangerous direction | **One-way** — a correctness property |
 | D5 | `UNREADABLE` outranks all other verdicts (§8.4.2) | Treating it as another discrepancy | Prevents a pass because the system could not see the problem | Costly |
-| D6 | Audit record produced always, stored never (§8.7.4) | Persisting it; or omitting it | Reconciles auditability with the privacy constraint; retention becomes a deployment decision | Easy |
+| ~~D6~~ | ~~Audit record produced always, stored never (§8.7.4)~~ — **superseded by D32** | Persisting it; or omitting it | Reconciles auditability with the privacy constraint; retention becomes a deployment decision | Easy |
 | D7 | Exactly one model call per label (§9.1) | Per-field calls | Per-field multiplies the dominant latency term beyond the budget | Costly |
 | D8 | Batch is orchestration over the single-item pipeline (§8.1) | A separate batch path | Prevents divergence between modes | Costly |
 | D9 | Semantic escalation designed, not built (§8.4.4) | Building it; or omitting the seam | Second round-trip against a 5s budget; the seam keeps it additive | Easy |
@@ -1877,6 +1934,7 @@ plainly in the README, which is the correct handling of a known limitation.
 | D27 | Ingested rules are always drafts; none is enforced without named human approval, and rules are superseded rather than deleted (§8.8.6) | Automatic activation; deletion of obsolete rules | Keeps an ingestion component from becoming the rule-derivation path rejected in D17. Deletion would make past decisions unauditable | **One-way** |
 | D28 | The versioned identity set is carried per decision, per request, **and as metric dimensions** (§9.4.6) | Versions in the audit record only | Aggregate metrics undimensioned by version can show that behaviour changed but never what changed. Distinguishing "the model changed" from "the inputs changed" requires opposite responses | Easy |
 | D29 | The service refuses to start on a floating model alias (§9.4.6) | Warning only; or trusting configuration | A mutable identifier silently invalidates every audit record citing it, and the failure is undetectable afterwards. Startup is the only cheap point to catch it | Easy |
+| D32 | The prototype persists a durable record and an append-only transaction history; submission content stays transient (§11.5.1) | Storing nothing (N3, D6); or storing content as well as the record | An audit trail that is produced and discarded demonstrates nothing, and batch needs state regardless (batch §10). Separating *content* from *record* keeps the privacy argument intact: artwork is purged at job completion, digests and extracted values are retained as the evidence an agent acted on. This is §15.1's production posture arriving early | **Costly** — retention becomes a policy obligation (Q-PRV-03) |
 | D31 | Prototype deploys to Cloudflare Workers; the container is the production step, not the prototype's ([`deployment-path.md`](deployment-path.md)) | Containerising now (D12/D13) | A container adds nothing a prototype needs and costs setup the budget cannot spare. Workers' constraints are strictly tighter than a container's — no filesystem, no threads, no native modules, a 6-connection cap — so code that satisfies them ports outward unchanged, while container-first code does not port inward. Production remains containerised and on premise (§15) | Easy — the platform sits behind five adapters (batch §14) |
 | D30 | The prototype's audit record omits rule-set binding, selection inputs, approval reference, policy-store version, and retrieval versions (§11.2.1) | Implementing §8.7.1 in full; or dropping the audit record from the floor | Those fields describe a policy-governance regime the prototype does not have — configuration is the policy store and no approval workflow exists. NFR-13 replayability is preserved in full; only governance metadata is omitted. Documented reduction, not a silent gap | Easy — populating a structure that already exists |
 

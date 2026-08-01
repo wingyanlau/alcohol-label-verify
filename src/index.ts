@@ -20,6 +20,11 @@ export interface Env {
   EXTRACT_CONCURRENCY: string
   /** Set with `wrangler secret put MODEL_API_KEY`. Never present in config. */
   MODEL_API_KEY?: string
+
+  /** Transient submission content. Purged at job completion (B-D10). */
+  STAGING?: R2Bucket
+  /** The durable record and append-only transaction history (D32). */
+  DB?: D1Database
 }
 
 /**
@@ -75,6 +80,7 @@ export function validateConfig(env: Env): ConfigProblem[] {
 function bindings(env: Record<string, unknown>): Record<string, boolean> {
   return {
     staging: 'STAGING' in env,
+    database: 'DB' in env,
     workQueue: 'WORK' in env,
     jobCoordinator: 'JOB' in env,
     modelApiKey: typeof env.MODEL_API_KEY === 'string' && env.MODEL_API_KEY.length > 0,
@@ -96,6 +102,27 @@ export default {
 
     if (pathname === '/health') {
       const problems = validateConfig(env)
+
+      // Confirm the record store is reachable and carries the expected schema.
+      // A deployment whose database is missing or unmigrated is misconfigured,
+      // not merely degraded — every verdict it issues would be unrecorded.
+      let schema: unknown = null
+      if (env.DB) {
+        try {
+          const row = await env.DB.prepare(
+            "SELECT value FROM schema_meta WHERE key = 'schema_version'",
+          ).first<{ value: string }>()
+          schema = row?.value ?? null
+          if (row?.value == null) {
+            problems.push({ setting: 'DB', problem: 'schema_meta is empty — migrations not applied' })
+          }
+        } catch (e) {
+          problems.push({
+            setting: 'DB',
+            problem: `unreachable or unmigrated: ${e instanceof Error ? e.message : String(e)}`,
+          })
+        }
+      }
       // Configuration problems are reported, not hidden behind a 200. A
       // deployment that starts wrong should say so at the first request.
       return json(
@@ -104,6 +131,7 @@ export default {
           environment: env.ENVIRONMENT,
           model: { provider: env.MODEL_PROVIDER, id: env.MODEL_ID },
           bindings: bindings(env as unknown as Record<string, unknown>),
+          schemaVersion: schema,
           problems,
         },
         problems.length === 0 ? 200 : 503,
