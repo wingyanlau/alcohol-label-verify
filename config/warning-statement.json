@@ -1,0 +1,63 @@
+{
+  "$comment": "Operative source of truth for FR-5 and FR-6 (D3). The statutory text appears in exactly one place — here. It is not duplicated in code, in prompts, or in prose. Correcting this file corrects the system. Design rationale in docs/config/warning-statement.md.",
+
+  "configVersion": 1,
+  "citation": "27 CFR 16.21 (text); 27 CFR 16.22 (formatting)",
+  "appliesTo": "All alcoholic beverages — beer, wine, distilled spirits",
+  "retrievedFrom": "Cornell LII mirror of the CFR",
+  "retrievedOn": "2026-07-31",
+  "verificationStatus": "UNCONFIRMED",
+  "verificationNote": "eCFR blocked automated retrieval. Confirm against https://www.ecfr.gov/current/title-27/chapter-I/subchapter-A/part-16/subpart-C/section-16.21 in a browser, then set verificationStatus to CONFIRMED. A single wrong word here silently invalidates every warning-statement verdict (M0, Q1a).",
+
+  "segments": [
+    {
+      "id": "header",
+      "label": "Header",
+      "text": "GOVERNMENT WARNING:",
+      "caseSensitive": true,
+      "caseSensitiveReason": "27 CFR 16.22 requires capital letters. FR-6."
+    },
+    {
+      "id": "clause_1",
+      "label": "Surgeon General / pregnancy",
+      "text": "(1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects.",
+      "caseSensitive": false
+    },
+    {
+      "id": "clause_2",
+      "label": "Impairment / health problems",
+      "text": "(2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "caseSensitive": false
+    }
+  ],
+
+  "advisoryChecks": [
+    {
+      "id": "header_bold",
+      "text": "\"GOVERNMENT WARNING:\" is in bold type",
+      "citation": "27 CFR 16.22"
+    },
+    {
+      "id": "remainder_not_bold",
+      "text": "The rest of the warning is NOT in bold type",
+      "citation": "27 CFR 16.22",
+      "note": "Raised by no stakeholder. The regulation constrains over-emphasis as well as under-emphasis."
+    },
+    {
+      "id": "type_size",
+      "text": "Type size meets the minimum for this container size (up to 237 mL: 1 mm; over 237 mL to 3 L: 2 mm; over 3 L: 3 mm)",
+      "citation": "27 CFR 16.22",
+      "note": "Depends on net contents, so it cannot be evaluated from artwork alone."
+    },
+    {
+      "id": "separateness",
+      "text": "The warning is separate and apart from other label information",
+      "citation": "27 CFR 16.22"
+    },
+    {
+      "id": "legibility",
+      "text": "Readily legible, on a contrasting background, characters not compressed",
+      "citation": "27 CFR 16.22"
+    }
+  ]
+}

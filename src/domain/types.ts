@@ -1,0 +1,126 @@
+/**
+ * Domain types.
+ *
+ * Design reference: §8.2 (data model), §8.4.1 (verdict states).
+ *
+ * Nothing in `src/domain` performs I/O, reads a clock, or touches a platform
+ * API. Every type here describes a value the deterministic comparison layer
+ * produces or consumes, which is what lets the whole suite run offline at zero
+ * cost — and what makes the container port cheap (deployment-path §3).
+ */
+
+/** Fields under comparison, in the order of the agent's paper checklist (P4). */
+export const FIELDS = ['brandName', 'classType', 'alcoholContent', 'netContents'] as const
+
+export type FieldName = (typeof FIELDS)[number]
+
+export const FIELD_LABELS: Record<FieldName, string> = {
+  brandName: 'Brand name',
+  classType: 'Class / type',
+  alcoholContent: 'Alcohol content',
+  netContents: 'Net contents',
+}
+
+/**
+ * Outcome of comparing one field.
+ *
+ * `UNREADABLE` and `MISMATCH` are distinct by requirement (FR-11), not by
+ * presentation preference: "I could not read this" and "I read this and it is
+ * wrong" lead an agent to different actions — request better artwork, versus
+ * raise a discrepancy with the applicant.
+ */
+export type FieldVerdictState =
+  /** Agrees within a stated rule. */
+  | 'MATCH'
+  /** Read successfully; disagrees. */
+  | 'MISMATCH'
+  /** The application supplied a value; the label does not carry it. */
+  | 'MISSING_ON_LABEL'
+  /** The application supplied nothing to compare against. Not assessed. */
+  | 'NOT_SUPPLIED'
+  /** Could not be determined from the image. Blocks a clear result (§8.4.2). */
+  | 'UNREADABLE'
+  /** Read and compared, but flagged for human confirmation. */
+  | 'LOW_CONFIDENCE'
+
+/**
+ * A single field's verdict, carrying its own evidence.
+ *
+ * FR-10 requires the expected value, the value read, and the rule applied to be
+ * visible to the agent. Because all three live on the verdict, the results view
+ * needs no access to the extractor or the comparator — the verdict is
+ * self-describing.
+ */
+export interface FieldVerdict {
+  readonly field: FieldName
+  readonly state: FieldVerdictState
+  /** As supplied on the application. `null` when nothing was supplied. */
+  readonly expected: string | null
+  /** As read from the label. `null` when absent or unreadable. */
+  readonly observed: string | null
+  /** The rule applied, named so a finding can be defended. */
+  readonly rule: string
+  /**
+   * Present only when a rule was actually *exercised* — a tolerance applied, a
+   * unit converted, a reading refused. An exact match carries no explanation,
+   * which is what keeps a clean result uncluttered (ui-design §6.3).
+   */
+  readonly explanation?: string
+}
+
+/** Outcome of comparing one segment of the statutory warning statement. */
+export interface WarningSegmentVerdict {
+  readonly segmentId: string
+  readonly label: string
+  readonly ok: boolean
+  readonly required: string
+  /** As read from the label, or `null` if the segment was not found. */
+  readonly observed: string | null
+  /** The specific difference, when there is one. "The warning is wrong" is not actionable. */
+  readonly deviation?: string
+}
+
+/** A formatting rule the system cannot verify from an image (FR-6a, N4). */
+export interface AdvisoryCheck {
+  readonly id: string
+  readonly text: string
+  readonly citation: string
+}
+
+export interface WarningVerdict {
+  readonly present: boolean
+  readonly ok: boolean
+  readonly segments: readonly WarningSegmentVerdict[]
+  /** Rules the agent must confirm by eye. Never auto-failed. */
+  readonly advisory: readonly AdvisoryCheck[]
+  readonly referenceDataVersion: number
+}
+
+/** Overall outcome, derived by rule from field verdicts (§8.4.2). Never from a model. */
+export type Outcome = 'CLEAR' | 'CLEAR_CONFIRM_FLAGGED' | 'DISCREPANCIES_FOUND' | 'INCOMPLETE'
+
+/** Values as supplied on the application. Absent fields are `null`, never `undefined`. */
+export type ApplicationData = Readonly<Record<FieldName, string | null>>
+
+/** One field as read from the label by the extraction layer. */
+export interface ObservedField {
+  /** Raw text exactly as it appears, or `null` if not found. */
+  readonly raw: string | null
+  /** Extractor confidence, 0..1. */
+  readonly confidence: number
+  /** The extractor could not determine this field from the image. */
+  readonly unreadable: boolean
+}
+
+/**
+ * What the extraction layer produces.
+ *
+ * Deliberately free of any application data (D4). The extractor is never shown
+ * the expected values: a model that can see them tends to confirm them, and
+ * every such error is a false *match* — a non-compliant label passing review.
+ */
+export interface Extraction {
+  readonly fields: Readonly<Record<FieldName, ObservedField>>
+  /** The warning statement exactly as it appears, or `null` if not found. */
+  readonly warningStatement: string | null
+}
