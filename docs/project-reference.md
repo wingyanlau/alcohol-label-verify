@@ -308,3 +308,215 @@ brief's four interviews are a partial picture, and the parties who would gate a
 real deployment — security, privacy, records, counsel, AI governance,
 accessibility — do not appear in it at all. Noticing that is worth more than any
 individual answer.
+
+---
+
+## 8. Verified Agency Context
+
+*Gathered from ttb.gov and the CFR on 2026-07-31 and 2026-08-01. The four
+interviews in the brief are a characterisation of TTB, not TTB itself; this
+section records what the agency actually publishes. A fifth evidence marker
+applies throughout:*
+
+| Marker | Meaning |
+|---|---|
+| **[V]** | **Verified** — published by TTB or in the CFR |
+
+Where **[V]** contradicts §1, the published source wins.
+
+### 8.1 What TTB is
+
+| Fact | Evidence |
+|---|---|
+| A bureau of the U.S. Department of the Treasury | **[V]** |
+| Enforces federal law on the production, labelling and taxation of alcohol and tobacco; also collects excise tax on firearms and ammunition | **[V]** |
+| Collected over **$18 billion** in excise taxes in FY 2023 | **[V]** |
+| Label approval serves tax collection *and* market integrity — product identification, correct tax classification, consumer protection | **[V]** |
+
+**[I]** This reframes the stakes. Class/type designation determines **tax
+classification**, so a misdescribed product is a revenue question as well as a
+consumer-protection one. The cost of a false pass is higher than the brief
+conveys.
+
+### 8.2 The COLA process as TTB describes it
+
+| Fact | Evidence |
+|---|---|
+| The instrument is a **Certificate of Label Approval (COLA)**, applied for on **TTB F 5100.31** | **[V]** |
+| Filed through **COLAs Online**, a paperless web system | **[V]** |
+| The **Alcohol Labeling and Formulation Division (ALFD)** processes COLAs for malt beverages and distilled spirits | **[V]** |
+| Related instruments: certificate of **exemption**, and **distinctive liquor bottle** approval. Exemptions are not issued for imported bottles or malt beverages | **[V]** |
+| Approved applications are **available for public inspection** | **[V]** |
+| Processing times are published as **median calendar days** — half take longer | **[V]** |
+| **myTTB** is the modernisation platform intended to replace legacy systems | **[V]** |
+| FY 2025 satisfaction: 83% COLAs Online, 81% Formulas Online | **[V]** |
+| **No AI or automation appears anywhere in TTB's description of label review** | **[V]** |
+
+### 8.3 The finding that most affects this design — "Needs Correction"
+
+**An application TTB cannot approve as submitted is not rejected. It is returned
+with the status `Needs Correction` and a list of the corrections required.** The
+submitter then has **30 calendar days**; failure to correct results in automatic
+denial and a status of `Rejected`. **[V]**
+
+This answers **Q-BUS-01** and validates the design more strongly than the
+interviews did:
+
+| Design element | Fit with the actual workflow |
+|---|---|
+| Per-field verdicts showing both values (FR-10) | **Is** the correction list the agent must produce |
+| N7 — the system never approves or rejects | Correct. The agent's normal action is neither: it is *return for correction* |
+| `INCOMPLETE` as a distinct outcome (D5) | Maps to requesting better artwork — a correction request, not a denial |
+| The rule line naming the tolerance applied | Explains to an applicant *why* something was or was not flagged |
+
+**[I]** The output of this tool is, almost exactly, a draft correction list.
+That is a stronger product framing than "verification", and it belongs in the
+README.
+
+### 8.4 Mandatory label information — distilled spirits
+
+| Requirement | Evidence |
+|---|---|
+| **Brand name, alcohol content and class/type must appear in the same field of vision** | **[V]** |
+| That label may be on the front, back or side of the container | **[V]** |
+| **The health warning statement may appear anywhere on the label** | **[V]** |
+| Where a product is not sold under a brand name, the bottler's, distiller's or importer's name is treated as the brand name | **[V]** |
+| Name and address (city and state) of bottler, distiller, processor or importer is mandatory | **[V]** |
+| Further mandatory items by product: neutral spirits, coloring or treatment with wood, FD&C Yellow #5, aspartame, carmine or cochineal, sulfite declaration, commodity statement, age statement, state of distillation | **[V]** |
+| TTB publishes **checklists of mandatory label information** for wine, spirits and malt beverages | **[V]** |
+| TTB publishes an interactive **"Anatomy of a Label"** tool | **[V]** |
+
+**Three consequences.**
+
+*The published checklists are almost certainly Jenny's printed checklist.* The
+brief describes an agent working from a paper list; TTB publishes exactly that.
+UI principle P4 — results in checklist order — should follow **TTB's** published
+order rather than an invented one.
+
+*"May appear anywhere" confirms R7.* The three compared fields must share a field
+of vision; the warning need not. Assumption A2 is now **known** unsafe rather
+than suspected — though see §8.10, since affixing the complete label set to one
+page substantially mitigates it.
+
+*"Same field of vision" is a checkable requirement the design does not check.*
+It is spatial, so it needs bounding boxes from extraction rather than text alone.
+Out of scope (N5), but a concrete next step — the kind of check a human does
+effortlessly and a text-only pipeline cannot do at all.
+
+### 8.5 Alcohol content tolerance — resolves Q7 and Q-LEG-07
+
+**The tolerance applies to actual contents versus the label, not to the label
+versus the application.**
+
+| Provision | Tolerance | Applies to |
+|---|---|---|
+| 27 CFR 5.65 | ± 0.3 percentage points | Actual alcohol content vs. what the label states |
+| 27 CFR 5.37(b) | 0.15% loss permitted; **no tolerance for an increase** | Internal Revenue Code purposes |
+| 27 CFR 4.36, 7.71 | Parallel provisions | Wine, malt beverages |
+
+**[I] Neither applies to this system.** Both concern laboratory-measured
+contents against a printed claim. Comparing a *printed* value against an
+*application* value has no tolerance provision, because both are statements of
+the same intended figure — there is nothing to vary.
+
+> **Q7 and Q-LEG-07 resolve to: exact numeric comparison is correct.**
+
+Test-plan `UT-A06` and `UT-Q07` can therefore be implemented as exact rather than
+left pending, with this citation as the justification.
+
+### 8.6 Common errors TTB itself identifies
+
+| Error | Evidence |
+|---|---|
+| **Net contents incorrectly stated** is among the most common problems on beer/malt label applications, and requires a correction before a COLA is issued | **[V]** |
+| Formula applications commonly omit required supporting documentation | **[V]** |
+| TTB directs applicants to the mandatory-information checklists specifically to prevent these | **[V]** |
+
+**[I]** Net contents leading the error categories is useful validation: it is one
+of the four compared fields, machine-checkable, and exactly the transcription
+slip automated matching removes.
+
+### 8.7 Fields on Form 5100.31 — a gap in the current design
+
+| Item | Field | Note |
+|---|---|---|
+| 6 | **Brand name** | Modelled |
+| 7 | **Fanciful name** | **Not modelled.** Required for some specialty products; must not be conflated with the brand name |
+| — | Class/type designation | **Not on the form** |
+| — | Alcohol content | **Not on the form** |
+| — | Net contents | **Not on the form** — Item 15 asks for it only where embossed on the container *and absent from the labels* |
+| — | Name and address of bottler/distiller/importer | **Not modelled** |
+| Pages 3–4 | The list of allowable label revisions | Printed on the form itself |
+
+**The paper form has no field for three of the four values under comparison.**
+The brief's *"ABV is correct? Check"* cannot be a form-versus-label comparison —
+there is nothing on the form to compare against. Either COLAs Online captures
+structured data the paper form does not, or the brief simplified. This is why the
+test corpus has a second page modelling the electronic record, and it is a
+question for Sarah.
+
+### 8.8 TTB does not routinely check what we chose not to check
+
+> *"TTB does not routinely review submitted labels for compliance with applicable
+> requirements for mandatory label information regarding type size, characters
+> per inch, or contrasting background."* — TTB F 5100.31, §II.C **[V]**
+
+It remains the applicant's responsibility, with TTB reserving the right to
+review.
+
+**[I] This is the strongest justification N4 and FR-6a have.** The prototype
+defers exactly what TTB itself defers — a much better argument than "image
+metrics are unreliable", and it belongs in the README.
+
+### 8.9 Allowable revisions — a category the prototype does not model
+
+Once approved, certain changes may be made **without a new COLA**: repositioning
+text or graphics, adding bottling or production dates, adding an internet
+address, and others listed on pages 3–4 of the form. TTB provides an **Allowable
+Changes Sample Label Generator**. **[V]**
+
+**[I]** This implies a review task the design does not contemplate — comparing a
+*revised* label against a *previously approved* one and deciding whether the
+differences fall within the allowable set. That is label-against-label rather
+than label-against-application, and a plausible second product.
+
+### 8.10 What the affixed label set does to R7
+
+The form instructs the applicant to **"AFFIX COMPLETE SET OF LABELS BELOW"**.
+Front and back labels are therefore on one submission page. **[V]**
+
+**[I] This substantially reduces R7.** If the system ingests the whole submission
+page rather than a standalone label image, the back label — and its warning
+statement — is present. Assumption A2 fails only where the tool is handed a
+*cropped front-label image* instead of the submission. Corpus case L12 models an
+*incomplete submission* (front label only), where reporting the warning missing
+is the correct finding rather than a false positive.
+
+### 8.11 Calibrating the brief against reality
+
+| Brief states | Status |
+|---|---|
+| ~150,000 applications per year | Not verified against published figures. Plausible; treat as the brief's premise |
+| 47 compliance agents | Not verified. The brief's premise |
+| COLA online since 2003 | Consistent with COLAs Online being long-established **[V]**; date unverified |
+| .NET system, Azure since 2019 | Not published. The brief's premise |
+| The process is manual and unaided | **Consistent with [V]** — no automation appears in TTB's description of label review |
+
+**[I]** The brief is a realistic characterisation, not a documentary one. Its
+process description holds up; its figures should be attributed to the brief
+rather than asserted as fact.
+
+### 8.12 References
+
+| Source | Used for |
+|---|---|
+| [About TTB](https://www.ttb.gov/about-ttb) | §8.1 |
+| [Certificate of Label Approval](https://www.ttb.gov/alfd/certificate-of-label-aproval-cola) | §8.2 |
+| [Alcohol Labeling and Formulation Division](https://www.ttb.gov/about-ttb/who-we-are/offices/alcohol-labeling-and-formulation-division) | §8.2 |
+| [COLAs and Formulas Online FAQs](https://www.ttb.gov/faqs/colas-and-formulas-online-faqs) | §8.3 |
+| [Distilled Spirits: Mandatory Label Information](https://www.ttb.gov/regulated-commodities/beverage-alcohol/distilled-spirits/ds-labeling-home/ds-brand-label) | §8.4 |
+| [Distilled Spirits: Alcohol Content](https://www.ttb.gov/regulated-commodities/beverage-alcohol/distilled-spirits/ds-labeling-home/ds-alcohol-content) | §8.5 |
+| [27 CFR Part 5](https://www.ecfr.gov/current/title-27/chapter-I/subchapter-A/part-5) | §8.5 |
+| [Avoiding Common Errors](https://www.ttb.gov/public-information/news/avoiding-common-errors) | §8.6 |
+| [TTB F 5100.31](https://www.ttb.gov/system/files/images/pdfs/forms/f510031.pdf) | §8.7, §8.8, §8.10 — retrieved and read directly |
+| [List of Allowable Changes](https://www.ttb.gov/regulated-commodities/labeling/allowable-revisions) | §8.9 |

@@ -1901,7 +1901,7 @@ plainly in the README, which is the correct handling of a known limitation.
 | Q4 | Batch pairing convention | M9 | Filename match (A8) |
 | Q5 | ~~Deployment target~~ — **resolved (D12): single container** | — | Host still open; low-stakes by §11.3 |
 | Q6 | Which container host | M8 | Any container-capable host; chosen on time-to-URL |
-| Q7 | Does any tolerance apply to ABV comparison, label versus application? | Comparison rules; test-plan UT-A06 | Exact numeric match, documented as an assumption. **If a tolerance does apply, exactness manufactures false discrepancies on compliant labels — Dave's objection arriving through the numeric path** |
+| ~~Q7~~ | ~~Does any tolerance apply to ABV comparison?~~ — **resolved**: 27 CFR 5.65 and 5.37 govern *actual contents vs. the label*, not label vs. application. **Exact numeric comparison is correct** (project-reference §8.5) | — | Implemented as exact |
 | Q8 | Should internal label consistency be checked — proof against ABV? | Nothing; a proposed addition | Not implemented; offered as a next step. Costs one comparison, needs no application data and no model |
 
 ---

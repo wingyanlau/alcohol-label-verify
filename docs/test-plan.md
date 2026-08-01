@@ -84,7 +84,7 @@ false passes (§8.3.1).
 | UT-A03 | `45.0%` / `45` | match |
 | UT-A04 | `ALCOHOL 45% BY VOLUME` / `45` | match |
 | UT-A05 | `40%` / `45` | **mismatch** |
-| UT-A06 | `45%` / `45.5` | mismatch — pending Q7 |
+| UT-A06 | `45%` / `45.5` | **mismatch** — Q7 resolved: no tolerance applies (project-reference §8.5) |
 | UT-A07 | `4.5%` / `45` | **mismatch** — decimal-point error must not pass |
 | UT-A08 | `90 Proof` / `45` | match — proof converted |
 | UT-A09 | `` / `45` | `MISSING_ON_LABEL` |
@@ -113,7 +113,7 @@ See §14, Q8. Not currently a requirement.
 | UT-Q04 | `1 L` / `1000 mL` | match |
 | UT-Q05 | `700 mL` / `750 mL` | mismatch |
 | UT-Q06 | `750` / `750 mL` | match, unit assumed — flagged low confidence |
-| UT-Q07 | `25.4 fl oz` / `750 mL` | match within rounding — pending Q7 |
+| UT-Q07 | `25.4 fl oz` / `750 mL` | match after unit conversion, compared at whole-millilitre resolution |
 
 ### 3.5 Warning statement (`UT-W`)
 
