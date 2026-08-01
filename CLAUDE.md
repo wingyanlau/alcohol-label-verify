@@ -24,6 +24,8 @@ it, do not leave both.
   orchestration, document normalisation, platform mapping
 - **[docs/deployment-path.md](docs/deployment-path.md)** — Workers → container.
   **§6 rules are binding**
+- **[docs/deployment-runbook.md](docs/deployment-runbook.md)** — every resource,
+  every step, verification, rollback, teardown
 - **[docs/project-reference.md](docs/project-reference.md)** — stakeholders,
   verified TTB context, open questions
 
