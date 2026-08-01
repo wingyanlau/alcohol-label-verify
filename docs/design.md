@@ -1623,6 +1623,11 @@ Ordered so a demonstrable system exists early and stays working.
 | M9 | Batch | UC-2 with progressive results |
 | M10 | README and documentation | Approach, assumptions, trade-offs, limitations |
 
+**Per-milestone user stories, requirement traces and testable exit criteria are
+in [`implementation-plan.md`](implementation-plan.md).** The table above states
+only a one-line definition of done, which is not checkable by someone who did
+not do the work.
+
 **M0 is a fifteen-minute task that gates a Must requirement.** FR-5 compares
 against a constant that is currently unverified; everything built on it is
 provisional until it is checked.

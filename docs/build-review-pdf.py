@@ -35,6 +35,7 @@ DOCS = [
     ("poc-batch.md", "PoC — Batch Processing the Corpus", "Scope, pipeline, measurements, exit criteria"),
     ("deployment-path.md", "From Prototype to Production", "Staged evolution, portability rules, effort"),
     ("deployment-runbook.md", "Deployment Runbook", "Resources, steps, verification, rollback, teardown"),
+    ("implementation-plan.md", "Implementation Plan", "Per-milestone stories, traces, and exit criteria"),
     ("ui-design.md", "User Interface", "Personas, screen specification, states, accessibility"),
     ("test-plan.md", "Test Plan", "Unit catalogue, corpus, adversarial cases, model migration"),
     ("project-reference.md", "Project Reference", "Stakeholders, verified agency context, open questions"),
