@@ -1,0 +1,23 @@
+{
+  "name": "alcohol-label-verify",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TTB alcohol label verification prototype",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail --format pretty",
+    "typecheck": "tsc --noEmit",
+    "types": "wrangler types",
+    "whoami": "wrangler whoami"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260801.1",
+    "typescript": "^5.7.2",
+    "wrangler": "^4.118.0"
+  }
+}

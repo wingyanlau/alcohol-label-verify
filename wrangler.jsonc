@@ -1,0 +1,87 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+
+  "name": "alcohol-label-verify",
+  "main": "src/index.ts",
+
+  // Pinned deliberately. A floating runtime date changes behaviour underneath a
+  // recorded audit trail, for the same reason D29 refuses a floating model alias.
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Structured logs. Payload-free by policy (D20) — identifiers, classifications
+  // and timings only, never label artwork or application values.
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+
+  // Non-secret configuration. Secrets are set with `wrangler secret put NAME`
+  // and never appear here or in the repository (§9.3).
+  "vars": {
+    "ENVIRONMENT": "development",
+
+    // Model identity must be fully qualified. The service refuses to start on a
+    // floating alias such as "-latest" (D29): a mutable identifier silently
+    // invalidates every audit record that cites it.
+    "MODEL_PROVIDER": "unset",
+    "MODEL_ID": "unset",
+
+    // Intake limits, enforced server-side regardless of client checks (§9.3).
+    "MAX_UPLOAD_BYTES": "10485760",
+    "MAX_PAGE_COUNT": "8",
+    "MAX_PIXELS": "40000000",
+    "MAX_BATCH_ITEMS": "300",
+
+    // Rasterisation target. Recorded in the audit record, because an UNREADABLE
+    // verdict may be an artefact of resolution rather than of the artwork (B-Q4).
+    "RASTER_DPI": "300",
+
+    // Extraction concurrency across a batch. Governed by the provider's rate
+    // limit, not by platform capacity (batch design §6.1).
+    "EXTRACT_CONCURRENCY": "5"
+  }
+
+  // ---------------------------------------------------------------------------
+  // Bindings below are declared as the design requires them, but are commented
+  // out until the underlying resources exist — Wrangler fails a deploy that
+  // references a missing resource. Create them, then uncomment.
+  //
+  //   npx wrangler r2 bucket create alcohol-label-verify-staging
+  //   npx wrangler queues create alcohol-label-verify-work
+  //   npx wrangler queues create alcohol-label-verify-dlq
+  //
+  // "r2_buckets": [
+  //   { "binding": "STAGING", "bucket_name": "alcohol-label-verify-staging" }
+  // ],
+  //
+  // "queues": {
+  //   "producers": [
+  //     { "binding": "WORK", "queue": "alcohol-label-verify-work" }
+  //   ],
+  //   "consumers": [
+  //     {
+  //       "queue": "alcohol-label-verify-work",
+  //       // One submission per invocation. Batching would serialise the two
+  //       // parallel extractions against the 6-connection cap (B-D4).
+  //       "max_batch_size": 1,
+  //       "max_retries": 3,
+  //       "dead_letter_queue": "alcohol-label-verify-dlq"
+  //     }
+  //   ]
+  // },
+  //
+  // // One coordinator per job: ledger, progress, and client fan-out (§15.3).
+  // // It must never fetch or extract — its connection cap makes that a hard
+  // // boundary, not a preference.
+  // "durable_objects": {
+  //   "bindings": [
+  //     { "name": "JOB", "class_name": "JobCoordinator" }
+  //   ]
+  // },
+  //
+  // "migrations": [
+  //   { "tag": "v1", "new_sqlite_classes": ["JobCoordinator"] }
+  // ]
+  // ---------------------------------------------------------------------------
+}

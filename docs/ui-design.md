@@ -7,133 +7,342 @@ Section references are to that document unless stated.*
 |---|---|
 | Status | Draft |
 | Last updated | 2026-07-31 |
-| Benchmark user | Sarah's mother, 73 (SRC-2) |
+| Primary persona | Compliance Agent (§2.1) |
+| Benchmark | "Sarah's mother", 73 — a test criterion, not a user (§2.2) |
 
 ---
 
 ## 1. The Bar
 
-Sarah set a specific, unusually clear standard: *"something my mother could
+Sarah set a specific and unusually clear standard: *"something my mother could
 figure out — she's 73 and just learned to video call her grandkids."* Half the
 team is over 50. Dave prints his emails.
 
-That is the design constraint, and it is more demanding than "clean". It rules
-out things that are normal in modern web applications: progressive disclosure,
-icon-only controls, hover-revealed actions, multi-step wizards, anything
-requiring a user to know that a region is scrollable or clickable.
+That is more demanding than "clean". It rules out things that are ordinary in
+modern web applications: progressive disclosure, icon-only controls,
+hover-revealed actions, multi-step wizards, and anything requiring a user to know
+that a region is scrollable, clickable, or draggable.
 
 **The test is NF-U** (test-plan §9.3): one untrained person completes a review
 without asking a question. Not "finds it attractive". Completes it.
 
 ---
 
-## 2. Information Architecture
+## 2. Personas and Surfaces
+
+### 2.1 The Compliance Agent — the only persona the prototype serves
+
+Every named user in the source material performs the same task: compare an
+application against label artwork and act on the difference. They are one
+persona, **the Compliance Agent**, with traits drawn from each individual.
+
+| Trait | From | Design consequence |
+|---|---|---|
+| Sceptical of modernisation; will abandon a tool that wastes time | Dave, 28 yrs (SRC-4) | Verdicts must show evidence and name the rule applied (FR-10). A false mismatch costs more trust than a missed match |
+| Expects tolerant judgment — `STONE'S THROW` is `Stone's Throw` | Dave (SRC-4) | Tolerance is exercised *and visibly reported* (§6.3) |
+| Works from a printed checklist; wants exactness on the warning | Jenny, 8 mths (SRC-5) | Results follow checklist order; warning failures are specific and printable (§7) |
+| Handles bulk importer filings, 200–300 at once | Janet, Seattle (SRC-2) | Batch mode (§9) — same results component, different entry |
+| Mixed technical confidence; half the team over 50 | Sarah (SRC-2) | Large type, high contrast, one obvious action (§11) |
+| Under time pressure; five-second threshold | Sarah (SRC-2) | The wait is explained and bounded (§4.6) |
+
+**Consolidating them is deliberate.** These are not five interfaces. They are one
+task at five tolerance points, and treating them separately would produce variants
+where the correct answer is a single screen satisfying the strictest constraint on
+each axis.
+
+**What consolidation must not lose** is the tension between the traits. Dave's
+demand for visible reasoning and Sarah's demand for an uncluttered screen pull
+against each other. §6.3 resolves that explicitly rather than averaging it away.
+
+Sarah is included as a source of requirements, not as a daily operator. Her
+interests that are *not* interface requirements — throughput, adoption, backlog —
+appear in §2.3 under the sponsor role.
+
+### 2.2 The benchmark is not a persona
+
+**"Sarah's mother" will never use this system.** She is the calibration point for
+NF-U and a proxy for the least confident real agent.
+
+The distinction has practical consequences. Designing *for* her would produce a
+tool that patronises Dave — oversimplified, slow to operate, thin on the evidence
+a 28-year veteran needs. Designing *to pass her test* is what Sarah actually
+asked for: a primary path obvious enough that low confidence is not a barrier,
+with the depth Dave requires still present.
+
+She is a criterion. She is not in §2.1.
+
+### 2.3 Roles requiring a surface — not built
+
+*Each is implied by a design decision, and none is in prototype scope. Recorded
+so the omission is scoped rather than overlooked.*
+
+| Role | Requirement | Implied by | Why not built |
+|---|---|---|---|
+| **Policy owner / approver** | Review drafted rules; approve, activate, supersede; see the source document and citation beside each proposal; identity recorded against every approval | D18, D27, §8.6.3 | Requires a policy store and an approval workflow. Configuration is the store at prototype scale (§8.8.8) |
+| **Auditor / compliance reviewer** | Retrieve a past decision by reference code; read its provenance; replay the verdict without re-invoking the model | §8.7, NFR-13 | Requires persistence, which N3 forbids. The record exists and travels with the result, but there is nothing to retrieve it *from* |
+| **Operator** | Latency and error rate against the 5s budget; verdict distribution sliced by model version; version-change annotations | §9.4.4, §9.4.6 | Host-provided log view only in the prototype (§9.4.7) |
+| **Programme sponsor** | Throughput, adoption rate, effect on backlog | Sarah's own interest (SRC-2) | Requires longitudinal data the prototype does not retain |
+
+**The policy approver is the notable gap.** D27 states that no rule reaches
+`IN FORCE` without named human approval — which *requires an interface to approve
+in*. The governance model has a UI dependency that §5.1 of the design document
+does not acknowledge. It belongs in §15 of that document.
+
+---
+
+## 3. Information Architecture
 
 **One screen. No navigation. No settings.**
 
 ```
    ┌──────────────────────────────────────────────┐
-   │                                              │
    │   Single review          ⟷      Batch        │
    │   (default)                    (secondary)   │
-   │                                              │
    └──────────────────────────────────────────────┘
 ```
 
-Two modes, one visible switch, nothing else. There is no menu, no account, no
-history, no preferences — partly because N2 and N3 mean there is nothing to put
-in them, and partly because every additional destination is somewhere a
-low-confidence user can get lost.
+Two modes, one visible switch. No menu, no account, no history, no preferences —
+partly because N2 and N3 mean there is nothing to put in them, and partly because
+every additional destination is somewhere a low-confidence user can get lost.
 
-**Rejected:** a wizard. Splitting "enter the application data" and "upload the
+**Rejected: a wizard.** Splitting "enter the application data" and "upload the
 label" into steps adds state, a back button, and a way to be halfway through.
 Everything needed for one review fits on one screen at legible size.
 
 ---
 
-## 3. Single Review — Layout
+## 4. Single Review — Specification
+
+### 4.1 Regions
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│  TTB Label Check                                    Single │ Batch     │
+│  A  TTB Label Check                                 Single │ Batch     │
 ├────────────────────────────────────────────────────────────────────────┤
 │                                                                        │
-│  ┌──────────────────────────────┐  ┌────────────────────────────────┐  │
-│  │  1. The application says      │  │  2. The label                  │  │
-│  │                               │  │                                │  │
-│  │  Brand name                   │  │   ┌──────────────────────────┐ │  │
-│  │  ┌─────────────────────────┐  │  │   │                          │ │  │
-│  │  │                         │  │  │   │   Drop the label image    │ │  │
-│  │  └─────────────────────────┘  │  │   │         here              │ │  │
-│  │                               │  │   │                          │ │  │
-│  │  Class / type                 │  │   │   ┌──────────────────┐   │ │  │
-│  │  ┌─────────────────────────┐  │  │   │   │  Choose a file   │   │ │  │
-│  │  │                         │  │  │   │   └──────────────────┘   │ │  │
-│  │  └─────────────────────────┘  │  │   │                          │ │  │
-│  │                               │  │   │   JPEG or PNG, up to 10MB │ │  │
-│  │  Alcohol content              │  │   └──────────────────────────┘ │  │
-│  │  ┌─────────────────────────┐  │  │                                │  │
-│  │  │                    % │  │  │                                │  │
-│  │  └─────────────────────────┘  │  │                                │  │
-│  │                               │  │                                │  │
-│  │  Net contents                 │  │                                │  │
-│  │  ┌─────────────────────────┐  │  │                                │  │
-│  │  │                         │  │  │                                │  │
-│  │  └─────────────────────────┘  │  │                                │  │
-│  └──────────────────────────────┘  └────────────────────────────────┘  │
+│  ┌── B ──────────────────────────┐  ┌── C ──────────────────────────┐  │
+│  │  1. The application says       │  │  2. The label                 │  │
+│  │                                │  │                               │  │
+│  │  Brand name  (required)        │  │   ┌─────────────────────────┐ │  │
+│  │  ┌──────────────────────────┐  │  │   │                         │ │  │
+│  │  │                          │  │  │   │  Drop the label image   │ │  │
+│  │  └──────────────────────────┘  │  │   │        here             │ │  │
+│  │                                │  │   │                         │ │  │
+│  │  Class / type                  │  │   │  ┌──────────────────┐   │ │  │
+│  │  ┌──────────────────────────┐  │  │   │  │  Choose a file   │   │ │  │
+│  │  │                          │  │  │   │  └──────────────────┘   │ │  │
+│  │  └──────────────────────────┘  │  │   │                         │ │  │
+│  │  e.g. Kentucky Straight…       │  │   │  JPEG or PNG, up to 10MB│ │  │
+│  │                                │  │   └─────────────────────────┘ │  │
+│  │  Alcohol content               │  │                               │  │
+│  │  ┌────────────────────┐        │  │                               │  │
+│  │  │               │ %  │        │  │                               │  │
+│  │  └────────────────────┘        │  │                               │  │
+│  │                                │  │                               │  │
+│  │  Net contents                  │  │                               │  │
+│  │  ┌──────────────────────────┐  │  │                               │  │
+│  │  │                          │  │  │                               │  │
+│  │  └──────────────────────────┘  │  │                               │  │
+│  │  e.g. 750 mL                   │  │                               │  │
+│  └───────────────────────────────┘  └───────────────────────────────┘  │
 │                                                                        │
-│              ┌──────────────────────────────────────┐                  │
-│              │        Check this label              │                  │
-│              └──────────────────────────────────────┘                  │
-│                                                                        │
-└────────────────────────────────────────────────────────────────────────┘
-```
-
-**Why this shape.**
-
-- **Two numbered panels.** "1. The application says" / "2. The label" names the
-  agent's actual task — comparing a form against artwork — in the layout itself.
-  Numbering removes any question of order without imposing steps.
-- **One primary action, always visible, never below the fold** (P1). It is the
-  largest interactive element on the screen.
-- **Field labels above inputs, never inside them.** Placeholder-as-label
-  disappears on focus, which is a documented accessibility failure and precisely
-  the kind of thing that strands a hesitant user.
-- **Constraints stated before they are violated** — accepted formats and size
-  limit are visible at rest, not revealed by an error (P6).
-- Panels stack vertically below ~900px. Nothing is hidden at any width.
-
----
-
-## 4. Working State
-
-The 5-second budget (S1) is short but not instant, and an unexplained wait is
-where a hesitant user starts clicking again.
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                                                                        │
-│              ┌──────────────────────────────────────┐                  │
-│              │   Reading the label…                 │                  │
-│              │   ▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░         │                  │
-│              └──────────────────────────────────────┘                  │
-│                                                                        │
-│                     This usually takes a few seconds.                  │
+│           ┌── D ──────────────────────────────────────┐                │
+│           │            Check this label                │                │
+│           └───────────────────────────────────────────┘                │
 │                                                                        │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-- The button is replaced, not merely disabled — a greyed button invites a second
-  click; a progress element does not.
-- Plain language: *"Reading the label"*, never *"Invoking extraction"* (P7).
-- If it exceeds ~8 seconds the copy changes to *"Still working — this is taking
-  longer than usual"*, which is honest and prevents the assumption of a hang.
+| Region | Contains | Notes |
+|---|---|---|
+| A | Product name, mode switch | No other chrome. No logo lockup, no user menu |
+| B | Application data form | Numbered "1." — names the agent's actual task order |
+| C | Label upload | Numbered "2." |
+| D | Primary action | Always visible without scrolling at 1280×800 and above |
+
+**Why two numbered panels.** "1. The application says" / "2. The label" describes
+the comparison the agent is performing, in the layout itself. Numbering
+establishes order without imposing steps.
+
+### 4.2 Application data fields
+
+| Field | Input | Required | Hint |
+|---|---|---|---|
+| Brand name | Single-line text | **Yes** | — |
+| Class / type | Single-line text | No | `e.g. Kentucky Straight Bourbon Whiskey` |
+| Alcohol content | Text with a `%` suffix adornment | No | — |
+| Net contents | Single-line text | No | `e.g. 750 mL` |
+
+**Labels sit above inputs, never inside them.** Placeholder-as-label disappears on
+focus. It is a documented accessibility failure and precisely the thing that
+strands a hesitant user mid-form.
+
+**Alcohol content is a text field, not `<input type="number">`.** Number inputs
+reject a pasted `45% Alc./Vol.`, add spinner controls nobody wants, and behave
+inconsistently with locale decimal separators. The `%` is a visual suffix inside
+the field's border, not part of the value. The parser accepts `45`, `45%`,
+`45.0`, or a pasted fragment.
+
+**Only brand name is required.** Everything else absent is a legitimate outcome —
+`NOT_SUPPLIED` is a first-class verdict state (§8.4.1), not a validation failure.
+Requiring more would force agents to invent values, and an invented value produces
+a false discrepancy.
+
+> **Noted, not scoped.** The warning-statement check needs no application data at
+> all. A "check the warning only" mode would be useful and nearly free. §9.2 of
+> the design document currently requires brand name, so this stays out.
+
+### 4.3 Label upload
+
+| State | Presentation |
+|---|---|
+| Empty | Dashed region, instruction text, **and** a `Choose a file` button. Accepted formats and size limit stated at rest |
+| Dragging over | Region highlights; border becomes solid |
+| Selected | Thumbnail preview, filename, file size, `Replace` and `Remove` |
+| Rejected | Returns to empty with the reason stated beneath (§10) |
+
+**Drag-and-drop is always paired with a file-picker button.** Drag-and-drop alone
+is unusable for several groups and unfamiliar to part of this audience. The button
+is not a fallback; it is the primary affordance, with the drop zone as a
+convenience.
+
+**A thumbnail appears before submission.** The agent must be able to confirm the
+right file is attached without submitting — the most common upload error is the
+wrong file, and discovering that after a five-second wait is a wasted review.
+
+**Constraints are stated before they are violated** (P6). Format and size are
+visible at rest, not revealed by an error.
+
+### 4.4 Primary action
+
+- Label: **Check this label**
+- The largest interactive element on the screen
+- **Never disabled**
+- Full-width on narrow viewports; centred and generously sized otherwise
+
+**The button is never disabled**, even with an empty form. A disabled button is
+unfocusable, announces nothing to assistive technology, and gives a hesitant user
+no explanation for why clicking does nothing. Pressing it with an incomplete form
+runs validation and moves focus to the problem, which *tells the agent what to
+do*. That is both the accessible pattern and the kinder one.
+
+### 4.5 Validation
+
+**On submit only. Never on blur.**
+
+Validating as a user leaves a field punishes slow and uncertain typists — it flags
+an incomplete entry as an error before they have finished thinking. For this
+audience that is actively hostile.
+
+On submit, if brand name is empty or no image is attached:
+
+1. Focus moves to the first problem
+2. An inline message appears beneath that control
+3. The control is marked invalid for assistive technology
+4. No request is sent
+
+Every constraint enforced here is re-enforced server-side (§9.3). Client-side
+validation exists for responsiveness, never for correctness.
+
+### 4.6 The working state
+
+Five seconds is short but not instant, and an unexplained wait is where a hesitant
+user starts clicking again.
+
+```
+              ┌──────────────────────────────────────┐
+              │   Reading the label…                 │
+              │   ▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░         │
+              └──────────────────────────────────────┘
+
+                     This usually takes a few seconds.
+```
+
+| Rule | Reason |
+|---|---|
+| The button is **replaced**, not disabled | A greyed button invites a second click; a progress element does not |
+| Copy is plain: *"Reading the label…"* | Never *"Invoking extraction"* (P7) |
+| Form inputs become read-only, not hidden | The agent can still see what they submitted |
+| After ~8s: *"Still working — this is taking longer than usual."* | Honest, and prevents the assumption of a hang |
+| Progress is indeterminate, not a countdown | A countdown that overruns is worse than none |
+
+### 4.7 Transition to results
+
+**Results replace the input region entirely.** The label image moves into the
+results view (§6.4), where it stays visible.
+
+The form is not shown alongside the results, because the results rows *become* the
+editing surface (§8). Two editable copies of the same value is a defect waiting to
+happen.
+
+On completion:
+
+1. The results region replaces regions B, C and D
+2. Focus moves to the outcome banner
+3. The banner is announced via an assertive live region
+4. The page does not scroll — the banner occupies the position the form did
+
+**Moving focus is not optional.** Without it, a screen-reader user is left at a
+now-empty region with no indication that anything happened, and a sighted user may
+miss a result rendered above their scroll position.
+
+A `Check another label` action resets to §4.1 with everything cleared.
+
+### 4.8 Keyboard and focus
+
+| | |
+|---|---|
+| Tab order | Brand name → class/type → alcohol → net contents → file button → primary action |
+| The drop zone is not a tab stop | The button inside it is |
+| Focus ring | Visible, never removed, ≥ 2px, ≥ 3:1 against its background |
+| `Enter` in any text field | Submits — matches the expectation of a four-field form |
+| On validation failure | Focus to the first invalid control |
+| On results | Focus to the outcome banner |
+| On error | Focus to the error message |
+
+### 4.9 Responsive behaviour
+
+| Width | Layout |
+|---|---|
+| ≥ 1100px | Panels side by side; image beside results |
+| 700–1100px | Panels side by side, narrower; image above results |
+| < 700px | Panels stack — application, then label, then action |
+
+Nothing is hidden at any width. No horizontal scrolling at any width, or at 200%
+zoom (NF-A04).
+
+### 4.10 Every string on this screen
+
+*Written once, here, so copy is a design artefact rather than an implementation
+afterthought.*
+
+| Element | Text |
+|---|---|
+| Page title | TTB Label Check |
+| Mode switch | Single review · Batch |
+| Panel 1 heading | 1. The application says |
+| Panel 2 heading | 2. The label |
+| Field labels | Brand name · Class / type · Alcohol content · Net contents |
+| Required marker | (required) — on brand name only |
+| Class hint | e.g. Kentucky Straight Bourbon Whiskey |
+| Net contents hint | e.g. 750 mL |
+| Drop zone | Drop the label image here |
+| File button | Choose a file |
+| Constraint line | JPEG or PNG, up to 10 MB |
+| Selected file actions | Replace · Remove |
+| Primary action | Check this label |
+| Working | Reading the label… |
+| Working, sub | This usually takes a few seconds. |
+| Working, extended | Still working — this is taking longer than usual. |
+| Missing brand name | Please enter the brand name from the application. |
+| Missing image | Please add an image of the label. |
+| Reset action | Check another label |
 
 ---
 
 ## 5. Results — Overall Outcome
 
-Three outcomes (§8.4.2), each unmistakable, each carrying a text label and never
+Three outcomes (§8.4.2), each unmistakable, each carrying a text label, never
 distinguished by colour alone (P2, NF-A05).
 
 ```
@@ -155,22 +364,21 @@ distinguished by colour alone (P2, NF-A05).
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-**The third is the one that matters most.** `INCOMPLETE` outranks everything
-(D5), and the interface must never let it read as a pass. It gets its own
-treatment, its own wording, and states the required action — a clearer photo —
-rather than merely reporting a condition.
+**The third matters most.** `INCOMPLETE` outranks everything (D5), and the
+interface must never let it read as a pass. It gets its own treatment, its own
+wording, and states the required action — a clearer photo — rather than merely
+reporting a condition.
 
-Wording is deliberately non-technical: *"Everything matches"*, not *"CLEAR"*.
-*"Could not finish the check"*, not *"INCOMPLETE"*. The verdict vocabulary in
+Wording is deliberately non-technical: *"Everything matches"*, not `CLEAR`.
+*"Could not finish the check"*, not `INCOMPLETE`. The verdict vocabulary in
 §8.4.2 is internal (P7).
 
 ---
 
 ## 6. Results — Field Rows
 
-Presented in the order of Jenny's paper checklist (P4), with the artwork beside
-them so the agent adjudicates against the label rather than against the verdict
-(FR-10).
+In the order of Jenny's paper checklist (P4), with the artwork beside them so the
+agent adjudicates against the label rather than against the verdict (FR-10).
 
 ```
 ┌───────────────────────────────────────┐  ┌──────────────────────────┐
@@ -188,7 +396,7 @@ them so the agent adjudicates against the label rather than against the verdict
 ├───────────────────────────────────────┤
 │  Alcohol content                       │
 │  ✗  Does not match                     │
-│     Application:  45%                  │
+│     Application:  45%      [ Edit ]    │
 │     On the label: 40% Alc./Vol.        │
 ├───────────────────────────────────────┤
 │  Net contents                          │
@@ -199,21 +407,18 @@ them so the agent adjudicates against the label rather than against the verdict
 └───────────────────────────────────────┘
 ```
 
-**Row anatomy — four parts, always all four:**
+### 6.1 Row anatomy
 
-| Part | Purpose |
-|---|---|
-| Field name | Plain English, matching the paper checklist |
-| Status with icon **and** words | Never icon-only, never colour-only |
-| Both values, labelled | The evidence (FR-10) — the agent's actual decision input |
-| Rule applied, when it explains something | *"Capitalisation differs — treated as a match"* |
+| Part | Always present | Purpose |
+|---|---|---|
+| Field name | Yes | Plain English, matching the paper checklist |
+| Status: icon **and** words | Yes | Never icon-only, never colour-only |
+| Both values, labelled | Yes | The evidence (FR-10) — the agent's actual decision input |
+| Rule line | **Conditional — §6.3** | Explains a judgment the system made |
 
-**The rule line is Dave's row.** His objection is a tool that flags
-`STONE'S THROW` against `Stone's Throw`. This design does not merely avoid the
-false flag — it *shows him it noticed and decided*, in a sentence. Silent
-correctness would leave him unsure whether the tool had looked.
+### 6.2 Status vocabulary
 
-**Status vocabulary**, fixed and used nowhere else:
+Fixed, and used nowhere else.
 
 | Icon | Words | Meaning |
 |---|---|---|
@@ -222,10 +427,41 @@ correctness would leave him unsure whether the tool had looked.
 | ! | Could not read this on the label | Perception failed — **not** a discrepancy |
 | — | Not on the application | Nothing supplied to compare against |
 
-**The keeping-the-image-visible decision is load-bearing.** FR-10 exists so the
-agent adjudicates against the artwork. If the image scrolls away behind the
-results, the agent adjudicates against the verdict instead — which is the
-trust posture the entire design is built to avoid.
+### 6.3 The rule line — when it appears
+
+**A rule line appears only when a rule was actually exercised.**
+
+| Situation | Rule line |
+|---|---|
+| Values identical | **None.** `✓ Matches` and nothing further |
+| Values differ but a tolerance matched them | **Yes** — *"Capitalisation differs — treated as a match."* |
+| Units converted | **Yes** — *"Units differ but the volume is the same."* |
+| Proof converted to ABV | **Yes** — *"Proof converted to alcohol by volume."* |
+| Unit assumed on the label | **Yes** — *"No unit was found on the label; millilitres assumed. Please double-check."* |
+| Plain mismatch | **Yes** — names the comparison performed |
+| Could not read | **Yes** — states the consequence and the remedy |
+
+**This resolves the tension in §2.1.** Dave's trust comes from seeing that the
+system noticed and decided — silent correctness leaves him unsure it looked at
+all. But an explanation on every row is text on a screen whose premise is that a
+hesitant user should not have to read much.
+
+Showing the line exactly when a judgment was made satisfies both: a clean label
+produces four near-bare rows, while every exercised tolerance is visible and
+challengeable. The explanation appears precisely when it is earning its place.
+
+**Rejected alternative:** hiding rule lines behind a disclosure control. That
+violates P1 and P9 — a control which must be discovered is one the benchmark user
+will not find.
+
+### 6.4 The image panel
+
+| Rule | Reason |
+|---|---|
+| Remains visible while results scroll | **Load-bearing.** FR-10 exists so the agent adjudicates against the artwork; if the image scrolls away they adjudicate against the verdict instead — the exact posture the design is built to avoid |
+| `Enlarge` opens a full-size view | Small print on a label is unreadable at panel size |
+| Never obscures a result row | The enlarged view is dismissible by `Esc`, by a close button, and by clicking outside |
+| Stacks above results below 1100px | Still visible, and still before the verdicts in reading order |
 
 ---
 
@@ -258,18 +494,19 @@ failures are more specific.
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **The deviation is shown, not just reported.** Required text and actual text
-  side by side with the difference marked. An agent must be able to act, and
-  "the warning is wrong" is not actionable.
-- **Failures are named by segment** (§3.6) — the header, clause 1, clause 2 —
-  rather than condemning the whole statement.
-- **The advisory checklist is FR-6a made honest.** Four things the system cannot
-  verify from an image, stated as the agent's responsibility rather than silently
-  omitted. Checkboxes are deliberately non-functional and non-persisted; they are
-  a printed checklist, which is the artefact Jenny already uses.
-- The second item — *"the rest of the warning is NOT in bold"* — is the rule no
-  interviewee mentioned (§3.6). Its presence is the visible payoff of reading the
-  regulation.
+- **The deviation is shown, not merely reported.** Required and actual text side
+  by side with the difference marked. "The warning is wrong" is not actionable.
+- **Failures are named by segment** (§3.6) — header, clause 1, clause 2 — rather
+  than condemning the whole statement.
+- **The advisory checklist is FR-6a made honest.** Rules the system cannot verify
+  from an image, stated as the agent's responsibility rather than silently
+  omitted. Checkboxes are non-functional and non-persisted: it is a printed
+  checklist, which is the artefact Jenny already uses.
+- **A print stylesheet is worth its cost.** Jenny works from paper, and the
+  advisory list is the one part of this interface that genuinely wants printing.
+- The second advisory item — *"the rest of the warning is NOT in bold"* — is the
+  rule no interviewee mentioned (§3.6). Its presence is the visible payoff of
+  reading the regulation rather than the transcript.
 
 ---
 
@@ -281,18 +518,24 @@ discrepancy.
 ```
 │  Alcohol content                       │
 │  ✗  Does not match                     │
-│     Application:  45%     [ Edit ]     │
+│     Application:  45%      [ Edit ]    │
 │     On the label: 40% Alc./Vol.        │
 ```
 
-Editing re-runs comparison only — no re-upload, no re-extraction, and the result
-is effectively instantaneous (§6.1). Copy after the edit: *"Re-checked using the
-same label reading."*
+| Step | Behaviour |
+|---|---|
+| `Edit` | The application value becomes an inline text input, focused, content selected |
+| Confirm | `Enter`, or a `Re-check` button. `Esc` cancels |
+| Result | Comparison re-runs; no re-upload, no re-extraction; effectively instantaneous |
+| Copy after | *"Re-checked using the same label reading."* |
+| Scope | Only the edited row's verdict and the overall outcome change |
 
-This is worth building because it is where the architecture becomes *felt*. The
-separation of extraction from comparison is otherwise invisible to the user; here
-it shows up as a correction that returns instantly instead of taking five
-seconds.
+**`Edit` appears only on rows where it can help** — a mismatch or a missing value.
+Offering it on a passing row invites tampering with a correct result.
+
+**This is where the architecture becomes felt.** The separation of extraction from
+comparison (§6.1) is otherwise invisible to the user; here it appears as a
+correction that returns instantly instead of taking five seconds.
 
 ---
 
@@ -319,13 +562,13 @@ seconds.
 
 - **Results appear as they resolve** (FR-13, NFR-2). The first lands within 5s
   while the rest continue.
-- **Problems sort to the top and stay there.** With 300 items the agent's job is
-  triage; the 43 that matched need no attention. Sorting by outcome rather than
-  by arrival is the difference between a list and a worklist.
+- **Problems sort to the top and stay there.** With 300 items the job is triage;
+  the 43 that matched need no attention. Sorting by outcome rather than by arrival
+  is the difference between a list and a worklist.
 - Counts update live, so progress is legible without reading rows.
 - A failed item shows its cause and is individually re-submittable (NFR-6).
-- Selecting any row opens that item's full review — the same view as §5–§7, so
-  there is one results design, not two.
+- Selecting any row opens that item's full review — the same view as §5–§7. One
+  results design, not two.
 
 ---
 
@@ -338,25 +581,30 @@ Every message follows one shape: **what happened, why, what to do next** (P6).
 | Wrong file type | *"That file is a PDF. Please upload a JPEG or PNG image of the label."* |
 | Too large | *"That image is 24 MB. The limit is 10 MB. Please upload a smaller image."* |
 | Corrupt image | *"This image could not be opened. It may be damaged — try exporting it again."* |
-| Missing field | *"Please enter the brand name from the application."* — shown at the field |
+| Missing brand name | *"Please enter the brand name from the application."* — at the field |
+| Missing image | *"Please add an image of the label."* — at the upload region |
 | Service unavailable | *"The label reading service is not responding. Nothing is wrong with your label — please try again in a moment."* |
 | Timeout | *"This took longer than expected and was stopped. [Try again]"* |
-| Unexpected | *"Something went wrong. Nothing was saved. [Try again]" + reference code* |
+| Unexpected | *"Something went wrong. Nothing was saved. [Try again]"* + reference code |
 
 **The service-unavailable wording carries real weight.** Without *"nothing is
 wrong with your label"*, an agent may record a rejection for a system fault. The
-distinction between a system failure and a compliance finding must be explicit in
-the words, not merely in the status code.
+distinction between a system failure and a compliance finding must be in the
+words, not merely in a status code.
+
+**The reference code** (D21) appears in error messages and at the foot of every
+result: `Reference: 7K2M-4QX9`. Nothing is stored (N3), so it is the only bridge
+between an agent's report of a wrong result and the operator's logs.
 
 **No message contains** an error number as its primary content, the words
-"invalid" or "failed" unqualified, a stack trace, or any instruction to contact
-an administrator who does not exist.
+"invalid" or "failed" unqualified, a stack trace, or an instruction to contact an
+administrator who does not exist.
 
 ---
 
 ## 11. Visual System
 
-Deliberately plain. Nothing here is stylistic preference; each follows from §5.1.
+Deliberately plain. Each decision follows from §2.1.
 
 | Aspect | Decision | Because |
 |---|---|---|
@@ -388,26 +636,26 @@ The interface's vocabulary is a design artefact (P7).
 | Failed | Says what did not happen and what to do |
 | Low confidence | *"Please double-check this one"* |
 
-**"AI" appears nowhere in the interface.** It is not what the agent is doing.
-The agent is checking a label; how the reading happens is an implementation
-detail, and naming it invites either misplaced trust or misplaced suspicion —
-both of which cost accuracy.
+**"AI" appears nowhere in the interface.** It is not what the agent is doing —
+they are checking a label. Naming the mechanism invites either misplaced trust or
+misplaced suspicion, and both cost accuracy.
 
 ---
 
 ## 13. Accessibility
 
-Target WCAG 2.1 AA (§5.4). Specifics:
+Target WCAG 2.1 AA (§5.4).
 
 - Every input has a real `<label>`; no placeholder-as-label
 - Full keyboard operation, logical tab order, visible focus (NF-A03)
-- Results announced on completion via a live region — the outcome must reach a
-  screen-reader user without a manual re-read
+- Results announced on completion via an assertive live region; focus moved to the
+  outcome banner (§4.7)
+- Validation errors associated with their controls and announced
 - Status conveyed in text, not by icon or colour alone (NF-A05)
 - Layout survives 200% zoom with no horizontal scrolling (NF-A04)
-- Drag-and-drop always paired with a file-picker button — drag-and-drop alone is
-  unusable for several groups and unknown to some of this audience
+- Drag-and-drop always paired with a file-picker button
 - No time limits, no auto-dismissing messages
+- The enlarged image view traps focus and returns it on dismissal
 
 ---
 
@@ -424,26 +672,28 @@ Target WCAG 2.1 AA (§5.4). Specifics:
 | Confidence percentages | A number invites false precision; *"please double-check this one"* is more actionable |
 | Approve / reject buttons | **N7** — the system informs, it does not decide. Adding them would misrepresent what the tool is |
 
-The last is the most important omission on the list. There is no button that
-records a compliance decision, because that decision is the agent's and is made
-in COLA.
+The last is the most important omission. There is no button that records a
+compliance decision, because that decision is the agent's and is made in COLA.
 
 ---
 
 ## 15. Build Order
 
-Matching §11.1 milestones and the §11.2 cut ladder:
+Matching §11.1 milestones and the §11.2 cut ladder.
 
-| # | Piece | Notes |
-|---|---|---|
-| 1 | Single-review layout, form, upload | §3 |
-| 2 | Field rows with evidence | §6 — FR-10, the trust mechanism |
-| 3 | Overall outcome banner | §5 — all three states, `INCOMPLETE` first |
-| 4 | Warning block with deviation display | §7 |
-| 5 | Error states | §10 |
-| 6 | Working state | §4 |
-| 7 | Advisory checklist | §7 — static, near-zero cost |
-| 8 | Correct-and-recheck | §8 — where the architecture becomes felt |
-| 9 | Batch | §9 — cut ladder items 5 and 6 |
+| # | Piece | Section | Milestone |
+|---|---|---|---|
+| 1 | Single-review layout, form, upload | §4.1–4.5 | M3 |
+| 2 | Working state and focus management | §4.6–4.8 | M3 |
+| 3 | Reference code surfaced | §10 | M4 |
+| 4 | Outcome banner, all three states | §5 | M5 |
+| 5 | Field rows with evidence | §6.1–6.2 | M5 |
+| 6 | Rule line, conditional | §6.3 | M5 |
+| 7 | Image panel, persistent | §6.4 | M5 |
+| 8 | Warning block with deviation display | §7 | M5 |
+| 9 | Advisory checklist | §7 | M5 |
+| 10 | Error states | §10 | M6 |
+| 11 | Correct-and-recheck | §8 | after M6 |
+| 12 | Batch | §9 | M9 |
 
-Items 1–5 constitute the shippable floor (§11.2).
+Items 1–10 constitute the shippable floor (§11.2).
