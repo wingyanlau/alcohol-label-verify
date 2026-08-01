@@ -257,14 +257,8 @@
       "expected": {
         "outcome": "INCOMPLETE",
         "fields": {
-          "brandName": [
-            "MATCH",
-            "UNREADABLE"
-          ],
-          "classType": [
-            "MATCH",
-            "UNREADABLE"
-          ],
+          "brandName": ["MATCH", "UNREADABLE"],
+          "classType": ["MATCH", "UNREADABLE"],
           "alcoholContent": "UNREADABLE",
           "netContents": "UNREADABLE"
         },
@@ -289,22 +283,10 @@
       "expected": {
         "outcome": "INCOMPLETE",
         "fields": {
-          "brandName": [
-            "MISSING_ON_LABEL",
-            "UNREADABLE"
-          ],
-          "classType": [
-            "MISSING_ON_LABEL",
-            "UNREADABLE"
-          ],
-          "alcoholContent": [
-            "MISSING_ON_LABEL",
-            "UNREADABLE"
-          ],
-          "netContents": [
-            "MISSING_ON_LABEL",
-            "UNREADABLE"
-          ]
+          "brandName": ["MISSING_ON_LABEL", "UNREADABLE"],
+          "classType": ["MISSING_ON_LABEL", "UNREADABLE"],
+          "alcoholContent": ["MISSING_ON_LABEL", "UNREADABLE"],
+          "netContents": ["MISSING_ON_LABEL", "UNREADABLE"]
         },
         "warningOk": false
       },

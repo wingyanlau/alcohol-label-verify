@@ -50,9 +50,7 @@
   // Transient content: submission PDFs and rasterised regions, held for the
   // life of a job and purged on completion (B-D10). The durable record lives
   // in D1 and keeps only the digest.
-  "r2_buckets": [
-    { "binding": "STAGING", "bucket_name": "alcohol-label-verify-staging" }
-  ],
+  "r2_buckets": [{ "binding": "STAGING", "bucket_name": "alcohol-label-verify-staging" }],
 
   // The durable record: jobs, submissions, extractions, verdicts, and an
   // append-only hash-chained transaction history (D32).
@@ -69,9 +67,7 @@
   "ai": { "binding": "AI" },
 
   "queues": {
-    "producers": [
-      { "binding": "WORK", "queue": "alcohol-label-verify-work" }
-    ],
+    "producers": [{ "binding": "WORK", "queue": "alcohol-label-verify-work" }],
     "consumers": [
       {
         "queue": "alcohol-label-verify-work",
@@ -88,12 +84,8 @@
   // It never fetches or extracts — its connection cap makes that a hard
   // boundary, not a preference (B-D12).
   "durable_objects": {
-    "bindings": [
-      { "name": "JOB", "class_name": "JobCoordinator" }
-    ]
+    "bindings": [{ "name": "JOB", "class_name": "JobCoordinator" }]
   },
 
-  "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["JobCoordinator"] }
-  ]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["JobCoordinator"] }]
 }

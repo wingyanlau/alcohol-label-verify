@@ -34,11 +34,7 @@ import type { Env } from './index.js'
 export type ItemState = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'REJECTED'
 
 /** Outcome vocabulary is the domain's; the coordinator only stores it. */
-export type Outcome =
-  | 'CLEAR'
-  | 'CLEAR_CONFIRM_FLAGGED'
-  | 'DISCREPANCIES_FOUND'
-  | 'INCOMPLETE'
+export type Outcome = 'CLEAR' | 'CLEAR_CONFIRM_FLAGGED' | 'DISCREPANCIES_FOUND' | 'INCOMPLETE'
 
 export interface ItemRef {
   readonly itemId: string

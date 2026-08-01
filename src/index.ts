@@ -146,7 +146,10 @@ export default {
           ).first<{ value: string }>()
           schema = row?.value ?? null
           if (row?.value == null) {
-            problems.push({ setting: 'DB', problem: 'schema_meta is empty — migrations not applied' })
+            problems.push({
+              setting: 'DB',
+              problem: 'schema_meta is empty — migrations not applied',
+            })
           }
         } catch (e) {
           problems.push({
@@ -178,10 +181,13 @@ export default {
       if (!env.AI) return json({ status: 'unavailable', reason: 'no AI binding' }, 503)
       const started = Date.now()
       try {
-        const out = (await env.AI.run(env.MODEL_ID as keyof AiModels, {
-          messages: [{ role: 'user', content: 'Reply with the single word: ready' }],
-          max_tokens: 8,
-        } as never)) as { response?: string }
+        const out = (await env.AI.run(
+          env.MODEL_ID as keyof AiModels,
+          {
+            messages: [{ role: 'user', content: 'Reply with the single word: ready' }],
+            max_tokens: 8,
+          } as never,
+        )) as { response?: string }
         return json({
           status: 'ok',
           model: env.MODEL_ID,
@@ -189,12 +195,15 @@ export default {
           reply: (out.response ?? '').trim().slice(0, 40),
         })
       } catch (e) {
-        return json({
-          status: 'error',
-          model: env.MODEL_ID,
-          latencyMs: Date.now() - started,
-          error: e instanceof Error ? e.message : String(e),
-        }, 502)
+        return json(
+          {
+            status: 'error',
+            model: env.MODEL_ID,
+            latencyMs: Date.now() - started,
+            error: e instanceof Error ? e.message : String(e),
+          },
+          502,
+        )
       }
     }
 
@@ -277,16 +286,25 @@ export default {
       const { jobId, submissionId, contentKey } = message.body ?? ({} as WorkMessage)
       if (!jobId || !submissionId || !contentKey) {
         // Malformed messages are not retried — redelivery cannot fix them.
-        console.log(JSON.stringify({
-          event: 'work.rejected', reason: 'malformed', messageId: message.id,
-        }))
+        console.log(
+          JSON.stringify({
+            event: 'work.rejected',
+            reason: 'malformed',
+            messageId: message.id,
+          }),
+        )
         message.ack()
         continue
       }
       // Payload-free by policy (D20): identifiers and classifications only.
-      console.log(JSON.stringify({
-        event: 'work.received', jobId, submissionId, attempt: message.attempts,
-      }))
+      console.log(
+        JSON.stringify({
+          event: 'work.received',
+          jobId,
+          submissionId,
+          attempt: message.attempts,
+        }),
+      )
       message.ack()
     }
   },

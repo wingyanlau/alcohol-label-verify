@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Lint, typecheck, and the full suite with coverage thresholds.
+      # Same gate as the pre-push hook, so CI cannot disagree with local.
+      - run: npm run quality-check
+
+      # The guard tests are named individually because they protect stated
+      # correctness properties rather than behaviour that is merely nice to
+      # have. If one of them is ever deleted rather than failed, the suite
+      # would still pass — this step notices that.
+      - name: Guard tests present
+        run: |
+          set -euo pipefail
+          missing=0
+          for id in UT-G03 UT-G04 UT-W05 UT-W12 UT-N08 CT-10; do
+            if ! grep -rq "$id" src/ 2>/dev/null; then
+              echo "::error::guard test $id is not present in src/"
+              missing=1
+            fi
+          done
+          exit $missing

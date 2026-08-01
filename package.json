@@ -11,13 +11,27 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail --format pretty",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "quality-check": "npm run lint && npm run build && npm run test:coverage",
     "types": "wrangler types",
-    "whoami": "wrangler whoami"
+    "corpus": "python3 testdata/generate.py",
+    "docs:pdf": "python3 docs/build-review-pdf.py",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.6",
+    "@cloudflare/vitest-pool-workers": "^0.20.1",
     "@cloudflare/workers-types": "^5.20260801.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "husky": "^9.1.7",
     "typescript": "^5.7.2",
+    "vitest": "^4.1.10",
     "wrangler": "^4.118.0"
   }
 }
