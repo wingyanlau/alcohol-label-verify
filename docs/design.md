@@ -1699,6 +1699,27 @@ re-derivable exactly, because everything the comparison consumed is captured.
 The claim the prototype makes is unchanged; only the governance metadata that
 would describe a policy regime it does not have is omitted.
 
+**And it is now tested rather than asserted** — `GET /audit/replay/:submissionId`
+re-derives a stored verdict from the record alone. Building it disproved the
+sentence above as it then stood. "Everything the comparison consumed is
+captured" was untrue: warning legibility is measured from pixels (D5), the
+comparison consumed it, and nothing stored it, so a replay recomputed `CLEAR`
+where the record said `INCOMPLETE`. Migration 0002 stores the decision — not
+the measurement, which is not reproducible from what survives a run.
+
+The lesson generalises past this one field. **Any input to the comparison that
+is derived from the artefact rather than read from it is a re-derivability
+hazard**, because the artefact is transient and the derivation is not part of
+the record. Legibility was the first; a second would fail the same way and just
+as silently. The replay endpoint is what makes the next one visible, which is
+the argument for having built it now rather than at the end.
+
+Replay runs through the same `verifySubmission` the live path uses, fed by a
+provider that returns recorded readings instead of calling a vendor. A
+replay-specific comparison would have been free to agree with a verdict the
+live path would no longer produce — precisely the failure a replay exists to
+catch.
+
 **What this concedes.** NFR-14 is met for the layers that exist, not for rule
 provenance. A verdict traces to a rule; it does not yet trace to an approval.
 That is the honest statement, and it belongs in the README.

@@ -170,8 +170,16 @@ passing review.
 - [ ] `audit_event` rows are appended and hash-chained; the chain verifies
 - [ ] A correlation identifier is generated per review and **surfaced in the
       response**
-- [ ] **Replay test passes**: a stored extraction re-compared yields a
-      bit-identical verdict (NFR-13)
+- [x] **Replay test passes**: a stored extraction re-compared yields a
+      bit-identical verdict (NFR-13) — `GET /audit/replay/:submissionId`,
+      re-derived through the same `verifySubmission` via a provider that
+      returns recorded readings. Writing it found the requirement already
+      broken: the legibility rule made the verdict depend on a measurement
+      taken from pixels and nothing stored it, so a replay recomputed `CLEAR`
+      where the record said `INCOMPLETE`. Migration 0002 records the decision
+      on the verdict row. **Verdicts written before that migration are not
+      re-derivable** and the endpoint reports them as disagreements, which is
+      the honest answer rather than a defect
 - [ ] Submission content is purged from R2 after completion (B-D10)
 
 ---
