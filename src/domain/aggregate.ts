@@ -5,7 +5,7 @@
  *
  * The ordering below is a safety property, not a presentation choice:
  *
- *   UNREADABLE outranks everything.
+ *   UNREADABLE outranks everything — including an illegible warning.
  *
  * A field that could not be read must never aggregate into a clear result. The
  * failure this prevents is the serious one — a label passing review because the
@@ -23,7 +23,14 @@ export interface AggregateInput {
 
 export function aggregate({ fields, warning }: AggregateInput): Outcome {
   // 1. Anything unreadable blocks a conclusion, whatever else was found.
+  //
+  // The warning counts here as much as any field, and for a sharper reason:
+  // its text is a fixed statute, so a model can return it perfectly without
+  // reading it. Legibility is measured from the pixels precisely because the
+  // extractor's own account of what it could see is worth nothing for a string
+  // it already knows.
   if (fields.some((f) => f.state === 'UNREADABLE')) return 'INCOMPLETE'
+  if (warning !== null && !warning.legible) return 'INCOMPLETE'
 
   // 2. A discrepancy on any field, or on the warning statement.
   const fieldProblem = fields.some((f) => f.state === 'MISMATCH' || f.state === 'MISSING_ON_LABEL')

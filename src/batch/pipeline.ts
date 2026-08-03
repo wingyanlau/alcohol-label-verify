@@ -88,17 +88,31 @@ function causeOf(error: unknown): string {
  * read, so it keeps the second extraction until a real COLAs Online
  * integration supplies one.
  */
-async function loadDeclaredRecord(env: Env, submissionId: string): Promise<ApplicationData | null> {
+interface CorpusEntry {
+  readonly declared: ApplicationData | null
+  /** Measured at build time from the shipped raster; see testdata/generate.py. */
+  readonly warningLegibility: number | null
+}
+
+async function loadCorpusEntry(env: Env, submissionId: string): Promise<CorpusEntry | null> {
   if (!env.ASSETS) return null
   const response = await env.ASSETS.fetch(new Request('https://assets.local/manifest.json'))
   if (!response.ok) return null
 
-  const manifest = (await response.json()) as { cases?: { id?: string; application?: unknown }[] }
+  const manifest = (await response.json()) as {
+    cases?: { id?: string; application?: unknown; warningLegibility?: unknown }[]
+  }
   const entry = manifest.cases?.find((c) => c.id === submissionId)
-  const declared = entry?.application
-  if (typeof declared !== 'object' || declared === null) return null
+  if (entry === undefined) return null
 
-  return applicationDataFrom(declared as Record<string, unknown>)
+  const declared = entry.application
+  return {
+    declared:
+      typeof declared === 'object' && declared !== null
+        ? applicationDataFrom(declared as Record<string, unknown>)
+        : null,
+    warningLegibility: typeof entry.warningLegibility === 'number' ? entry.warningLegibility : null,
+  }
 }
 
 /**
@@ -239,10 +253,20 @@ export async function processItem(
     // observed inventing "Old Forester" for a compliant label. The label is
     // untouched: it is still read from pixels, because that is what a consumer
     // sees (rule 5). An upload has no declared record and keeps both calls.
-    const declared = await loadDeclaredRecord(env, corpusIdOf(message))
+    const corpus = await loadCorpusEntry(env, corpusIdOf(message))
+    const declared = corpus?.declared ?? null
     const result = await verifySubmission(
       {
-        label: { image: normalised.label.image, mimeType: normalised.label.mimeType },
+        label: {
+          image: normalised.label.image,
+          mimeType: normalised.label.mimeType,
+          // Measured from the pixels, because the extractor cannot be asked:
+          // it returns the statutory warning from memory when it cannot read
+          // one, and reports success either way.
+          ...(corpus?.warningLegibility === null || corpus?.warningLegibility === undefined
+            ? {}
+            : { warningLegibility: corpus.warningLegibility }),
+        },
         record:
           declared === null
             ? { image: normalised.record.image, mimeType: normalised.record.mimeType }

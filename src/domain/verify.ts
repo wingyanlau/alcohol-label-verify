@@ -24,11 +24,19 @@ import type { ExtractionProvenance, ExtractionProvider } from './extraction.js'
 import type { WarningReference } from './reference.js'
 import type { ApplicationData, Extraction, FieldVerdict, Outcome, WarningVerdict } from './types.js'
 import { FIELDS } from './types.js'
-import { verifyWarning } from './warning.js'
+import { verifyWarning, WARNING_LEGIBILITY_FLOOR } from './warning.js'
 
 export interface RegionImage {
   readonly image: ArrayBuffer
   readonly mimeType: string
+  /**
+   * Edge energy measured over the region carrying the health warning.
+   *
+   * Supplied by whoever produced the pixels, because that is the only place
+   * the pixels exist. Absent means unmeasured, which is treated as legible —
+   * a missing measurement must not silently fail every submission.
+   */
+  readonly warningLegibility?: number
 }
 
 export interface VerifyInput {
@@ -86,6 +94,14 @@ export async function verifySubmission(
 
   const needsRecordExtraction = 'image' in input.record
 
+  // Whether the warning was legible enough for a transcription to mean
+  // anything. Not a question the extractor can answer about a statute it knows
+  // by heart: shown an illegible warning it returns the canonical text and
+  // reports success. Measured from pixels, or assumed legible when unmeasured.
+  const warningLegible =
+    input.label.warningLegibility === undefined ||
+    input.label.warningLegibility >= WARNING_LEGIBILITY_FLOOR
+
   const extractStarted = now()
   // Concurrent, and separate. See the module comment.
   const [labelResult, recordResult] = await Promise.all([
@@ -114,7 +130,11 @@ export async function verifySubmission(
 
   const compareStarted = now()
   const fields = compareFields(application, labelResult.extraction)
-  const warning = verifyWarning(labelResult.extraction.warningStatement, opts.warningRef)
+  const warning = verifyWarning(
+    labelResult.extraction.warningStatement,
+    opts.warningRef,
+    warningLegible,
+  )
   const outcome = aggregate({ fields, warning })
   const compareMs = now() - compareStarted
 

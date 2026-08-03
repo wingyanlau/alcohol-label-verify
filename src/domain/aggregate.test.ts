@@ -21,12 +21,54 @@ const field = (state: FieldVerdictState, name: FieldName = 'brandName'): FieldVe
   rule: 'test fixture',
 })
 
-const warning = (ok: boolean): WarningVerdict => ({
+const warning = (ok: boolean, legible = true): WarningVerdict => ({
   present: true,
   ok,
+  legible,
   segments: [],
   advisory: [],
   referenceDataVersion: 1,
+})
+
+describe('UT-G05 — an illegible warning can never aggregate to a clear result', () => {
+  /*
+   * Written from a measured failure, not an imagined one.
+   *
+   * The statutory warning is a fixed string every model knows by heart. Shown a
+   * blurred label, the model did not report that it could not read it — it
+   * returned the statute, verbatim and correct, and the check passed.
+   *
+   * The experiment that settled it: the same submission rendered twice at the
+   * same blur, differing only in that one carried "birth defect" where the
+   * statute says "birth defects". Both transcriptions came back identical and
+   * canonical. The model reads when it can and recites when it cannot, and
+   * says nothing about which it did.
+   *
+   * So legibility cannot be a model's claim about itself. It is measured from
+   * the pixels, and an unreadable warning blocks a conclusion exactly as an
+   * unreadable field does (D5).
+   */
+  it('outranks a clean match', () => {
+    expect(
+      aggregate({ fields: [field('MATCH'), field('MATCH')], warning: warning(true, false) }),
+    ).toBe('INCOMPLETE')
+  })
+
+  it('outranks a discrepancy, because the unread part may be worse', () => {
+    expect(aggregate({ fields: [field('MISMATCH')], warning: warning(false, false) })).toBe(
+      'INCOMPLETE',
+    )
+  })
+
+  it('does not fire when the warning was legible', () => {
+    expect(aggregate({ fields: [field('MATCH')], warning: warning(true, true) })).toBe('CLEAR')
+  })
+
+  // A submission with no warning verdict at all is a different case: nothing
+  // was assessed, so there is nothing to call illegible.
+  it('says nothing about a submission carrying no warning verdict', () => {
+    expect(aggregate({ fields: [field('MATCH')], warning: null })).toBe('CLEAR')
+  })
 })
 
 describe('UT-G — aggregation ordering', () => {

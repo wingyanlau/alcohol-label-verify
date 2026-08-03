@@ -35,6 +35,7 @@ function result(overrides: Partial<VerifyResult> = {}): VerifyResult {
     warning: {
       present: true,
       ok: false,
+      legible: true,
       segments: [
         {
           segmentId: 'header',

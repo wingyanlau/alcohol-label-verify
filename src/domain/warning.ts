@@ -132,14 +132,36 @@ function clausesInOrder(ref: WarningReference, observed: string): boolean {
  * @param observedText the statement exactly as it appears, or `null` if absent
  * @param ref reference data; injected so tests can supply their own
  */
+/**
+ * Edge energy below which the warning region cannot be trusted to have been
+ * read. Mirrors WARNING_LEGIBILITY_FLOOR in testdata/generate.py, which is
+ * where the measurement is taken.
+ *
+ * Calibrated, not guessed: across the corpus every blurred case scores about
+ * 24 and every legible one 33 or above — including the angle-and-glare scan at
+ * 68, which is degraded but readable and correctly passes. Thirty sits in the
+ * gap.
+ */
+export const WARNING_LEGIBILITY_FLOOR = 30
+
 export function verifyWarning(
   observedText: string | null,
   ref: WarningReference = warningReference(),
+  /**
+   * Whether the artwork was legible enough for a transcription to mean
+   * anything. Measured from pixels by the caller — never claimed by the
+   * extractor, which will happily return this statute from memory.
+   *
+   * A verdict is still computed when false, because what the model produced is
+   * worth recording; aggregation refuses to conclude from it (D5).
+   */
+  legible = true,
 ): WarningVerdict {
   const advisory = ref.advisoryChecks.map(({ id, text, citation }) => ({ id, text, citation }))
 
   if (observedText === null || observedText.trim() === '') {
     return {
+      legible,
       present: false,
       ok: false,
       segments: ref.segments.map((s) => ({
@@ -171,6 +193,7 @@ export function verifyWarning(
   const allOk = segments.every((s) => s.ok)
 
   return {
+    legible,
     present: true,
     ok: allOk && ordered,
     segments:

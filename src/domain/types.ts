@@ -90,6 +90,20 @@ export interface AdvisoryCheck {
 export interface WarningVerdict {
   readonly present: boolean
   readonly ok: boolean
+  /**
+   * Whether the artwork could actually be read well enough to verify.
+   *
+   * Measured from the pixels, never asserted by the extractor. The statutory
+   * warning is a fixed string every model knows by heart, so a model shown an
+   * illegible warning can return it perfectly without having read a character
+   * — and will, silently. Two renderings of the same submission at the same
+   * blur, differing only in that one said "birth defect" where the statute
+   * says "birth defects", produced identical canonical transcriptions.
+   *
+   * `false` blocks a conclusion (D5): not present-and-wrong, not absent, but
+   * "a human must look at this".
+   */
+  readonly legible: boolean
   readonly segments: readonly WarningSegmentVerdict[]
   /** Rules the agent must confirm by eye. Never auto-failed. */
   readonly advisory: readonly AdvisoryCheck[]

@@ -668,6 +668,31 @@ def shoot(html: Path, png: Path) -> None:
         check=True, capture_output=True)
 
 
+# Legibility floor for the warning region.
+#
+# Measured, not guessed: across the corpus the blurred cases score ~24 and
+# every legible one scores 33 or above, including L09's angle-and-glare at 68.
+# Thirty sits in the gap.
+#
+# It exists because the extractor cannot be asked. The statutory warning is a
+# fixed string every model knows by heart, so shown an illegible warning it
+# returns the statute verbatim and says nothing. Two renderings at the same
+# blur — one saying "birth defect" where the statute says "birth defects" —
+# produced identical canonical transcriptions. Legibility is therefore a
+# property of the pixels, and this is where the pixels are.
+WARNING_LEGIBILITY_FLOOR = 30.0
+
+
+def warning_legibility(png: Path) -> float:
+    """Edge energy in the region carrying the health warning."""
+    from PIL import Image, ImageFilter, ImageStat
+
+    im = Image.open(png).convert("L")
+    w, h = im.size
+    region = im.crop((int(w * 0.50), int(h * 0.20), int(w * 0.97), int(h * 0.36)))
+    return round(ImageStat.Stat(region.filter(ImageFilter.FIND_EDGES)).stddev[0], 2)
+
+
 def shoot_at(html: Path, png: Path, css_w: int, css_h: int, scale: float) -> None:
     """Rasterise an HTML page to PNG at a chosen size and device scale."""
     subprocess.run(
@@ -785,6 +810,7 @@ def main() -> int:
                  LABEL_CSS_W, LABEL_CSS_H, LABEL_SCALE)
         shoot_at(rh, RASTERS / f"{c['id']}-record.png",
                  round(PAGE_W * 96 / 72), round(PAGE_H * 96 / 72), RECORD_SCALE)
+        c["_legibility"] = warning_legibility(RASTERS / f"{c['id']}-label.png")
 
         manifest.append({
             "id": c["id"], "file": out.name, "title": c["title"], "serves": c["serves"],
@@ -795,6 +821,9 @@ def main() -> int:
                 "netContents": c["net"], "productType": "Distilled spirits",
                 "applicant": c["applicant"].replace("\n", ", "),
             },
+            # Measured from the shipped raster. The runtime refuses to conclude
+            # from a warning below the floor, whatever the model transcribed.
+            "warningLegibility": c.get("_legibility"),
             "expected": {
                 "outcome": c["expect"], "fields": c["fields"],
                 "warningOk": c["warning_ok"],
