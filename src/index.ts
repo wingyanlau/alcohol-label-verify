@@ -572,6 +572,62 @@ export default {
       )
     }
 
+    // Re-derive the most recent verdicts and summarise (NFR-13).
+    //
+    // The per-submission route below answers "is this verdict sound?"; this one
+    // answers "is re-derivability still holding?", which is the question a
+    // deploy gate needs and nobody would think to ask by hand. A regression in
+    // the comparison rules shows up here as `differs > 0` within seconds of the
+    // deploy that caused it, instead of the next time an auditor looks.
+    //
+    // Statuses are kept apart rather than summed. Verdicts recorded before
+    // migration 0002 can never be re-derived, and if they counted as failures
+    // the number would never reach zero — so the gate would be permanently red
+    // and permanently ignored.
+    if (pathname === '/audit/replay' && request.method === 'GET') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+
+      const limit = Math.min(
+        Number(new URL(request.url).searchParams.get('limit') ?? 25) || 25,
+        100,
+      )
+      const rows = (
+        await env.DB.prepare(
+          `SELECT DISTINCT submission_id FROM verdict
+            WHERE superseded_by IS NULL
+            ORDER BY created_at DESC LIMIT ?1`,
+        )
+          .bind(limit)
+          .all<{ submission_id: string }>()
+      ).results
+
+      const counts: Record<string, number> = {
+        identical: 0,
+        differs: 0,
+        'not-comparable': 0,
+        'not-re-derivable': 0,
+      }
+      const findings: unknown[] = []
+      for (const row of rows) {
+        try {
+          const report = await replayVerdict(await loadStoredVerdict(env.DB, row.submission_id))
+          counts[report.status] = (counts[report.status] ?? 0) + 1
+          // Only genuine disagreement is quoted back. The other non-identical
+          // statuses are facts about the record's age, not about correctness.
+          if (report.status === 'differs') findings.push(report)
+        } catch (error) {
+          counts.differs = (counts.differs ?? 0) + 1
+          findings.push({
+            submissionId: row.submission_id,
+            status: 'differs',
+            differences: [error instanceof Error ? error.message : String(error)],
+          })
+        }
+      }
+
+      return json({ checked: rows.length, ...counts, findings }, counts.differs === 0 ? 200 : 409)
+    }
+
     // Re-derive a stored verdict from the record alone (NFR-13).
     //
     // The audit record's central claim is that a verdict can be produced again
@@ -590,7 +646,7 @@ export default {
 
       try {
         const report = await replayVerdict(await loadStoredVerdict(env.DB, submissionId))
-        return json(report, report.identical ? 200 : 409)
+        return json(report, report.status === 'identical' ? 200 : 409)
       } catch (error) {
         if (error instanceof ReplayUnavailableError) {
           return json({ error: 'not-found', reason: error.message }, 404)

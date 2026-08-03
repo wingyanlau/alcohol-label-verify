@@ -318,3 +318,40 @@ jobs:
           echo "Creating tag: $TAG_NAME"
           git tag -a "$TAG_NAME" -m "Production deploy of ${GITHUB_SHA}"
           git push origin "$TAG_NAME"
+
+      # NFR-13 is a claim the audit record makes about itself: a verdict can be
+      # produced again from what was stored. Nothing else in this gate would
+      # notice it breaking. A rule changed without a version bump — exactly the
+      # mistake versions exist to catch — turns every stored verdict into
+      # fiction, silently, until someone thinks to check.
+      - name: Verify stored verdicts still re-derive
+        run: |
+          set -euo pipefail
+          url="https://alcohol-label-verify.wing-lawrence.workers.dev"
+
+          body=$(curl -sS --max-time 60 "$url/audit/replay?limit=25")
+          echo "$body" | jq '{checked, identical, differs, "not-comparable", "not-re-derivable"}'
+
+          # Nothing to replay is not a pass. A fresh database would otherwise
+          # report zero disagreements and read as verification.
+          checked=$(echo "$body" | jq -r '.checked // 0')
+          if [ "$checked" -eq 0 ]; then
+            echo "::warning::no stored verdicts to replay — re-derivability unverified"
+            exit 0
+          fi
+
+          # Only `differs` fails. A verdict recorded before the record carried
+          # everything the comparison used cannot be re-derived and never will
+          # be; counting those would leave the gate permanently red, which is
+          # the same as having no gate.
+          differs=$(echo "$body" | jq -r '.differs // 0')
+          if [ "$differs" -ne 0 ]; then
+            echo "$body" | jq '.findings'
+            echo "::error::$differs stored verdict(s) no longer re-derive from the record"
+            exit 1
+          fi
+
+          stale=$(echo "$body" | jq -r '.["not-re-derivable"] // 0')
+          if [ "$stale" -ne 0 ]; then
+            echo "::warning::$stale verdict(s) predate the record they would need; not re-derivable by design"
+          fi
