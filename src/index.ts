@@ -9,7 +9,7 @@
  * §9.5 (configuration).
  */
 
-import { appendAudit, readWholeChain, verifyChain } from './batch/audit.js'
+import { readWholeChain, verifyChain } from './batch/audit.js'
 import { MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
 import { loadCurrentJob } from './batch/current.js'
 import { loadSubmissionDetail } from './batch/detail.js'
@@ -18,7 +18,7 @@ import { contentKey, labelImageKey } from './batch/keys.js'
 import { processItem } from './batch/pipeline.js'
 import { isReferenceCode, normaliseReferenceCode } from './batch/reference-code.js'
 import { loadStoredVerdict, ReplayUnavailableError, replayVerdict } from './batch/replay-load.js'
-import { RETENTION_POLICY, REVIEW_WINDOW_DAYS, runPurge } from './batch/retention.js'
+import { RETENTION_POLICY, REVIEW_WINDOW_DAYS, sweepRetention } from './batch/retention.js'
 import { approvalFor, isApproved } from './domain/approval.js'
 import { ExtractionContractError } from './domain/extraction.js'
 import { referenceIsUnverified, warningReference } from './domain/reference.js'
@@ -682,6 +682,22 @@ export default {
       }
     }
 
+    // Run the retention sweep now, instead of waiting for 03:20.
+    //
+    // The same function the schedule calls, so exercising this exercises the
+    // nightly job rather than a parallel path that happens to work. It takes
+    // no window: an endpoint that could shorten the retention period is an
+    // endpoint that could delete every submission in the system with one
+    // parameter. To test the sweep, backdate a job — not the policy.
+    //
+    // Idempotent, so calling it twice is harmless: the second run finds every
+    // candidate already marked and does nothing.
+    if (pathname === '/retention/sweep' && request.method === 'POST') {
+      if (!env.DB || !env.STAGING) return json({ error: 'unavailable' }, 503)
+      const result = await sweepRetention(env.DB, env.STAGING, new Date())
+      return json({ ...result, windowDays: REVIEW_WINDOW_DAYS })
+    }
+
     // Find a review from the code an agent quoted (D21).
     //
     // This is the half of the requirement that makes the other half worth
@@ -769,25 +785,7 @@ export default {
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     if (!env.DB || !env.STAGING) return
 
-    ctx.waitUntil(
-      (async () => {
-        const now = new Date()
-        const result = await runPurge(env.DB as D1Database, env.STAGING as R2Bucket, now)
-        if (result.purged === 0) return
-
-        // Recorded in the chain, because a deletion is a thing that happened
-        // to a submission and the record is meant to show what happened to it.
-        // Counts and identifiers only — the same rule as every other event.
-        await appendAudit(env.DB as D1Database, {
-          at: now.toISOString(),
-          actor: 'system',
-          action: 'content.purged',
-          subjectType: 'job',
-          subjectId: 'retention-sweep',
-          detail: `submissions=${result.purged};objects=${result.objectsDeleted};cutoff=${result.cutoff};windowDays=${REVIEW_WINDOW_DAYS}`,
-        })
-      })(),
-    )
+    ctx.waitUntil(sweepRetention(env.DB as D1Database, env.STAGING as R2Bucket, new Date()))
   },
 
   async queue(batch: MessageBatch<WorkMessage>, env: Env): Promise<void> {

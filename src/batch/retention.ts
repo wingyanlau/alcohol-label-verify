@@ -54,6 +54,7 @@
  * it from a records schedule, which is Q-PRV-03 and is not ours to answer.
  */
 
+import { appendAudit } from './audit.js'
 import { labelImageKey } from './keys.js'
 
 /**
@@ -217,4 +218,41 @@ export async function runPurge(
   }
 
   return { ...outcome, cutoff }
+}
+
+/**
+ * The sweep, as both the schedule and an operator invoke it.
+ *
+ * One function with two callers, deliberately. A manual trigger that ran its
+ * own slightly different logic would prove the manual trigger works and
+ * nothing about the nightly job, which is the one that actually enforces the
+ * policy.
+ *
+ * Note what it does NOT take: a window. The caller cannot ask for a shorter
+ * one. An endpoint able to override the retention window is an endpoint able
+ * to delete every submission in the system with one parameter, and no
+ * operational need justifies that — to exercise the sweep, move a job's
+ * timestamp, not the policy.
+ */
+export async function sweepRetention(
+  db: D1Database,
+  bucket: R2Bucket,
+  now: Date,
+): Promise<PurgeOutcome & { readonly cutoff: string }> {
+  const result = await runPurge(db, bucket, now)
+  if (result.purged === 0) return result
+
+  // Recorded in the chain, because a deletion is a thing that happened to a
+  // submission and the record is meant to show what happened to it. Counts and
+  // identifiers only — the same rule as every other event (D20).
+  await appendAudit(db, {
+    at: now.toISOString(),
+    actor: 'system',
+    action: 'content.purged',
+    subjectType: 'job',
+    subjectId: 'retention-sweep',
+    detail: `submissions=${result.purged};objects=${result.objectsDeleted};cutoff=${result.cutoff};windowDays=${REVIEW_WINDOW_DAYS}`,
+  })
+
+  return result
 }
