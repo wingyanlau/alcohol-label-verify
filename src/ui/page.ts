@@ -105,6 +105,7 @@ export const PAGE_HTML = `<!doctype html>
 
   <section id="start">
     <button id="startBtn" type="button">Check the 26 test submissions</button>
+    <button id="resetBtn" type="button" class="secondary hidden" style="margin-left:10px">Stop and reset</button>
     <p class="note" style="margin-top:14px">Runs the bundled corpus: 26 authored submissions covering matches, genuine discrepancies, unreadable fields, and the health-warning cases. Results appear below as each one finishes.</p>
     <p id="startErr" class="err hidden" role="alert"></p>
   </section>
@@ -125,6 +126,7 @@ export const PAGE_HTML = `<!doctype html>
   'use strict'
   var startBtn = document.getElementById('startBtn')
   var startErr = document.getElementById('startErr')
+  var resetBtn = document.getElementById('resetBtn')
   var batchSection = document.getElementById('batch')
   var progressLabel = document.getElementById('progressLabel')
   var bar = document.getElementById('bar')
@@ -163,6 +165,9 @@ export const PAGE_HTML = `<!doctype html>
   // The button reflects the job, not this tab. A session that merely joined a
   // running batch must not offer to start another one.
   function setButton(mode) {
+    // Offered only while work is outstanding. A finished job has nothing to
+    // stop, and a button that does nothing is worse than no button.
+    resetBtn.classList.toggle('hidden', mode !== 'running')
     if (mode === 'running') {
       startBtn.disabled = true
       startBtn.textContent = 'Checking…'
@@ -305,6 +310,25 @@ export const PAGE_HTML = `<!doctype html>
       .catch(function () {
         setButton('idle')
         startErr.textContent = 'The check could not be started. Nothing was saved. Please try again in a moment.'
+        startErr.classList.remove('hidden')
+      })
+  })
+
+  resetBtn.addEventListener('click', function () {
+    resetBtn.disabled = true
+    resetBtn.textContent = 'Stopping…'
+    fetch('/batch/reset', { method: 'POST' })
+      .then(function (r) { if (!r.ok) throw new Error('reset failed'); return r.json() })
+      .then(function () {
+        // The coordinator broadcasts the abort and a fresh snapshot, so the
+        // worklist updates itself. Nothing to do here but restore the control.
+        resetBtn.disabled = false
+        resetBtn.textContent = 'Stop and reset'
+      })
+      .catch(function () {
+        resetBtn.disabled = false
+        resetBtn.textContent = 'Stop and reset'
+        startErr.textContent = 'The check could not be stopped. Please try again in a moment.'
         startErr.classList.remove('hidden')
       })
   })

@@ -190,7 +190,10 @@ export class JobCoordinator extends DurableObject<Env> {
 
     const progress = this.#progress()
     this.#broadcast({ type: 'job.aborted', reason, progress })
-    if (progress.done) this.#broadcast({ type: 'job.completed', progress })
+    // A fresh snapshot, because abort settles many items at once and there is
+    // no per-item event for any of them. Without it every abandoned row would
+    // still read "Waiting" on screen while the ledger says otherwise.
+    this.#broadcast({ type: 'snapshot', snapshot: await this.snapshot() })
     return progress
   }
 

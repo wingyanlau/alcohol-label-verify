@@ -585,6 +585,40 @@ export default {
       return json(await loadCurrentJob(env.DB))
     }
 
+    // Stop whatever is running.
+    //
+    // A job only ends when every item reaches a terminal state, so anything
+    // that strands work — a purged queue, a spent allowance, a deploy mid-run
+    // — leaves rows QUEUED for ever. `/batch/current` then reports the job as
+    // running, and because starting joins a job in flight, every later batch
+    // attaches to the corpse. Until now the only cure was editing D1 by hand.
+    //
+    // Both stores are settled, not just the ledger: the durable record is what
+    // `/batch/current` reads, and leaving it behind would reset the page while
+    // still blocking the next run.
+    if (pathname === '/batch/reset' && request.method === 'POST') {
+      if (!env.DB || !env.JOB) return json({ error: 'unavailable' }, 503)
+
+      const current = await loadCurrentJob(env.DB)
+      if (current === null) return json({ jobId: null, stopped: 0 })
+
+      const reason = 'Stopped by request.'
+      const settled = await env.DB.prepare(
+        `UPDATE submission SET state = 'FAILED', failure_cause = ?
+          WHERE job_id = ? AND state IN ('QUEUED', 'RUNNING')`,
+      )
+        .bind(reason, current.jobId)
+        .run()
+
+      // Messages already delivered cannot be recalled, but the coordinator's
+      // abort flag is checked before any work, so they ack and drain instead of
+      // reviving the job an item at a time.
+      const stub = env.JOB.get(env.JOB.idFromName(current.jobId))
+      await stub.abort(reason)
+
+      return json({ jobId: current.jobId, stopped: settled.meta?.changes ?? 0 })
+    }
+
     if (pathname === '/batch' && request.method === 'POST') {
       try {
         // Joining, not starting a second job: two people pressing the button
