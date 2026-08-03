@@ -398,6 +398,30 @@ where live job ledgers sit. Confirm no job is running first.
 
 ---
 
+## 8a. Platform Limits That Shape the Design
+
+*Measured against the account, not quoted from a brochure. Every one of these
+changed a design decision.*
+
+| Limit | Free | Paid | Consequence here |
+|---|---|---|---|
+| Browser Rendering: new instances | **1 per 20 s** | 1 per second | The binding constraint on batch throughput. Not concurrency — pacing. Setting `max_concurrency: 1` was necessary and nowhere near sufficient |
+| Browser Rendering: concurrent | 3 | 120 | Never reached; the launch *rate* bites first |
+| Browser Rendering: browser time | 10 min/day | usage-priced | About five full corpus runs a day, before pre-rasterisation removed the browser from the corpus path entirely |
+| Workers AI | 10,000 neurons/day | + $0.011 / 1,000 | One corpus run is roughly 2,000–8,000 neurons, so the allowance is one to four runs |
+| Workers AI model input | images inside `messages` as `image_url` parts | — | A sibling `image` property is **accepted and ignored** by llama-4-scout |
+| Gemini free tier | a few requests | usage-priced | The key survived four calls: two probes and two batch items |
+| Queue message | 128 KB | — | Content goes to R2, keys travel in the message |
+| Worker isolate | 128 MB, no native modules | — | Rules out in-Worker rasterisation of a 300 DPI page |
+| Outbound connections | 6 per invocation | — | Fan out across invocations, never inside one |
+
+The two that mattered most were both **rates**, not sizes, and both were
+diagnosed as something else first: browser launches were blamed on concurrency,
+and inference failures on image dimensions. A ceiling measured over time looks
+like a capacity problem until the clock is part of the measurement.
+
+---
+
 ## 9. Problems Encountered, and Their Fixes
 
 *Recorded because each cost time and each would recur.*
@@ -411,6 +435,17 @@ where live job ledgers sit. Confirm no job is running first.
 | Gemini returned HTTP 429, `quota_limit_value: "0"` | Zero quota on the project — not a rate limit | Wired Workers AI instead; the provider seam is unchanged |
 | Biome warned `recommended` is deprecated | Biome 2.x renamed it to `preset` | Migrate the config |
 | Queue consumer failed typecheck | `ExportedHandler<Env>` needs the message type parameter | `ExportedHandler<Env, WorkMessage>` |
+| Every submission rejected: `page size NaNxNaNpt, undefined page(s)` | `page.evaluate(source, ...args)` with a **string** first argument evaluates it as an expression and ignores the arguments — the render script was never invoked | Build the call expression explicitly (`page-script.ts`) |
+| Every field returned `<text exactly as printed>`, and a compliant label's record read `Old Forester` | The image was sent as a sibling of `messages`; the model ignored it and answered from the prompt alone — echoing the template, and inventing plausible values under schema pressure | Send `image_url` content parts; guard the contract against template echoes (CT-11) |
+| `provider returned an empty response` on every item, worsening after the corpus improved | Workers AI returns the answer already parsed when it is well-formed JSON; the adapter accepted only strings. The better the model read, the more reliably its answer was discarded | Read `response` as string **or** object, falling back to `choices[0].message.content` |
+| `response was not valid JSON` from Gemini | A thinking model returns reasoning as parts beside the answer; joining all of them wrapped the JSON in prose | Exclude `thought` parts; disable thinking for extraction |
+| Liveness probe reported a truncation on a healthy model | `ping()` asked for 8 output tokens with thinking on, so the budget went entirely to reasoning | Probe under the same settings production uses |
+| 24 of 26 items failed with `429`, always the first submissions in the queue | A rate-limited item released its queue slot, so later items inherited the wait and earlier ones exhausted their attempts. Failure tracked queue position, not the artwork | Hold the item in place through the backoff (`retry.ts`) |
+| The whole worklist read "Checking…" while one item ran | A deferred item stayed `RUNNING` in the ledger; with 5–40 s waits nearly every item looked active. It also stopped `attempts` incrementing, since `startItem` only transitions from `QUEUED` | `deferItem` returns it to `QUEUED` and broadcasts |
+| A finished job blocked every later batch | "Running" was inferred from rows left `QUEUED`, which is also what an abandoned job looks like for ever. Starting joins a job in flight, so every new batch attached to the corpse | `POST /batch/reset`, settling both stores |
+| A misconfigured deploy passed its own gate | Verification retried until it got a 200, and during propagation that 200 came from the version being replaced | Poll `/health` until the version id matches the one just deployed |
+| A sound revision failed the deploy gate under Gemini | The gate matched Cloudflare's error words (`4006`, `neurons`) in a workflow that deploys whichever provider is configured | `/health` reports the provider's own `fault`; the gate acts on that |
+| `models/gemini-2.5-flash-002 is not found` | An id invented to satisfy a pinning rule that assumed Google versions by suffix. It versions by omission, and retired numbered pins after 2.0 | Ask the API: `/health/models` |
 
 ---
 
@@ -419,7 +454,9 @@ where live job ledgers sit. Confirm no job is running first.
 | Missing | Consequence |
 |---|---|
 | Custom domain | The `workers.dev` subdomain is the only route |
-| Smoke test against the corpus | Staging is verified by health probes, not by submitting a known label and asserting its verdict |
+| Smoke test against the corpus | Staging is verified by health probes, not by submitting a known label and asserting its verdict. `/health/extract` is half of it: it reads a known label, but nothing compares the reading to authored ground truth |
+| A corpus run that finishes | Neither provider has had the quota to complete 26 items. The exit criteria — `L01` CLEAR, `L04` DISCREPANCIES_FOUND — remain unmeasured, and every failure so far has been a platform limit rather than a verification result |
+| A Durable Object test harness | `vitest.config.ts` is `environment: 'node'`; the workers pool its own comment describes is not configured, so the coordinator is exercised only by `/health/coordinator` |
 | Rollback from CI | Rollback is the manual §7 command; no workflow reverts a bad deploy |
 | Retention enforcement | `schema_meta.retention_policy` is `UNSET`; nothing purges the record |
 | Alerting | Logs are queryable; nothing watches them |

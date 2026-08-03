@@ -134,7 +134,9 @@ verification rule tested only on the happy path.**
 
 - Runtime: Cloudflare Workers, Durable Objects, Queues, R2, D1
 - Language: TypeScript 5.9 (strict, `noUncheckedIndexedAccess`)
-- Inference: Workers AI, behind a provider adapter
+- Inference: **two adapters behind one seam** — Workers AI (binding-authed) and
+  Gemini (API key). `MODEL_PROVIDER` selects; each vendor answers for its own
+  credential requirement, floating-alias rule and fault classification (D33)
 - Testing: Vitest, `@cloudflare/vitest-pool-workers`
 - Linting: Biome 2.x
 - Test corpus: Python + Chrome (generation only, not runtime)
@@ -181,9 +183,61 @@ test-plan §12: every Must-priority requirement maps to a passing test.
 
 ## Common Pitfalls
 
+*Every one below was paid for. See `deployment-runbook.md` §9 for the full log.*
+
+**Diagnosis**
+
+- **An error message must say what was observed, not what was inferred.**
+  "Provider returned an empty response" described a failed type check; the
+  model was reading the label perfectly, and the wrong sentence cost three
+  rounds. When a message and reality disagree, suspect the message — you wrote
+  it (D38)
+- **Dump the wire before theorising.** Every failure today that was reasoned
+  about took rounds; every one where the actual request or response was printed
+  resolved immediately
+- **A test that has never failed proves nothing.** A scripted edit whose pattern
+  did not match wrote no test at all, and the suite went green
+- **Read the file after a scripted edit.** A second replace matched too little
+  and left dead logic below the new code; both ran, and the old path won
+
+**Providers**
+
+- Images go **inside `messages`** as `image_url` parts. A sibling `image`
+  property is accepted and silently ignored, and the model then answers from
+  the prompt alone — echoing the schema or inventing a plausible value
+- The answer is not always a string: Workers AI returns it already parsed when
+  it is well-formed JSON. Read `response` as string or object, then
+  `choices[0].message.content`
+- A thinking model returns reasoning as parts beside the answer. Join only the
+  parts without `thought: true`, and switch thinking off — extraction is
+  perception, not deliberation
+- Ask, do not guess, which models exist: `/health/models`
+- What counts as a floating alias differs by vendor. Cloudflare floats with a
+  `-latest` suffix; Google floats by *omitting* a version
+
+**Rates and limits**
+
+- The binding constraints are **rates**, not sizes: Browser Rendering admits one
+  new browser every 20 s on the free plan, and a 429 arrives in 40 ms, so an
+  immediate retry is refused before it could have cleared
+- A rate limit clears by waiting; an exhausted daily allowance does not. Confuse
+  them and you either abandon a batch that needed ninety seconds or spend the
+  whole queue proving the same dead end (D37)
+- A rate-limited item must keep its queue slot, or failure tracks queue position
+  rather than the submission (B-D14)
+
+**Deployment**
+
 - `process.env` does not exist in Workers → use the `env` argument
 - **A deploy can succeed with a binding silently missing** — always check the
   binding list that `wrangler deploy` prints
+- **Verify the version you just deployed.** Cloudflare serves the previous
+  worker for seconds after upload, so a check that retries until it gets a 200
+  can certify the version it was replacing — it did
+- `wrangler secret put` publishes a new version, so set secrets **before**
+  deploying or the version check waits for one that is no longer live
+- An account condition — spent quota, rate limit — is not a defect in the
+  revision. Warn; do not fail the deploy
 - Cloudflare propagation lags a few seconds after deploy; retry before
   diagnosing a failure
 - Queue messages cap at 128 KB → content goes to R2, keys go in the message
@@ -216,4 +270,6 @@ test-plan §12: every Must-priority requirement maps to a passing test.
 | **B-Q4** | Is 300 DPI enough to read the warning? Measurable against the corpus; sets cost and latency per item |
 | Model choice | Five vision models available; which reads small text best is a measurement not yet made |
 | Retention | `schema_meta.retention_policy` is `UNSET`. D32 made retention a real obligation |
-| Gemini | The key has zero project quota — Workers AI is wired instead |
+| Gemini | Wired and working — reads the corpus correctly. The key's quota is tiny: it survived four calls before a persistent 429 |
+| B-Q4 | Now answerable. Two providers, one instruction, one prompt version — a corpus run under each is a controlled comparison (D34). Neither has quota today |
+| Corpus fidelity | The labels are crisp vector text, not photographs. Accuracy measured here overstates real-world reading, and only L09/L10 approximate a degraded scan |
