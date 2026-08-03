@@ -1746,6 +1746,31 @@ two findings that send an investigator to opposite ends of the system.
 Digests only, never the reading: an audit detail is a log line, and a reading
 is content (D20).
 
+**A better design, deferred until the MVP is end to end.** The current
+implementation recovers the digests by parsing an audit detail string
+(`labelDigest=…`) and infers whether a verdict predates the legibility decision
+from a migration *filename* (`WHERE name LIKE '0002%'`). Both work and both are
+tested; both are convention where they should be data, and each fails silently
+in the safe-looking direction — a renamed key or a renumbered migration
+degrades to "cannot check", which reads as fine.
+
+The replacement is one idea rather than three mechanisms: **the verdict stores
+its own replay input set** — a single canonical JSON document holding
+everything the comparison consumed (reading digests, application data, the
+legibility decision, the full version map) — and the chain commits to that.
+Replay then reads a structured object instead of scraping strings;
+re-derivability becomes a schema question ("does the stored input set carry
+every key the current comparison needs?") that *names the missing key* instead
+of guessing from a date; and a future input that cannot be recomputed is added
+in one place, with older records correctly reporting themselves incomplete for
+free. Cost is a migration adding `verdict.replay_inputs` and a write in
+`persist`.
+
+Deferred deliberately: it is a rewrite of a working, tested mechanism, and the
+milestones it competes with (intake rejection, the adversarial cases, the
+single-review screen) are the difference between a prototype that demonstrates
+and one that does not.
+
 **What it still does not establish.** The digest commits to the reading, not to
 the rows derived from it. `field_verdict` and `verdict` remain unchained, so an
 edit made consistently across the reading, its digest and the chain would pass —

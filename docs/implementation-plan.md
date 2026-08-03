@@ -197,6 +197,35 @@ passing review.
 
 ---
 
+## M4a — Replay rebuilt around a stored input set *(deferred)*
+
+> **As an auditor,** I need re-derivability to fail loudly and specifically
+> **so that** "cannot check" is never mistaken for "checked and sound".
+
+| | |
+|---|---|
+| Beneficiary | Auditor |
+| Traces to | NFR-13, NFR-14, D32 |
+| Entry | M4 |
+| Status | **Deferred until the MVP is end to end** — see `design.md` §17.3 |
+
+Replay works and is tested. Two of its mechanisms are convention rather than
+data: digests are parsed out of an audit detail string, and whether a verdict
+predates the legibility decision is inferred from a migration filename. Both
+degrade silently to "cannot check", which reads as fine.
+
+**Exit criteria**
+
+- [ ] `verdict.replay_inputs` holds a canonical document of every input the
+      comparison consumed, and the chain commits to it
+- [ ] Replay reads that document; no audit string is parsed for data
+- [ ] Re-derivability is a schema check that **names the missing input**,
+      not a date comparison against a migration
+- [ ] A new non-reproducible input is added in one place, and older records
+      report themselves incomplete without further code
+
+---
+
 ## M5 — Results presentation
 
 > **As a compliance agent,** I want the label visible beside the verdicts with
