@@ -38,6 +38,20 @@ const fakeAi = (text: string, capture?: (input: unknown) => void) =>
     }),
   }) as unknown as Ai
 
+/** A fake Ai binding that returns a whole envelope, not just text. */
+const fakeAiEnvelope = (envelope: unknown) =>
+  ({ run: vi.fn(async () => envelope) }) as unknown as Ai
+
+const envelopeProvider = (envelope: unknown) =>
+  createWorkersAiProvider({
+    ai: fakeAiEnvelope(envelope),
+    modelId: '@cf/meta/llama-4-scout-17b-16e-instruct',
+    now: (() => {
+      let t = 1000
+      return () => (t += 250)
+    })(),
+  })
+
 const provider = (text: string, capture?: (input: unknown) => void) =>
   createWorkersAiProvider({
     ai: fakeAi(text, capture),
@@ -75,6 +89,42 @@ describe('response handling', () => {
 
   it('rejects an empty response', async () => {
     await expect(provider('').extract(request)).rejects.toThrow(/empty response/)
+  })
+
+  // Observed against the live model. Workers AI returns an OpenAI-shaped
+  // envelope, and when the answer is well-formed JSON the `response` field
+  // arrives already parsed — an object, not a string. Reading only strings
+  // discarded a perfect extraction and reported it as an empty response, so
+  // the better the model read the label, the more reliably we threw its answer
+  // away.
+  describe('the answer, wherever the envelope puts it', () => {
+    it('accepts a response already parsed into an object', async () => {
+      const r = await envelopeProvider({ response: body }).extract(request)
+      expect(r.extraction.fields.brandName.raw).toBe('OLD TOM DISTILLERY')
+    })
+
+    it('falls back to the chat completion content', async () => {
+      const r = await envelopeProvider({
+        response: null,
+        choices: [{ message: { content: JSON.stringify(body) } }],
+      }).extract(request)
+      expect(r.extraction.fields.netContents.raw).toBe('750 mL')
+    })
+
+    it('prefers the response field when both are present', async () => {
+      const other = { ...body, fields: { ...body.fields, brandName: { value: 'FROM CHOICES' } } }
+      const r = await envelopeProvider({
+        response: JSON.stringify(body),
+        choices: [{ message: { content: JSON.stringify(other) } }],
+      }).extract(request)
+      expect(r.extraction.fields.brandName.raw).toBe('OLD TOM DISTILLERY')
+    })
+
+    it('still reports an envelope carrying no answer at all', async () => {
+      await expect(
+        envelopeProvider({ response: null, choices: [] }).extract(request),
+      ).rejects.toThrow(/empty response/)
+    })
   })
 
   it('propagates a contract violation rather than repairing it', async () => {

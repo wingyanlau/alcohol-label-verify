@@ -80,6 +80,45 @@ ${
 }- Return JSON only. No commentary.`
 }
 
+/**
+ * The model's answer, wherever the envelope puts it.
+ *
+ * Workers AI returns an OpenAI-shaped completion, and `response` is not always
+ * a string: when the answer is well-formed JSON it arrives already parsed.
+ * Reading only strings discarded a perfect extraction and reported it as an
+ * empty response — so the better the model read the label, the more reliably
+ * its answer was thrown away.
+ *
+ * Order matters. `response` is the provider's own summary of the completion and
+ * is preferred; `choices[0].message.content` is the underlying field and serves
+ * as the fallback. An envelope carrying neither is genuinely empty and is
+ * reported as such, rather than being papered over.
+ */
+function answerText(envelope: unknown): string {
+  if (typeof envelope !== 'object' || envelope === null) return ''
+  const record = envelope as Record<string, unknown>
+
+  const response = record.response
+  if (typeof response === 'string') return response
+  // Already parsed. Re-serialised so it runs through the same salvage and
+  // contract path as every other answer, rather than a second parallel one.
+  if (typeof response === 'object' && response !== null) return JSON.stringify(response)
+
+  const choices = record.choices
+  if (Array.isArray(choices)) {
+    const first = choices[0]
+    if (typeof first === 'object' && first !== null) {
+      const message = (first as Record<string, unknown>).message
+      if (typeof message === 'object' && message !== null) {
+        const content = (message as Record<string, unknown>).content
+        if (typeof content === 'string') return content
+      }
+    }
+  }
+
+  return ''
+}
+
 /** Pull a JSON object out of a model response that may be fenced or prefixed. */
 function extractJson(text: string): unknown {
   const trimmed = text.trim()
@@ -155,11 +194,13 @@ export function createWorkersAiProvider(opts: WorkersAiOptions): ExtractionProvi
             },
           ],
         } as never,
-      )) as { response?: unknown }
+      )) as unknown
 
       const latencyMs = now() - started
-      const raw = typeof response?.response === 'string' ? response.response : ''
-      if (raw === '') throw new ExtractionContractError('provider returned an empty response')
+      const raw = answerText(response)
+      if (raw.trim() === '') {
+        throw new ExtractionContractError('provider returned an empty response')
+      }
 
       const extraction = parseExtractionResponse(extractJson(raw), {
         fields: request.fields,
