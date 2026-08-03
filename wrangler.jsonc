@@ -63,7 +63,22 @@
 
     // Extraction concurrency across a batch. Governed by the provider's rate
     // limit, not by platform capacity (batch design §6.1).
-    "EXTRACT_CONCURRENCY": "5"
+    "EXTRACT_CONCURRENCY": "5",
+
+    // AI Gateway. Every inference call — both vendors, batch and probes alike —
+    // is proxied so usage is a number rather than a guess. A day's allowance
+    // was once spent without anyone being able to say on what.
+    //
+    // Caching stays off: a corpus run served from cache measures the cache, not
+    // the model, and B-Q4 asks which model reads a 4.5pt warning best. Set
+    // AI_GATEWAY_CACHE_TTL deliberately for a demonstration.
+    //
+    // Payload logging is off in code (`cf-aig-collect-log-payload: false`),
+    // because the gateway stores request and response bodies by default and
+    // ours are label artwork and the values read from it — content, which logs
+    // must never carry (D20).
+    "AI_GATEWAY_ID": "alcohol-label-verify",
+    "AI_GATEWAY_ACCOUNT": "fb1dbb92cdbbab3ebd151838821ce3e5"
   },
 
   // Transient content: submission PDFs and rasterised regions, held for the
@@ -183,7 +198,11 @@
         "MAX_PIXELS": "40000000",
         "MAX_BATCH_ITEMS": "300",
         "RASTER_DPI": "300",
-        "EXTRACT_CONCURRENCY": "5"
+        "EXTRACT_CONCURRENCY": "5",
+
+        // See the note on the development block above.
+        "AI_GATEWAY_ID": "alcohol-label-verify",
+        "AI_GATEWAY_ACCOUNT": "fb1dbb92cdbbab3ebd151838821ce3e5"
       },
 
       // `STAGING` is the transient-content binding (B-D10), unrelated to the
@@ -240,7 +259,11 @@
         "MAX_PIXELS": "40000000",
         "MAX_BATCH_ITEMS": "300",
         "RASTER_DPI": "300",
-        "EXTRACT_CONCURRENCY": "5"
+        "EXTRACT_CONCURRENCY": "5",
+
+        // See the note on the development block above.
+        "AI_GATEWAY_ID": "alcohol-label-verify",
+        "AI_GATEWAY_ACCOUNT": "fb1dbb92cdbbab3ebd151838821ce3e5"
       },
 
       "r2_buckets": [{ "binding": "STAGING", "bucket_name": "alcohol-label-verify-staging" }],
