@@ -100,7 +100,55 @@ describe('provenance (§8.7.1)', () => {
     const text = JSON.stringify(body)
     expect((await provider(text).extract(request)).rawResponse).toBe(text)
   })
+
+  // The regression. The image used to travel as a sibling of `messages`, which
+  // this model accepts and silently ignores — it does not error, it answers
+  // from the prompt alone, and under a required JSON schema that means it
+  // invents a value. Every field of every submission came back as the prompt's
+  // own placeholder, and nothing objected.
+  it('sends the image inside the message, not as a sibling of it', async () => {
+    let sent: unknown
+    await provider(JSON.stringify(body), (i) => {
+      sent = i
+    }).extract(request)
+
+    const input = sent as { messages: { content: unknown }[]; image?: unknown }
+
+    // A sibling `image` is the shape that was ignored. Its absence is the fix.
+    expect(input.image).toBeUndefined()
+
+    const content = input.messages[0]?.content
+    expect(Array.isArray(content)).toBe(true)
+
+    const parts = content as { type: string; image_url?: { url: string } }[]
+    const image = parts.find((p) => p.type === 'image_url')
+    expect(image).toBeDefined()
+    expect(image?.image_url?.url).toMatch(/^data:image\/png;base64,.+/)
+  })
 })
+
+/**
+ * The prompt text, dug out of the message.
+ *
+ * The image travels as a content part alongside the text, so `content` is an
+ * array rather than a string. Reading it as a string used to work and silently
+ * yielded "[object Object]" — which still *contained* nothing, so an assertion
+ * that the prompt names a field would have passed for the wrong reason had it
+ * been written with `not.toContain`.
+ */
+function promptTextOf(sent: unknown): string {
+  const content = (sent as { messages?: { content?: unknown }[] }).messages?.[0]?.content
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .filter((part): part is { type: string; text: string } => {
+      return (
+        typeof part === 'object' && part !== null && (part as { type?: string }).type === 'text'
+      )
+    })
+    .map((part) => part.text)
+    .join('\n')
+}
 
 describe('the prompt', () => {
   it('names the fields to find', async () => {
@@ -108,7 +156,7 @@ describe('the prompt', () => {
     await provider(JSON.stringify(body), (i) => {
       sent = i
     }).extract(request)
-    const prompt = String((sent as { messages: { content: string }[] }).messages[0]?.content)
+    const prompt = promptTextOf(sent)
     expect(prompt).toContain('brandName')
     expect(prompt).toContain('netContents')
   })
@@ -118,7 +166,7 @@ describe('the prompt', () => {
     await provider(JSON.stringify(body), (i) => {
       sent = i
     }).extract(request)
-    const prompt = String((sent as { messages: { content: string }[] }).messages[0]?.content)
+    const prompt = promptTextOf(sent)
     expect(prompt).toMatch(/CANNOT READ/)
     expect(prompt).toMatch(/Do not guess/)
     expect(prompt).toMatch(/correct and expected answer/)
@@ -129,7 +177,7 @@ describe('the prompt', () => {
     await provider(JSON.stringify(body), (i) => {
       sent = i
     }).extract(request)
-    const prompt = String((sent as { messages: { content: string }[] }).messages[0]?.content)
+    const prompt = promptTextOf(sent)
     expect(prompt).toMatch(/VERBATIM/)
     expect(prompt).toMatch(/capitalisation/i)
   })
@@ -139,7 +187,7 @@ describe('the prompt', () => {
     await provider(JSON.stringify({ fields: body.fields }), (i) => {
       sent = i
     }).extract({ ...request, includeWarning: false })
-    const prompt = String((sent as { messages: { content: string }[] }).messages[0]?.content)
+    const prompt = promptTextOf(sent)
     expect(prompt).not.toMatch(/VERBATIM/)
   })
 

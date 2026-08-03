@@ -118,6 +118,65 @@ describe('CT — the extraction contract', () => {
     )
   })
 
+  // CT-11 is a guard, and it was written from a live failure rather than
+  // imagined. The image was not reaching the model, so it answered from the
+  // prompt alone and returned the prompt's own template — verbatim, in every
+  // field. The response was schema-valid, so the contract accepted it, the
+  // comparison ran on it, and `<text exactly as printed>` was recorded as the
+  // observed value of a compliance verdict.
+  //
+  // A model that echoes the schema has not read anything. That is a broken
+  // dependency, not an unreadable label, so it fails the item rather than
+  // reporting UNREADABLE: the artwork is fine, and saying otherwise would send
+  // a reviewer to look at a label that has nothing wrong with it.
+  describe('CT-11 — a template echo is not a reading', () => {
+    it('rejects the placeholder the prompt itself supplies', () => {
+      expect(() =>
+        parseExtractionResponse({
+          ...wellFormed,
+          fields: {
+            ...wellFormed.fields,
+            brandName: { value: '<text exactly as printed>', confidence: 0.9 },
+          },
+        }),
+      ).toThrow(ExtractionContractError)
+    })
+
+    it('rejects any angle-bracketed placeholder, not just the one we shipped', () => {
+      for (const echo of ['<brand name>', '<value>', '<the government warning, verbatim>']) {
+        expect(() =>
+          parseExtractionResponse({
+            ...wellFormed,
+            fields: { ...wellFormed.fields, classType: { value: echo, confidence: 1 } },
+          }),
+        ).toThrow(ExtractionContractError)
+      }
+    })
+
+    it('rejects a placeholder echoed into the warning statement', () => {
+      expect(() =>
+        parseExtractionResponse({
+          ...wellFormed,
+          warningStatement: '<the government warning, verbatim>',
+        }),
+      ).toThrow(ExtractionContractError)
+    })
+
+    // The guard must not fire on real artwork. Angle brackets appear in
+    // ordinary text, and a false rejection here fails a submission that is
+    // perfectly readable.
+    it('accepts real text that merely contains angle brackets', () => {
+      const e = parseExtractionResponse({
+        ...wellFormed,
+        fields: {
+          ...wellFormed.fields,
+          brandName: { value: 'Smith <&> Sons', confidence: 0.9 },
+        },
+      })
+      expect(e.fields.brandName.raw).toBe('Smith <&> Sons')
+    })
+  })
+
   it('rejects a field that is not an object', () => {
     expect(() =>
       parseExtractionResponse({

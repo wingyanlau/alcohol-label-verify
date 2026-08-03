@@ -98,6 +98,29 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
  * absence of an answer, and a blank value is treated as absence rather than as
  * an empty string that might later compare equal to something.
  */
+/**
+ * A value that is the prompt's own template, returned instead of a reading.
+ *
+ * Observed live: the image was not reaching the model, so it answered from the
+ * prompt alone and echoed the schema — `<text exactly as printed>` — in every
+ * field. The response was well-formed, so nothing downstream objected, and a
+ * placeholder was recorded as the observed value of a compliance verdict.
+ *
+ * Anchored at both ends deliberately. A value that *is* a placeholder is an
+ * echo; a value that merely contains angle brackets is text, and rejecting
+ * `Smith <&> Sons` would fail a submission that reads perfectly.
+ */
+const TEMPLATE_ECHO = /^<[^<>]*>$/
+
+function rejectTemplateEcho(where: string, value: string): void {
+  if (TEMPLATE_ECHO.test(value.trim())) {
+    throw new ExtractionContractError(
+      `${where} returned the prompt's own placeholder ("${value.trim()}") — ` +
+        'the model answered without reading the image',
+    )
+  }
+}
+
 function readField(name: string, raw: unknown): ObservedField {
   if (!isRecord(raw)) {
     throw new ExtractionContractError(`field "${name}" is not an object`)
@@ -108,6 +131,7 @@ function readField(name: string, raw: unknown): ObservedField {
 
   let value: string | null = null
   if (typeof raw.value === 'string') {
+    rejectTemplateEcho(`field "${name}"`, raw.value)
     const trimmed = raw.value.trim()
     value = trimmed === '' ? null : trimmed
   } else if (raw.value !== undefined && raw.value !== null) {
@@ -164,6 +188,7 @@ export function parseExtractionResponse(
   if (opts.includeWarning !== false) {
     const w = value.warningStatement
     if (typeof w === 'string') {
+      rejectTemplateEcho('warningStatement', w)
       warningStatement = w.trim() === '' ? null : w
     } else if (w !== undefined && w !== null) {
       throw new ExtractionContractError('warningStatement must be a string or null')

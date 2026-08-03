@@ -113,6 +113,17 @@ export interface WorkersAiOptions {
   readonly now?: () => number
 }
 
+/** Base64 in chunks, so a 300 DPI crop cannot overflow the call stack. */
+function toBase64(buffer: ArrayBuffer): string {
+  const view = new Uint8Array(buffer)
+  const CHUNK = 0x8000
+  let binary = ''
+  for (let i = 0; i < view.length; i += CHUNK) {
+    binary += String.fromCharCode(...view.subarray(i, i + CHUNK))
+  }
+  return btoa(binary)
+}
+
 export function createWorkersAiProvider(opts: WorkersAiOptions): ExtractionProvider {
   const now = opts.now ?? (() => Date.now())
 
@@ -122,13 +133,27 @@ export function createWorkersAiProvider(opts: WorkersAiOptions): ExtractionProvi
     async extract(request: ExtractionRequest): Promise<ExtractionResult> {
       const started = now()
 
-      const image = [...new Uint8Array(request.image)]
+      // The image travels inside the message, as a content part.
+      //
+      // A sibling `image` property — the documented shape for Llama 3.2 Vision
+      // — is accepted and silently ignored by this model. It does not error:
+      // it answers from the prompt alone, which under a required JSON schema
+      // means it invents a value. /health/vision measures all three shapes
+      // against a crop whose brand name is known, and only this one can read it.
+      const dataUri = `data:${request.mimeType};base64,${toBase64(request.image)}`
       const response = (await opts.ai.run(
         opts.modelId as keyof AiModels,
         {
           ...SAMPLING,
-          messages: [{ role: 'user', content: buildPrompt(request) }],
-          image,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: buildPrompt(request) },
+                { type: 'image_url', image_url: { url: dataUri } },
+              ],
+            },
+          ],
         } as never,
       )) as { response?: unknown }
 
