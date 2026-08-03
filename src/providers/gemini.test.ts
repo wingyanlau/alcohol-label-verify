@@ -232,13 +232,25 @@ describe('the spec', () => {
     expect(GEMINI_SPEC.classify(new Error('429 RESOURCE_EXHAUSTED'))).toBe('rate-limited')
   })
 
-  it('abandons the job only when the wording is daily or billing shaped', () => {
+  it('abandons the job only when the exhausted quota is a daily one', () => {
     expect(GEMINI_SPEC.classify(new Error('429 RESOURCE_EXHAUSTED: quota exceeded per day'))).toBe(
       'quota-exhausted',
     )
-    expect(GEMINI_SPEC.classify(new Error('RESOURCE_EXHAUSTED: free tier limit'))).toBe(
+    expect(GEMINI_SPEC.classify(new Error('429: limit: GenerateRequestsPerDayPerProject'))).toBe(
       'quota-exhausted',
     )
+  })
+
+  // Every 429 carries the same advice — "check your plan and billing details" —
+  // whether the limit was per minute or per day, and the earlier rule matched
+  // on exactly that boilerplate. It read a routine rate limit as a spent
+  // allowance, which abandons a batch that only needed to wait a moment.
+  it('is not fooled by the billing advice attached to every 429', () => {
+    const perMinute = new Error(
+      '429: You exceeded your current quota, please check your plan and billing details. ' +
+        'Quota exceeded for quota metric: generate_content_requests, limit: per minute',
+    )
+    expect(GEMINI_SPEC.classify(perMinute)).toBe('rate-limited')
   })
 
   // "This model is currently experiencing high demand. Spikes in demand are

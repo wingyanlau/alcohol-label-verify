@@ -99,7 +99,18 @@ export const GEMINI_SPEC: ProviderSpec = {
       return 'permanent'
     }
     if (/RESOURCE_EXHAUSTED/i.test(message) || /\b429\b/.test(message)) {
-      const daily = /per day|daily|quota exceeded|billing|free tier/i.test(message)
+      // Only a DAILY limit abandons the job, and the evidence for one has to be
+      // the quota metric rather than the surrounding prose.
+      //
+      // The first version matched "billing", "quota exceeded" and "free tier" —
+      // words Google attaches to every 429 as generic advice, per-minute limits
+      // included. It happened to be right the day it was written and would
+      // have abandoned batches that needed to wait ninety seconds.
+      //
+      // Ambiguity still resolves toward waiting: a wrong 'rate-limited' costs
+      // minutes, a wrong 'quota-exhausted' costs a batch that would have
+      // succeeded.
+      const daily = /per\s*day|perday|\bdaily\b/i.test(message)
       return daily ? 'quota-exhausted' : 'rate-limited'
     }
     // An overloaded model asks to be tried later, and that is a rate limit in

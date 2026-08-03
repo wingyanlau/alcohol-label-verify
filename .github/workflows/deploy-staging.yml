@@ -212,6 +212,33 @@ jobs:
             exit 0
           fi
 
+          # The provider classifies its own failure and reports it; this reads
+          # that verdict rather than matching error text.
+          #
+          # The previous version grepped for "4006", "daily free allocation" and
+          # "neurons" — Cloudflare's vocabulary, in a workflow that deploys
+          # whichever provider is configured. Pointed at Gemini it failed a
+          # sound revision for an exhausted account quota, which is exactly the
+          # leak the provider abstraction was built to close and which survived
+          # in CI after being fixed in the code.
+          fault=$(echo "$body" | jq -r '.fault // "unknown"' 2>/dev/null || echo unknown)
+          reason=$(echo "$body" | jq -r '.error // .reason // "unknown"' 2>/dev/null || echo unknown)
+
+          case "$fault" in
+            quota-exhausted|rate-limited)
+              echo "::warning::inference unverified ($fault): $reason"
+              echo "::warning::this is an account condition, not a problem with this revision"
+              ;;
+            *)
+              echo "::error::/health/inference reported [$fault]: $reason"
+              exit 1
+              ;;
+          esac
+
+          if echo "$body" | jq -e '.status == "ok"' > /dev/null 2>&1; then
+            exit 0
+          fi
+
           reason=$(echo "$body" | jq -r '.error // .reason // "unknown"' 2>/dev/null || echo unknown)
           # An exhausted daily allowance is a fact about the account, not about
           # this revision — Workers AI reports 4006 once the day's neurons are

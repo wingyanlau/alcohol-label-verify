@@ -91,6 +91,18 @@ function bindings(env: Record<string, unknown>): Record<string, boolean> {
   }
 }
 
+/**
+ * How the configured provider classifies its own failure.
+ *
+ * Reported so nothing downstream — least of all a shell script in a workflow —
+ * has to recognise a vendor's error vocabulary. Null when no provider could be
+ * built, because then the fault is the configuration rather than the vendor.
+ */
+function faultOf(env: Env, error: unknown): string | null {
+  const spec = specFor((env.MODEL_PROVIDER ?? '').trim())
+  return spec ? spec.classify(error) : null
+}
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body, null, 2) + '\n', {
     status,
@@ -174,6 +186,11 @@ export default {
             provider: configured,
             model: env.MODEL_ID,
             latencyMs: Date.now() - started,
+            // The provider's own reading of its own failure. The deploy gate
+            // acts on this rather than pattern-matching the message, which was
+            // one vendor's vocabulary applied to whichever vendor happened to
+            // be configured.
+            fault: faultOf(env, e),
             error: e instanceof Error ? e.message : String(e),
           },
           502,
@@ -289,6 +306,7 @@ export default {
             provider: configured,
             model: env.MODEL_ID,
             latencyMs: Date.now() - started,
+            fault: faultOf(env, e),
             error: e instanceof Error ? e.message : String(e),
             // Only here, and only for a corpus label someone is deliberately
             // probing. It never reaches a log or the durable record (D20).
