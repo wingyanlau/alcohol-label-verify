@@ -147,9 +147,25 @@ jobs:
           done
 
           echo "$body"
-          echo "$body" | jq -e '.status == "ok"' > /dev/null \
-            || { echo "::error::/health/raster reported: $(echo "$body" | jq -r '.error // .reason // .')"; exit 1; }
-          # A zero-byte screenshot is a browser that launched and rendered
-          # nothing — reported as ok, and useless.
-          echo "$body" | jq -e '.bytes > 0' > /dev/null \
-            || { echo "::error::rasterisation produced an empty image"; exit 1; }
+
+          if echo "$body" | jq -e '.status == "ok"' > /dev/null; then
+            # A zero-byte screenshot is a browser that launched and rendered
+            # nothing — reported as ok, and useless.
+            echo "$body" | jq -e '.bytes > 0' > /dev/null \
+              || { echo "::error::rasterisation produced an empty image"; exit 1; }
+          else
+            reason=$(echo "$body" | jq -r '.error // .reason // "unknown"')
+            # A rate limit is a fact about the account on the day, not about
+            # this revision: Browser Rendering allows one new browser every 20
+            # seconds and 10 minutes of browser time daily. Failing the deploy
+            # for it would block shipping code that is entirely sound, and
+            # would train people to re-run until it passes. Anything else — a
+            # missing binding, a broken launch — still fails.
+            if echo "$reason" | grep -qiE '429|rate limit|browser time limit'; then
+              echo "::warning::rasterisation unverified: $reason"
+              echo "::warning::the account is at its Browser Rendering limit; this does not indicate a problem with this revision"
+            else
+              echo "::error::/health/raster reported: $reason"
+              exit 1
+            fi
+          fi
