@@ -16,9 +16,17 @@
  * sequential rather than merely one-at-a-time.
  */
 
-import { isRateLimited, MAX_ATTEMPTS, retryDelaySeconds } from './backoff.js'
+import type { FaultKind } from '../providers/types.js'
+import { MAX_ATTEMPTS, retryDelaySeconds } from './backoff.js'
 
 export interface RetryOptions {
+  /**
+   * How the provider classifies a failure.
+   *
+   * Passed in rather than imported: which errors mean "wait" is the vendor's
+   * knowledge, not the batch layer's.
+   */
+  readonly classify: (error: unknown) => FaultKind
   /** Injected so tests assert the schedule without serving it (test-plan §17). */
   readonly sleep?: (ms: number) => Promise<void>
   readonly maxAttempts?: number
@@ -38,7 +46,7 @@ const realSleep = (ms: number): Promise<void> =>
  */
 export async function withRateLimitRetry<T>(
   attempt: () => Promise<T>,
-  opts: RetryOptions = {},
+  opts: RetryOptions,
 ): Promise<T> {
   const sleep = opts.sleep ?? realSleep
   const maxAttempts = opts.maxAttempts ?? MAX_ATTEMPTS
@@ -47,7 +55,7 @@ export async function withRateLimitRetry<T>(
     try {
       return await attempt()
     } catch (error) {
-      if (!isRateLimited(error) || n >= maxAttempts) throw error
+      if (opts.classify(error) !== 'rate-limited' || n >= maxAttempts) throw error
       await sleep(retryDelaySeconds(n) * 1000)
     }
   }

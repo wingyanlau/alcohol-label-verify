@@ -14,6 +14,7 @@ import { loadSubmissionDetail } from './batch/detail.js'
 import { startBatch } from './batch/intake.js'
 import { contentKey, labelImageKey } from './batch/keys.js'
 import { processItem } from './batch/pipeline.js'
+import { knownProviderNames, specFor } from './providers/registry.js'
 import { buildPrompt, createWorkersAiProvider } from './providers/workers-ai.js'
 import { PAGE_HTML } from './ui/page.js'
 
@@ -47,15 +48,6 @@ export interface Env {
 }
 
 /**
- * Identifiers that float — they resolve to different artefacts over time.
- *
- * D29: the service refuses to start on one. A mutable identifier silently
- * invalidates every audit record that cites it, and the failure is undetectable
- * after the fact. Startup is the only cheap point to catch it.
- */
-const FLOATING_SUFFIXES = ['latest', 'preview', 'stable', 'current']
-
-/**
  * One unit of work: a single submission. Deliberately carries only references —
  * queue messages are capped at 128 KB, so content travels in R2 and its key
  * travels here (batch design §15.1).
@@ -76,33 +68,40 @@ export interface WorkMessage {
   readonly recordRasterPath?: string
 }
 
-/** Providers whose credential is supplied by a binding rather than a secret. */
-const BINDING_AUTHED_PROVIDERS = new Set(['workers-ai'])
-
 export type ConfigProblem = { readonly setting: string; readonly problem: string }
 
 export function validateConfig(env: Env): ConfigProblem[] {
   const problems: ConfigProblem[] = []
 
-  const id = (env.MODEL_ID ?? '').trim()
-  if (id === '' || id === 'unset') {
-    problems.push({ setting: 'MODEL_ID', problem: 'not set' })
-  } else if (FLOATING_SUFFIXES.some((s) => id.toLowerCase().endsWith(`-${s}`))) {
+  // Both questions below are the vendor's to answer, and the answers differ
+  // between them: Cloudflare floats an id with a `-latest` suffix, Google
+  // floats by omitting a version, and only one of the two needs a credential.
+  // A single list here would have been right for whichever vendor it was
+  // written against and quietly wrong for the next.
+  const providerName = (env.MODEL_PROVIDER ?? '').trim()
+  const spec = providerName === '' ? null : specFor(providerName)
+
+  if (providerName === '' || providerName === 'unset') {
+    problems.push({ setting: 'MODEL_PROVIDER', problem: 'not set' })
+  } else if (spec === null) {
     problems.push({
-      setting: 'MODEL_ID',
-      problem: `"${id}" is a floating alias. Pin a fully qualified version (D29).`,
+      setting: 'MODEL_PROVIDER',
+      problem: `"${providerName}" is not a known provider. Known: ${knownProviderNames()}`,
+    })
+  } else if (spec.requiresCredential && !env.MODEL_API_KEY) {
+    problems.push({
+      setting: 'MODEL_API_KEY',
+      problem: `provider "${providerName}" needs a credential — set it with \`wrangler secret put MODEL_API_KEY\``,
     })
   }
 
-  const provider = (env.MODEL_PROVIDER ?? '').trim()
-  if (provider === '' || provider === 'unset') {
-    problems.push({ setting: 'MODEL_PROVIDER', problem: 'not set' })
-  } else if (!BINDING_AUTHED_PROVIDERS.has(provider) && !env.MODEL_API_KEY) {
-    // An external provider needs a credential; a binding-authed one does not.
-    // Requiring a key uniformly would report a healthy deployment as broken.
+  const id = (env.MODEL_ID ?? '').trim()
+  if (id === '' || id === 'unset') {
+    problems.push({ setting: 'MODEL_ID', problem: 'not set' })
+  } else if (spec?.isFloatingModelId(id)) {
     problems.push({
-      setting: 'MODEL_API_KEY',
-      problem: `provider "${provider}" needs a credential — set it with \`wrangler secret put MODEL_API_KEY\``,
+      setting: 'MODEL_ID',
+      problem: `"${id}" is a floating alias. Pin a fully qualified version (D29).`,
     })
   }
 

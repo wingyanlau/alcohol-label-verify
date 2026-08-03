@@ -9,7 +9,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { ExtractionContractError, type ExtractionRequest } from '../domain/extraction.js'
-import { createWorkersAiProvider, PROMPT_VERSION } from './workers-ai.js'
+import { createWorkersAiProvider, PROMPT_VERSION, WORKERS_AI_SPEC } from './workers-ai.js'
 
 const request: ExtractionRequest = {
   region: 'label',
@@ -252,5 +252,44 @@ describe('the prompt', () => {
     for (const leak of ['Old Tom Distillery', '45%', '750 mL', 'Kentucky Straight']) {
       expect(payload).not.toContain(leak)
     }
+  })
+})
+
+describe('the spec', () => {
+  // These moved here from batch/backoff.ts, which was matching Cloudflare's
+  // wording to decide whether to wait, abandon, or retry. Pointed at any other
+  // vendor that code called every fault transient and would have retried a
+  // spent allowance eight times.
+  it('needs no credential, because the binding carries authentication', () => {
+    expect(WORKERS_AI_SPEC.requiresCredential).toBe(false)
+  })
+
+  it('recognises the exhaustion the account actually reported', () => {
+    const real = new Error(
+      '4006: you have used up your daily free allocation of 10,000 neurons, please upgrade ' +
+        "to Cloudflare's Workers Paid plan if you would like to continue usage.",
+    )
+    expect(WORKERS_AI_SPEC.classify(real)).toBe('quota-exhausted')
+  })
+
+  it('recognises a rate limit, and keeps it distinct from an exhausted quota', () => {
+    const rate = new Error('Unable to create new browser: code: 429: message: Rate limit exceeded')
+    expect(WORKERS_AI_SPEC.classify(rate)).toBe('rate-limited')
+    // One clears by waiting; the other does not clear before tomorrow.
+    expect(WORKERS_AI_SPEC.classify(new Error('4006 daily free allocation'))).toBe(
+      'quota-exhausted',
+    )
+  })
+
+  it('calls anything else transient rather than guessing', () => {
+    expect(WORKERS_AI_SPEC.classify(new Error('provider returned an empty response'))).toBe(
+      'transient',
+    )
+    expect(WORKERS_AI_SPEC.classify(null)).toBe('transient')
+  })
+
+  it('treats a floating alias as floating (D29)', () => {
+    expect(WORKERS_AI_SPEC.isFloatingModelId('@cf/meta/llama-4-scout-latest')).toBe(true)
+    expect(WORKERS_AI_SPEC.isFloatingModelId('@cf/meta/llama-4-scout-17b-16e-instruct')).toBe(false)
   })
 })

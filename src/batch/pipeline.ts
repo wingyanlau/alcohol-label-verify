@@ -30,8 +30,9 @@ import {
   type NormaliseResult,
 } from '../normalise/normaliser.js'
 import { TTB_F5100_31_2023, UnknownFormError } from '../normalise/regions.js'
-import { createWorkersAiProvider } from '../providers/workers-ai.js'
-import { isQuotaExhausted, isRateLimited, MAX_ATTEMPTS } from './backoff.js'
+import { createProvider } from '../providers/registry.js'
+import type { Provider } from '../providers/types.js'
+import { MAX_ATTEMPTS } from './backoff.js'
 import { labelImageKey } from './keys.js'
 import { buildPersistPlan, persistResult } from './persist.js'
 import { withRateLimitRetry } from './retry.js'
@@ -139,6 +140,22 @@ export async function processItem(
   // Bound here: the narrowing above does not survive into the retry closure.
   const browser = env.BROWSER
 
+  // Built once, before any work: its `spec.classify` decides what every failure
+  // below means. A provider that cannot be constructed is an operator error, so
+  // it fails the item loudly rather than being retried against a deployment
+  // that will never come right.
+  let provider: Provider
+  try {
+    provider = createProvider(env)
+  } catch (e) {
+    const cause = e instanceof Error ? e.message : String(e)
+    await env.DB.prepare(`UPDATE submission SET state = 'FAILED', failure_cause = ? WHERE id = ?`)
+      .bind(cause, submissionId)
+      .run()
+    await stub.recordFailure(submissionId, cause)
+    return { retry: false }
+  }
+
   // Nothing left to attempt: the job was abandoned while this message waited
   // in the queue. Acked without work, so the remaining messages drain in
   // seconds rather than each rediscovering the same dead end.
@@ -171,11 +188,14 @@ export async function processItem(
       // keeps its turn while waiting: releasing the message would release the
       // slot to the next submission, which is what made failure a function of
       // queue position rather than of the artwork.
-      (await withRateLimitRetry(() =>
-        createBrowserNormaliser({ browser, limits: intakeLimits(env) }).normalise(bytes, dpi),
+      (await withRateLimitRetry(
+        () => createBrowserNormaliser({ browser, limits: intakeLimits(env) }).normalise(bytes, dpi),
+        // Rasterisation is refused on rate by Browser Rendering, whose wording
+        // the inference provider does not know. Classified here, in the only
+        // place that knows both dependencies exist.
+        { classify: (e) => (/\b429\b|rate limit/i.test(String(e)) ? 'rate-limited' : 'transient') },
       ))
 
-    const provider = createWorkersAiProvider({ ai: env.AI, modelId: env.MODEL_ID })
     const result = await verifySubmission(
       {
         label: { image: normalised.label.image, mimeType: normalised.label.mimeType },
@@ -214,7 +234,9 @@ export async function processItem(
     // 25 more times. Every remaining item is settled with the same cause, so
     // the worklist says what happened instead of filling with failures that
     // look like a broken tool.
-    if (isQuotaExhausted(error)) {
+    const fault = provider.spec.classify(error)
+
+    if (fault === 'quota-exhausted') {
       const reason =
         'The daily inference allowance for this account is used up. ' +
         'The check stopped here; no further submissions were attempted.'
@@ -238,7 +260,12 @@ export async function processItem(
     // queue now would hand the next submission a turn this one never got —
     // the behaviour that made failure depend on queue position. Having tried
     // and waited, the honest answer is that the provider is refusing.
-    if (!isDeterministicRefusal(error) && !isRateLimited(error) && attempt < MAX_ATTEMPTS) {
+    if (
+      !isDeterministicRefusal(error) &&
+      fault !== 'rate-limited' &&
+      fault !== 'permanent' &&
+      attempt < MAX_ATTEMPTS
+    ) {
       // Transient and not a rate limit: return the item to the queue for a
       // bounded retry (§8). It is waiting rather than running, and the ledger
       // has to say so or the whole worklist reads "Checking…".

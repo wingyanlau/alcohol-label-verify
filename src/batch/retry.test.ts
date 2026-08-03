@@ -10,10 +10,20 @@ function recorder() {
   return { waited, sleep: async (ms: number) => void waited.push(ms) }
 }
 
+/**
+ * A stand-in for the provider's own classifier.
+ *
+ * Which failures mean "wait" belongs to the vendor, so the retry helper is
+ * given the answer rather than deducing it — and these tests can therefore
+ * state the schedule without naming anyone's error codes.
+ */
+const classify = (error: unknown) =>
+  /\b429\b|rate limit/i.test(String(error)) ? ('rate-limited' as const) : ('transient' as const)
+
 describe('holding an item through a rate limit', () => {
   it('does not wait when the first attempt succeeds', async () => {
     const { waited, sleep } = recorder()
-    const result = await withRateLimitRetry(async () => 'normalised', { sleep })
+    const result = await withRateLimitRetry(async () => 'normalised', { sleep, classify })
     expect(result).toBe('normalised')
     expect(waited).toEqual([])
   })
@@ -30,7 +40,7 @@ describe('holding an item through a rate limit', () => {
         if (calls < 3) throw rateLimit()
         return 'normalised'
       },
-      { sleep },
+      { sleep, classify },
     )
     expect(result).toBe('normalised')
     expect(calls).toBe(3)
@@ -44,7 +54,7 @@ describe('holding an item through a rate limit', () => {
         async () => {
           throw rateLimit()
         },
-        { sleep, maxAttempts: 4 },
+        { sleep, classify, maxAttempts: 4 },
       ),
     ).rejects.toThrow(/429/)
     expect(waited).toEqual([5_000, 10_000, 15_000])
@@ -59,7 +69,7 @@ describe('holding an item through a rate limit', () => {
           calls++
           throw rateLimit()
         },
-        { sleep, maxAttempts: 3 },
+        { sleep, classify, maxAttempts: 3 },
       ),
     ).rejects.toThrow(/429/)
     expect(calls).toBe(3)
@@ -74,7 +84,7 @@ describe('holding an item through a rate limit', () => {
         async () => {
           throw new Error('this does not appear to be a form I recognise')
         },
-        { sleep },
+        { sleep, classify },
       ),
     ).rejects.toThrow(/form I recognise/)
     expect(waited).toEqual([])
