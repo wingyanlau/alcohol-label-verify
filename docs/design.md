@@ -1720,6 +1720,31 @@ replay-specific comparison would have been free to agree with a verdict the
 live path would no longer produce — precisely the failure a replay exists to
 catch.
 
+**It reports four outcomes, not a boolean.** `identical`; `differs` (the rules
+produce something else from the same inputs — a regression, or an unversioned
+rule change); `not-comparable` (the versioned identity set has moved since, so
+the comparison would be between two different systems, and no outcome is
+produced for anyone to mistake for one); `not-re-derivable` (the record is
+missing an input the verdict used — every verdict written before migration
+0002 lacks the legibility decision). Collapsing these is what makes such an
+endpoint useless in practice: if historical verdicts reported `differs`, the
+count would never reach zero and a real regression would arrive inside a pile
+of expected failures.
+
+Both deploy gates call `GET /audit/replay` and fail on `differs > 0`. An empty
+database is a warning, not a pass.
+
+**What replay still does not establish.** That the record is unaltered. The
+hash chain covers `audit_event`, not the `extraction` rows a replay reads from,
+and no digest of a stored reading is recorded anywhere — so an edit to a
+reading that does not change a field state or the warning is invisible to both
+`/audit/verify` and `/audit/replay`. The application data is also taken from
+`field_verdict.expected`, which makes the replay partly circular by
+construction: editing a stored value changes the input and the output
+together. Replay demonstrates **consistency with the record**, not **integrity
+of the record**; closing that gap means committing a digest of each reading to
+the chain, which enlarges what the chain promises and has not been decided.
+
 **What this concedes.** NFR-14 is met for the layers that exist, not for rule
 provenance. A verdict traces to a rule; it does not yet trace to an approval.
 That is the honest statement, and it belongs in the README.
