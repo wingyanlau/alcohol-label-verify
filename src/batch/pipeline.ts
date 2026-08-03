@@ -26,9 +26,10 @@ import { createBrowserNormaliser } from '../normalise/browser-normaliser.js'
 import { checkIntake, type IntakeLimits, IntakeRejected } from '../normalise/normaliser.js'
 import { UnknownFormError } from '../normalise/regions.js'
 import { createWorkersAiProvider } from '../providers/workers-ai.js'
-import { isRateLimited, MAX_ATTEMPTS, retryDelaySeconds } from './backoff.js'
+import { isRateLimited, MAX_ATTEMPTS } from './backoff.js'
 import { labelImageKey } from './keys.js'
 import { buildPersistPlan, persistResult } from './persist.js'
+import { withRateLimitRetry } from './retry.js'
 
 export interface ProcessOutcome {
   /** Whether the queue should redeliver this message for another attempt. */
@@ -36,9 +37,8 @@ export interface ProcessOutcome {
   /**
    * How long to hold the message before redelivering it.
    *
-   * Absent means "as soon as convenient". Present when the failure was the
-   * provider refusing on rate: an immediate retry is refused in 40ms and
-   * spends an attempt for nothing.
+   * Unused by the rate-limit path, which waits in place rather than releasing
+   * the slot. Retained for a transient fault that wants pacing without one.
    */
   readonly delaySeconds?: number
 }
@@ -94,7 +94,11 @@ export async function processItem(
     checkIntake(bytes, intakeLimits(env))
 
     const normaliser = createBrowserNormaliser({ browser: env.BROWSER, limits: intakeLimits(env) })
-    const normalised = await normaliser.normalise(bytes, dpi)
+    // The launch is the only step the provider refuses on rate, and this item
+    // keeps its turn while waiting: releasing the message would release the
+    // slot to the next submission, which is what made failure a function of
+    // queue position rather than of the artwork.
+    const normalised = await withRateLimitRetry(() => normaliser.normalise(bytes, dpi))
 
     const provider = createWorkersAiProvider({ ai: env.AI, modelId: env.MODEL_ID })
     const result = await verifySubmission(
@@ -130,22 +134,17 @@ export async function processItem(
   } catch (error) {
     const cause = causeOf(error)
 
-    if (!isDeterministicRefusal(error) && attempt < MAX_ATTEMPTS) {
-      // Transient: return the item to the queue for a bounded retry (§8). The
-      // coordinator keeps it RUNNING; the redelivery starts it again.
-      //
-      // Hand the item back to the ledger as queued. It is waiting, not
-      // running, and a wait of up to 40 seconds is long enough that the
-      // difference is what the worklist shows.
+    // A rate limit has already been waited out in place, across the full
+    // attempt budget, without ever giving up the slot. Returning it to the
+    // queue now would hand the next submission a turn this one never got —
+    // the behaviour that made failure depend on queue position. Having tried
+    // and waited, the honest answer is that the provider is refusing.
+    if (!isDeterministicRefusal(error) && !isRateLimited(error) && attempt < MAX_ATTEMPTS) {
+      // Transient and not a rate limit: return the item to the queue for a
+      // bounded retry (§8). It is waiting rather than running, and the ledger
+      // has to say so or the whole worklist reads "Checking…".
       await stub.deferItem(submissionId)
-
-      // A rate limit waits longer on each attempt, because the ceiling is
-      // measured over time: retrying immediately is refused in 40ms and burns
-      // the budget without ever crossing it. Other transient faults are not
-      // paced — a provider timeout has no interval to wait out.
-      return isRateLimited(error)
-        ? { retry: true, delaySeconds: retryDelaySeconds(attempt) }
-        : { retry: true }
+      return { retry: true }
     }
 
     await env.DB.prepare(`UPDATE submission SET state = ?, failure_cause = ? WHERE id = ?`)
