@@ -2154,6 +2154,109 @@ other one.
 
 ---
 
+## 17. The AI Infrastructure Layer
+
+*Written after a day in which almost every failure lived here rather than in
+the verification logic. Each boundary below is stated with the mistake that
+established it, because a boundary nobody has crossed is a preference.*
+
+### 17.1 Why it is a layer
+
+A generative-AI application is usually described as two things: prompts and
+business logic. That description survives exactly until a second vendor, a
+spent quota, or a model that answers confidently without reading.
+
+What sits between the decision logic and a vendor is not glue. It has its own
+responsibilities, its own failure modes, and — crucially — its own reasons to
+refuse work. Naming it makes those refusals designable instead of accidental.
+
+### 17.2 The stack
+
+| Layer | May know about | Must not know about |
+|---|---|---|
+| **Decision** — comparison, aggregation, verdicts | Field values, reference data | That a model exists |
+| **Contract** — what is asked, what a valid answer is | Regions, field names, images | Any vendor, prompt or wire format |
+| **Adapter** — one vendor | That vendor's transport, envelope, error vocabulary, model naming | Application data, retry policy, cost |
+| **Broker** — inference infrastructure | Requests, counts, spend, cache keys | What a request *means* |
+| **Platform** — storage, queue, coordination, rasterisation | Bytes and jobs | Anything above |
+
+The decision layer is the one that has never leaked. Every incident this
+project recorded happened in the three layers below it, which is an argument
+for the separation rather than against it.
+
+### 17.3 Boundaries, and what taught them
+
+**Fault vocabulary belongs to the adapter.**
+The batch layer decided retry-versus-abandon by matching `4006`, `neurons` and
+`daily free allocation` — Cloudflare's wording — in code that runs whichever
+provider is configured. Pointed at Gemini it would have called every fault
+transient and retried a spent quota eight times. The CI gate carried the same
+strings and failed a sound revision for an account condition. *A vendor's words
+must not appear above its adapter, including in a shell script.*
+
+**Retry policy belongs to the application, never to the broker.**
+Brokers offer request retries. Enabled, they sit *underneath* the application's
+own budget and multiply attempts invisibly, so a documented "eight attempts"
+becomes an unknown number. The application already distinguishes waiting from
+abandoning; a second retrier that cannot make that distinction can only blur
+it.
+
+**The prompt belongs to neither vendor.**
+Two adapters share one instruction and one `PROMPT_VERSION` (D34). A prompt
+tuned per vendor makes every cross-vendor comparison confounded and stops the
+audit record claiming two verdicts were produced under the same conditions.
+
+**Model identity is configuration; what makes it *unstable* is the vendor's.**
+Cloudflare floats with a `-latest` suffix, Google by omitting a version. A
+single rule rejected every model that exists and accepted one that did not
+(D29 as applied). The adapter answers "does this identifier move?"; the
+deployment answers "which model?".
+
+**Legibility is a property of pixels, not a claim by the reader.**
+Shown an illegible statutory warning, the model returned the statute verbatim
+and reported success. Two renderings differing only in `birth defect` versus
+`birth defects` produced identical canonical transcriptions. *Anything the
+model could know without looking cannot be verified by asking it* (D5, UT-G05).
+
+**Content stops at the adapter.**
+Brokers store request and response bodies by default; here those are label
+artwork and the values read from it. Metrics, tokens, latency and errors may
+leave; content may not (D20).
+
+### 17.4 Invariants
+
+1. **Absence degrades, and visibly.** An unconfigured broker means direct
+   vendor calls, not failure — an observability layer that can take the service
+   down is worse than none. But the fallback is reported, or the deployment
+   silently stops being measured while appearing healthy (B-D17).
+2. **Every failure is classified by what response helps** — wait, abandon,
+   redeliver, stop — not by severity or status code (D37).
+3. **An error states what was observed.** `provider returned an empty response`
+   described a failed type check while the model was reading perfectly, and
+   sent three rounds of debugging after the wrong thing (D38).
+4. **Cost is measured where requests are, not where they are issued.** Two
+   vendors serving one workload make per-adapter counters meaningless.
+5. **Caching is off for measurement.** A corpus run served from cache measures
+   the cache.
+
+### 17.5 What this layer does not do
+
+It does not interpret answers, decide verdicts, own retry budgets, normalise
+vendor errors, or hold a second copy of the prompt. Every one of those is a
+place where model behaviour would be decided twice, and the second place is
+always the one nobody reads.
+
+### 17.6 Platform mapping
+
+Implementations are listed in `batch-backend-design.md` §14 — AI Gateway on
+Cloudflare, Vertex AI on GCP, Bedrock on AWS, LiteLLM or Envoy on premise. All
+preserve the vendor's own request and response schema, so the seam is a
+destination rather than a translation: the Gemini adapter needed one field and
+no logic. An interface unifying their management APIs would be an abstraction
+with no caller.
+
+---
+
 ## Appendix A. Sections Deliberately Not Completed
 
 *Recorded rather than omitted, per the template's rule: an explicit N/A is
