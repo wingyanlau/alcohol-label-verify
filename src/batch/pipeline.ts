@@ -31,7 +31,7 @@ import {
 } from '../normalise/normaliser.js'
 import { TTB_F5100_31_2023, UnknownFormError } from '../normalise/regions.js'
 import { createWorkersAiProvider } from '../providers/workers-ai.js'
-import { isRateLimited, MAX_ATTEMPTS } from './backoff.js'
+import { isQuotaExhausted, isRateLimited, MAX_ATTEMPTS } from './backoff.js'
 import { labelImageKey } from './keys.js'
 import { buildPersistPlan, persistResult } from './persist.js'
 import { withRateLimitRetry } from './retry.js'
@@ -139,6 +139,12 @@ export async function processItem(
   // Bound here: the narrowing above does not survive into the retry closure.
   const browser = env.BROWSER
 
+  // Nothing left to attempt: the job was abandoned while this message waited
+  // in the queue. Acked without work, so the remaining messages drain in
+  // seconds rather than each rediscovering the same dead end.
+  const abandoned = await stub.abortedReason()
+  if (abandoned !== null) return { retry: false }
+
   await stub.startItem(submissionId)
 
   try {
@@ -202,6 +208,30 @@ export async function processItem(
     return { retry: false }
   } catch (error) {
     const cause = causeOf(error)
+
+    // The day's inference allowance is gone. It will not clear by waiting, so
+    // the job stops here rather than spending the rest of the queue proving it
+    // 25 more times. Every remaining item is settled with the same cause, so
+    // the worklist says what happened instead of filling with failures that
+    // look like a broken tool.
+    if (isQuotaExhausted(error)) {
+      const reason =
+        'The daily inference allowance for this account is used up. ' +
+        'The check stopped here; no further submissions were attempted.'
+      await env.DB.prepare(`UPDATE submission SET state = 'FAILED', failure_cause = ? WHERE id = ?`)
+        .bind(reason, submissionId)
+        .run()
+      // The ledger and the durable record both have to settle, or /batch/current
+      // reads the job as running for ever and the next batch joins a corpse.
+      await env.DB.prepare(
+        `UPDATE submission SET state = 'FAILED', failure_cause = ?
+          WHERE job_id = ? AND state IN ('QUEUED', 'RUNNING')`,
+      )
+        .bind(reason, jobId)
+        .run()
+      await stub.abort(reason)
+      return { retry: false }
+    }
 
     // A rate limit has already been waited out in place, across the full
     // attempt budget, without ever giving up the slot. Returning it to the

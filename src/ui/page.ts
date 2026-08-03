@@ -264,6 +264,13 @@ export const PAGE_HTML = `<!doctype html>
       renderProgress(msg.progress)
     } else if (msg.type === 'job.completed') {
       renderProgress(msg.progress)
+    } else if (msg.type === 'job.aborted') {
+      // Stopped for a reason none of the remaining items could have changed.
+      // Said once, plainly, rather than left to be inferred from a worklist
+      // full of identical failures.
+      startErr.textContent = msg.reason
+      startErr.classList.remove('hidden')
+      renderProgress(msg.progress)
     }
     renderCounts()
     renderWorklist()

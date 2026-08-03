@@ -41,6 +41,31 @@ export function retryDelaySeconds(attempt: number): number {
  * match on.
  */
 export function isRateLimited(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error ?? '')
+  const message = messageOf(error)
+  if (isQuotaExhausted(error)) return false
   return /\b429\b/.test(message) || /rate limit/i.test(message)
+}
+
+/**
+ * Whether the account's inference allowance is spent, rather than merely
+ * being served too fast.
+ *
+ * Workers AI reports 4006 when the day's neurons are gone. The distinction
+ * from a rate limit is the whole point: a rate limit clears by waiting, and an
+ * allowance does not clear before tomorrow. Treating this as transient would
+ * spend the rest of the queue rediscovering the same dead end, once per
+ * submission, and leave a reviewer with 26 failures that look like a broken
+ * tool rather than an exhausted budget.
+ */
+export function isQuotaExhausted(error: unknown): boolean {
+  const message = messageOf(error)
+  return (
+    /\b4006\b/.test(message) ||
+    /daily free allocation/i.test(message) ||
+    /neurons?\b[^.]*\bexhaust/i.test(message)
+  )
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error ?? '')
 }

@@ -104,9 +104,25 @@ jobs:
         run: |
           set -euo pipefail
           url="https://alcohol-label-verify.wing-lawrence.workers.dev"
-          body=$(curl -fsS --max-time 60 "$url/health/inference")
+          body=$(curl -sS --max-time 60 "$url/health/inference" || true)
           echo "$body"
-          echo "$body" | jq -e '.status == "ok"' > /dev/null
+
+          if echo "$body" | jq -e '.status == "ok"' > /dev/null 2>&1; then
+            exit 0
+          fi
+
+          reason=$(echo "$body" | jq -r '.error // .reason // "unknown"' 2>/dev/null || echo unknown)
+          # An exhausted daily allowance is a fact about the account, not about
+          # this revision — Workers AI reports 4006 once the day's neurons are
+          # spent. Failing the deploy for it blocks shipping sound code and
+          # teaches people to re-run until it passes. Anything else still fails.
+          if echo "$reason" | grep -qiE '4006|daily free allocation|neurons'; then
+            echo "::warning::inference unverified: $reason"
+            echo "::warning::the account has spent its daily Workers AI allowance; this does not indicate a problem with this revision"
+          else
+            echo "::error::/health/inference reported: $reason"
+            exit 1
+          fi
 
       # The other dependency no configuration check can prove. Rasterisation is
       # the batch path's entry point (D33) — the model is never shown a PDF text

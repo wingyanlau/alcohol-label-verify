@@ -75,6 +75,7 @@ type Event =
   | { type: 'item.completed'; item: ItemRow; progress: Progress }
   | { type: 'item.failed'; item: ItemRow; progress: Progress }
   | { type: 'job.completed'; progress: Progress }
+  | { type: 'job.aborted'; reason: string; progress: Progress }
 
 export class JobCoordinator extends DurableObject<Env> {
   #sql: SqlStorage
@@ -159,6 +160,43 @@ export class JobCoordinator extends DurableObject<Env> {
     const progress = this.#progress()
     if (rows[0]) this.#broadcast({ type: 'item.deferred', itemId, progress })
     return progress
+  }
+
+  /**
+   * Abandon the job: something is wrong that the remaining items cannot fix.
+   *
+   * Written for an exhausted inference allowance. Unlike a rate limit, it does
+   * not clear by waiting, so carrying on would rediscover the same dead end
+   * once per submission and leave a reviewer with a screen of failures that
+   * look like a broken tool rather than a spent budget.
+   *
+   * Every item still queued or running is settled with the same cause, so the
+   * ledger has no survivors waiting on work that will never come — the state
+   * that leaves a page reading "waiting" indefinitely.
+   */
+  async abort(reason: string): Promise<Progress> {
+    const now = new Date().toISOString()
+    this.#sql.exec(
+      `INSERT INTO meta (key, value) VALUES ('aborted', ?) ON CONFLICT(key) DO UPDATE SET value = ?`,
+      reason,
+      reason,
+    )
+    this.#sql.exec(
+      `UPDATE item SET state = 'FAILED', cause = ?, updated_at = ?
+        WHERE state IN ('QUEUED', 'RUNNING')`,
+      reason,
+      now,
+    )
+
+    const progress = this.#progress()
+    this.#broadcast({ type: 'job.aborted', reason, progress })
+    if (progress.done) this.#broadcast({ type: 'job.completed', progress })
+    return progress
+  }
+
+  /** Why the job was abandoned, or null if it was not. */
+  async abortedReason(): Promise<string | null> {
+    return this.#meta('aborted')
   }
 
   /**
