@@ -75,6 +75,16 @@ export interface Provider extends ExtractionProvider {
    * deployment.
    */
   ping(): Promise<void>
+
+  /**
+   * Which models this deployment could be pointed at, when the vendor can say.
+   *
+   * Optional because not every provider has an answer — Cloudflare's catalogue
+   * is not queryable through the AI binding. Where it exists it turns "the id
+   * in your config does not exist" from a guessing game into a lookup, which
+   * cost two deploys to learn.
+   */
+  listModels?(): Promise<readonly string[]>
 }
 
 /** Convenience for classifiers, which all match on message text. */

@@ -196,6 +196,24 @@ export function createGeminiProvider(opts: GeminiOptions): Provider {
       answerText(await response.json())
     },
 
+    async listModels(): Promise<readonly string[]> {
+      const response = await doFetch(ENDPOINT, {
+        headers: { 'x-goog-api-key': opts.apiKey },
+      })
+      if (!response.ok) {
+        const detail = (await response.text().catch(() => '')).slice(0, 300)
+        throw new Error(`provider returned HTTP ${response.status}${detail ? `: ${detail}` : ''}`)
+      }
+      const body = (await response.json()) as {
+        models?: { name?: string; supportedGenerationMethods?: string[] }[]
+      }
+      return (body.models ?? [])
+        .filter((m) => m.supportedGenerationMethods?.includes('generateContent') ?? true)
+        .map((m) => (m.name ?? '').replace(/^models\//, ''))
+        .filter((n) => n !== '')
+        .sort()
+    },
+
     async extract(request: ExtractionRequest): Promise<ExtractionResult> {
       const started = now()
 

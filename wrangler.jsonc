@@ -176,7 +176,7 @@
         // an audit record citing it is correspondingly weaker (D29). What the
         // service still refuses is what genuinely moves: `-latest`, preview,
         // experimental, and dated snapshots.
-        "MODEL_ID": "gemini-2.5-flash",
+        "MODEL_ID": "gemini-3.5-flash",
 
         "MAX_UPLOAD_BYTES": "10485760",
         "MAX_PAGE_COUNT": "8",

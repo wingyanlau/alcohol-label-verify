@@ -295,6 +295,35 @@ export default {
       }
     }
 
+    // What the configured provider will actually accept.
+    //
+    // Added after two deploys spent on model ids that did not exist: one I
+    // invented to satisfy my own pinning rule, one retired for new accounts.
+    // Both were guesses where a lookup was available.
+    if (pathname === '/health/models') {
+      const configured = (env.MODEL_PROVIDER ?? '').trim()
+      try {
+        const provider = createProvider(env)
+        if (!provider.listModels) {
+          return json({
+            status: 'unavailable',
+            provider: configured,
+            reason: 'this provider cannot enumerate its catalogue',
+          })
+        }
+        return json({ status: 'ok', provider: configured, models: await provider.listModels() })
+      } catch (e) {
+        return json(
+          {
+            status: 'error',
+            provider: configured,
+            error: e instanceof Error ? e.message : String(e),
+          },
+          502,
+        )
+      }
+    }
+
     if (pathname === '/health/raster') {
       if (!env.BROWSER) return json({ status: 'unavailable', reason: 'no BROWSER binding' }, 503)
       const started = Date.now()
