@@ -45,9 +45,9 @@ jobs:
           : "${CLOUDFLARE_API_TOKEN:?missing — add it under Settings → Environments → production}"
           : "${CLOUDFLARE_ACCOUNT_ID:?missing — add it under Settings → Environments → production}"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -131,7 +131,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Create release tag
         run: |
