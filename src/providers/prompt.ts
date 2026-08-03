@@ -32,6 +32,29 @@ export const PROMPT_VERSION = 'label-extract@1'
  *  3. Asks for the warning statement VERBATIM, including capitalisation, since
  *     FR-6 turns on whether the header is in capitals.
  */
+/**
+ * The digest of the instruction as it actually stands.
+ *
+ * PROMPT_VERSION is a label someone remembers to change; this is the text. A
+ * prompt edited without a version bump would leave every audit record citing a
+ * version that no longer describes what was sent, and nothing would show it.
+ * Taken over the label-region form, which is the one that carries the warning.
+ */
+export async function promptDigest(): Promise<string> {
+  const text = buildPrompt({
+    region: 'label',
+    image: new ArrayBuffer(0),
+    mimeType: 'image/png',
+    fields: ['brandName', 'classType', 'alcoholContent', 'netContents'],
+    includeWarning: true,
+  })
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+  return [...new Uint8Array(hash)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 16)
+}
+
 export function buildPrompt(request: ExtractionRequest): string {
   const fieldList = request.fields.map((f) => `  "${f}"  — ${FIELD_LABELS[f]}`).join('\n')
 

@@ -18,7 +18,10 @@
 
 import type { Env, WorkMessage } from '../env.js'
 import { checkIntake, IntakeRejected } from '../normalise/normaliser.js'
+import { PROMPT_VERSION, promptDigest } from '../providers/prompt.js'
+import { createProvider } from '../providers/registry.js'
 import { appendAudit } from './audit.js'
+import { fingerprintOf, PROBE_IMAGE } from './fingerprint.js'
 import { contentKey } from './keys.js'
 import { corpus, type Submission } from './submissions.js'
 
@@ -150,6 +153,52 @@ export async function startBatch(env: Env): Promise<BatchStarted> {
 
   // Settle rejected items on the ledger so the worklist shows them immediately.
   for (const r of rejectedItems) await stub.recordFailure(r.itemId, r.cause)
+
+  // Characterise the reader before it reads anything.
+  //
+  // One call, once per job, whose answer is hashed and recorded. Every verdict
+  // in this job was produced by whatever answered here, so the job carries the
+  // identity and the verdicts inherit it. A failure to fingerprint does not
+  // stop the job: an unidentified reader is a gap worth recording, not a
+  // reason to refuse work that would otherwise succeed.
+  let fingerprint = 'unavailable'
+  let providerName = (env.MODEL_PROVIDER ?? '').trim()
+  try {
+    const provider = createProvider(env)
+    providerName = provider.name
+    const probe = await env.ASSETS.fetch(new Request(`https://assets.local/${PROBE_IMAGE}`))
+    if (probe.ok) {
+      const result = await provider.extract({
+        region: 'label',
+        image: await probe.arrayBuffer(),
+        mimeType: 'image/png',
+        fields: ['brandName'],
+        includeWarning: false,
+      })
+      fingerprint = await fingerprintOf(result.extraction.fields.brandName.raw ?? '')
+    }
+  } catch {
+    // Recorded as unavailable below, and deliberately not rethrown.
+  }
+
+  await appendAudit(db, {
+    at: now,
+    actor: 'system',
+    action: 'model.fingerprinted',
+    subjectType: 'job',
+    subjectId: jobId,
+    // The identity this job's verdicts were produced under. `model` is what was
+    // asked for; `fingerprint` is what answered. A changed fingerprint against
+    // an unchanged model name is a vendor repointing an alias — otherwise
+    // undetectable after the fact.
+    detail: [
+      `provider=${providerName}`,
+      `model=${env.MODEL_ID}`,
+      `fingerprint=${fingerprint}`,
+      `prompt=${PROMPT_VERSION}`,
+      `promptDigest=${await promptDigest()}`,
+    ].join(';'),
+  })
 
   await appendAudit(db, {
     at: now,
