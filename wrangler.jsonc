@@ -250,7 +250,13 @@
 
       "durable_objects": {
         "bindings": [{ "name": "JOB", "class_name": "JobCoordinator" }]
-      }
+      },
+
+      // Retention is enforced by a scheduled sweep, not a bucket TTL (B-D10).
+      // Daily at 03:20 UTC: the window is measured in days, so the hour is
+      // immaterial except that it should not land on the hour, where every
+      // other cron on the platform is queued.
+      "triggers": { "crons": ["20 3 * * *"] }
     },
 
     "production": {
@@ -305,7 +311,12 @@
 
       "durable_objects": {
         "bindings": [{ "name": "JOB", "class_name": "JobCoordinator" }]
-      }
+      },
+
+      // See the note on the staging trigger. Retention is a promise the
+      // deployment makes about applicant content, so the environment that
+      // holds real submissions is the one that must not be missing this.
+      "triggers": { "crons": ["20 3 * * *"] }
     }
   }
 }

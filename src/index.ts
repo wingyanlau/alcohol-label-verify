@@ -9,14 +9,16 @@
  * §9.5 (configuration).
  */
 
-import { readWholeChain, verifyChain } from './batch/audit.js'
+import { appendAudit, readWholeChain, verifyChain } from './batch/audit.js'
 import { MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
 import { loadCurrentJob } from './batch/current.js'
 import { loadSubmissionDetail } from './batch/detail.js'
 import { startBatch } from './batch/intake.js'
 import { contentKey, labelImageKey } from './batch/keys.js'
 import { processItem } from './batch/pipeline.js'
+import { isReferenceCode, normaliseReferenceCode } from './batch/reference-code.js'
 import { loadStoredVerdict, ReplayUnavailableError, replayVerdict } from './batch/replay-load.js'
+import { RETENTION_POLICY, REVIEW_WINDOW_DAYS, runPurge } from './batch/retention.js'
 import { approvalFor, isApproved } from './domain/approval.js'
 import { ExtractionContractError } from './domain/extraction.js'
 import { referenceIsUnverified, warningReference } from './domain/reference.js'
@@ -152,12 +154,19 @@ export default {
       // A deployment whose database is missing or unmigrated is misconfigured,
       // not merely degraded — every verdict it issues would be unrecorded.
       let schema: unknown = null
+      let storedRetention: string | null = null
       if (env.DB) {
         try {
           const row = await env.DB.prepare(
             "SELECT value FROM schema_meta WHERE key = 'schema_version'",
           ).first<{ value: string }>()
           schema = row?.value ?? null
+          storedRetention =
+            (
+              await env.DB.prepare(
+                "SELECT value FROM schema_meta WHERE key = 'retention_policy'",
+              ).first<{ value: string }>()
+            )?.value ?? null
           if (row?.value == null) {
             problems.push({
               setting: 'DB',
@@ -188,6 +197,16 @@ export default {
           // is visible.
           gateway: gatewayStatus(env),
           schemaVersion: schema,
+          // What the deployment promises about applicant content (D32), from
+          // the record and from the code. Reported as a pair because the
+          // window lives in two places — a migration and a constant — and a
+          // policy that has drifted from what the sweep actually deletes is
+          // worse than one that was never stated.
+          retention: {
+            stated: storedRetention,
+            enforced: RETENTION_POLICY,
+            agrees: storedRetention === null ? null : storedRetention === RETENTION_POLICY,
+          },
           problems,
         },
         problems.length === 0 ? 200 : 503,
@@ -663,6 +682,63 @@ export default {
       }
     }
 
+    // Find a review from the code an agent quoted (D21).
+    //
+    // This is the half of the requirement that makes the other half worth
+    // having: printing a reference nobody can look up is decoration. The agent
+    // reports "7K2M-4QX9 called this a mismatch and it isn't", and an operator
+    // needs to reach that record without asking them to read a UUID aloud.
+    //
+    // Returns the location rather than the result, so there is exactly one
+    // renderer for a review and this route cannot drift away from it.
+    const lookup = pathname.match(/^\/reference\/([^/]+)$/)
+    if (lookup && request.method === 'GET') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+
+      const code = normaliseReferenceCode(decodeURIComponent(lookup[1] ?? ''))
+      // A typo is answered as a typo. Sending a malformed code to the database
+      // would return "not found", which tells an operator the record is gone
+      // when in fact the code was mistyped — two very different problems.
+      if (!isReferenceCode(code)) {
+        return json({ error: 'malformed', reason: `"${code}" is not a reference code` }, 400)
+      }
+
+      const rows = (
+        await env.DB.prepare(
+          `SELECT id, job_id, source_name FROM submission WHERE reference_code = ?1`,
+        )
+          .bind(code)
+          .all<{ id: string; job_id: string | null; source_name: string }>()
+      ).results
+
+      if (rows.length === 0) return json({ error: 'not_found', reference: code }, 404)
+      // Reported, not silently resolved to the first. Forty bits will not
+      // collide at this scale, and if it ever does the operator must see two
+      // candidates rather than be handed the wrong one with confidence.
+      if (rows.length > 1) {
+        return json(
+          {
+            error: 'ambiguous',
+            reference: code,
+            candidates: rows.map((r) => ({ submissionId: r.id, sourceName: r.source_name })),
+          },
+          409,
+        )
+      }
+
+      const row = rows[0] as { id: string; job_id: string | null; source_name: string }
+      return json({
+        reference: code,
+        submissionId: row.id,
+        jobId: row.job_id,
+        sourceName: row.source_name,
+        detailUrl:
+          row.job_id === null
+            ? null
+            : `/batch/${encodeURIComponent(row.job_id)}/submission/${encodeURIComponent(row.id)}`,
+      })
+    }
+
     if (pathname === '/') {
       return new Response(PAGE_HTML, {
         headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
@@ -682,6 +758,38 @@ export default {
    * individual batch item, so a retry is invisible rather than a doubling of
    * worst-case latency.
    */
+  /**
+   * The retention sweep (B-D10, D32).
+   *
+   * Deletion is a step the system performs and records, not a bucket lifecycle
+   * rule — that is what B-D10 was protecting, and a TTL cannot write an audit
+   * event. The window itself and the reasoning behind it are in
+   * `batch/retention.ts`; this handler only runs it and says what happened.
+   */
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (!env.DB || !env.STAGING) return
+
+    ctx.waitUntil(
+      (async () => {
+        const now = new Date()
+        const result = await runPurge(env.DB as D1Database, env.STAGING as R2Bucket, now)
+        if (result.purged === 0) return
+
+        // Recorded in the chain, because a deletion is a thing that happened
+        // to a submission and the record is meant to show what happened to it.
+        // Counts and identifiers only — the same rule as every other event.
+        await appendAudit(env.DB as D1Database, {
+          at: now.toISOString(),
+          actor: 'system',
+          action: 'content.purged',
+          subjectType: 'job',
+          subjectId: 'retention-sweep',
+          detail: `submissions=${result.purged};objects=${result.objectsDeleted};cutoff=${result.cutoff};windowDays=${REVIEW_WINDOW_DAYS}`,
+        })
+      })(),
+    )
+  },
+
   async queue(batch: MessageBatch<WorkMessage>, env: Env): Promise<void> {
     for (const message of batch.messages) {
       const body = message.body ?? ({} as WorkMessage)

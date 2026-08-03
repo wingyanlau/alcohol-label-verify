@@ -17,6 +17,7 @@ import { OUTCOME_HEADLINE } from '../domain/aggregate.js'
 import { referenceIsUnverified, warningReference } from '../domain/reference.js'
 import type { FieldName, Outcome } from '../domain/types.js'
 import { FIELD_LABELS, FIELDS } from '../domain/types.js'
+import { referenceCodeFor } from './reference-code.js'
 
 export interface DetailField {
   readonly field: string
@@ -54,12 +55,25 @@ export interface SubmissionDetail {
     readonly referenceUnverified: boolean
   }
   readonly labelImageUrl: string
+  /**
+   * The quotable identifier (D21). Derived from `submissionId`, so it is
+   * stable and needs no storage — see `reference-code.ts`.
+   */
+  readonly reference: string
+  /**
+   * When the staged content was deleted under the retention policy, or null
+   * while it is still held. The panels read this rather than discovering the
+   * absence by failing to load an image — "deleted on 3 August" is a policy
+   * working; a broken panel is a tool that looks broken.
+   */
+  readonly contentPurgedAt: string | null
 }
 
 interface SubmissionRecord {
   source_name: string
   state: string
   failure_cause: string | null
+  content_purged_at: string | null
 }
 interface VerdictRecord {
   id: string
@@ -92,8 +106,11 @@ export async function loadSubmissionDetail(
   submissionId: string,
   labelImageUrl: string,
 ): Promise<SubmissionDetail | null> {
+  const reference = await referenceCodeFor(submissionId)
   const submission = await db
-    .prepare(`SELECT source_name, state, failure_cause FROM submission WHERE id = ?`)
+    .prepare(
+      `SELECT source_name, state, failure_cause, content_purged_at FROM submission WHERE id = ?`,
+    )
     .bind(submissionId)
     .first<SubmissionRecord>()
   if (submission === null) return null
@@ -122,6 +139,8 @@ export async function loadSubmissionDetail(
       fields: [],
       warning: { evaluated: false, ok: false, segments: [], advisory, referenceUnverified },
       labelImageUrl,
+      reference,
+      contentPurgedAt: submission.content_purged_at,
     }
   }
 
@@ -187,5 +206,7 @@ export async function loadSubmissionDetail(
       referenceUnverified,
     },
     labelImageUrl,
+    reference,
+    contentPurgedAt: submission.content_purged_at,
   }
 }

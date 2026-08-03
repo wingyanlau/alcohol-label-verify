@@ -90,6 +90,18 @@ export const PAGE_HTML = `<!doctype html>
   .imgpanel img { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
   .imgpanel .pdf { width: 100%; height: 460px; margin-top: 14px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
   .imgpanel .cap { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  /* A stated policy, not a missing panel. Neutral grey, deliberately: a
+     deletion that happened on schedule is not a warning. */
+  .purged { color: var(--muted); font-size: 15px; border: 1px dashed var(--line);
+            border-radius: 6px; padding: 14px; background: #f7f7f6; }
+  /* The quotable reference (D21). Muted — it is provenance, not a finding —
+     but never below 15px, and monospaced so 0/O and 1/I are distinguishable
+     on screen as well as in the alphabet the code is drawn from. */
+  .refline { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line);
+             color: var(--muted); font-size: 15px; }
+  .refcode { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+             font-size: 16px; letter-spacing: 0.06em; color: var(--ink);
+             user-select: all; }
   .warning-seg { padding: 8px 0; }
   .warning-seg .dev { color: var(--muted); font-size: 15px; }
   .advisory { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 14px; }
@@ -492,35 +504,61 @@ export const PAGE_HTML = `<!doctype html>
     layout.appendChild(left)
 
     var right = el('div', 'imgpanel')
-    var img = document.createElement('img')
-    img.alt = 'Label artwork'
-    img.src = d.labelImageUrl
-    img.addEventListener('error', function () { right.classList.add('hidden') })
-    right.appendChild(img)
-    right.appendChild(el('div', 'cap', 'The label as read. Adjudicate against the artwork, not the verdict.'))
 
-    // The whole submission, below the crop. The crop shows what the model was
-    // given; this shows what the applicant filed. A verdict that disagrees with
-    // the document — or a crop that caught the wrong region — is visible only
-    // by looking at both.
-    if (d.sourceUrl) {
-      var frame = document.createElement('iframe')
-      frame.className = 'pdf'
-      frame.src = d.sourceUrl
-      frame.title = 'The submission as filed'
-      right.appendChild(frame)
-      var link = document.createElement('a')
-      link.href = d.sourceUrl
-      link.target = '_blank'
-      link.rel = 'noopener'
-      link.textContent = 'Open the submission in a new tab'
-      var cap = el('div', 'cap')
-      cap.appendChild(link)
-      right.appendChild(cap)
+    // Content deleted under the retention policy is stated, not discovered.
+    // Without this the panels would fail to load and the reviewer would read a
+    // working policy as a broken tool — and might doubt the verdict with it.
+    if (d.contentPurgedAt) {
+      right.appendChild(el('div', 'purged',
+        'The label artwork and the submission as filed were deleted on ' +
+        d.contentPurgedAt.slice(0, 10) + ', under the retention policy. ' +
+        'The verdict and everything it was computed from are unaffected.'))
+    } else {
+
+      var img = document.createElement('img')
+      img.alt = 'Label artwork'
+      img.src = d.labelImageUrl
+      img.addEventListener('error', function () { right.classList.add('hidden') })
+      right.appendChild(img)
+      right.appendChild(el('div', 'cap', 'The label as read. Adjudicate against the artwork, not the verdict.'))
+
+      // The whole submission, below the crop. The crop shows what the model was
+      // given; this shows what the applicant filed. A verdict that disagrees with
+      // the document — or a crop that caught the wrong region — is visible only
+      // by looking at both.
+      if (d.sourceUrl) {
+        var frame = document.createElement('iframe')
+        frame.className = 'pdf'
+        frame.src = d.sourceUrl
+        frame.title = 'The submission as filed'
+        right.appendChild(frame)
+        var link = document.createElement('a')
+        link.href = d.sourceUrl
+        link.target = '_blank'
+        link.rel = 'noopener'
+        link.textContent = 'Open the submission in a new tab'
+        var cap = el('div', 'cap')
+        cap.appendChild(link)
+        right.appendChild(cap)
+      }
+
     }
     layout.appendChild(right)
 
     sheet.appendChild(layout)
+
+    // The reference, at the foot of every result (D21, ui-design §10).
+    //
+    // Selectable and monospaced because its whole job is to be copied or read
+    // aloud accurately — an agent reporting a wrong verdict quotes this, and
+    // an operator finds the record from it at /reference/<code>.
+    if (d.reference) {
+      var foot = el('div', 'refline')
+      foot.appendChild(el('span', null, 'Reference: '))
+      foot.appendChild(el('code', 'refcode', d.reference))
+      sheet.appendChild(foot)
+    }
+
     mount(sheet)
   }
 

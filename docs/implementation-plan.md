@@ -168,8 +168,12 @@ passing review.
 - [ ] The record persists to D1: `submission`, `extraction`, `verdict`,
       `field_verdict`, `warning_verdict`
 - [ ] `audit_event` rows are appended and hash-chained; the chain verifies
-- [ ] A correlation identifier is generated per review and **surfaced in the
-      response**
+- [x] A correlation identifier is generated per review and **surfaced in the
+      response** — a quotable code (`7K2M-4QX9`, ui-design §10) at the foot of
+      every result, derived from the submission id rather than allocated, so
+      every review ever processed has one and always had it. `GET
+      /reference/<code>` resolves it; without a lookup the code would be
+      decoration
 - [x] **Replay test passes**: a stored extraction re-compared yields a
       bit-identical verdict (NFR-13) — `GET /audit/replay/:submissionId`,
       re-derived through the same `verifySubmission` via a provider that
@@ -180,7 +184,14 @@ passing review.
       on the verdict row. **Verdicts written before that migration are not
       re-derivable** and the endpoint reports them as disagreements, which is
       the honest answer rather than a defect
-- [ ] Submission content is purged from R2 after completion (B-D10)
+- [x] Submission content is purged from R2 (B-D10) — after a stated **review
+      window**, not at completion. Completion is when the content starts being
+      needed: the review screen shows the label crop and the submission as
+      filed, so purging then would leave a reviewer two broken panels. A daily
+      sweep deletes both objects 14 days after the job starts, marks the
+      record, and appends `content.purged` to the chain. The policy is recorded
+      in `schema_meta` and reported by `/health` beside the constant the sweep
+      enforces. See B-D10, which was rewritten rather than merely ticked
 
 ---
 

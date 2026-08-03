@@ -24,6 +24,7 @@ import { createProvider } from '../providers/registry.js'
 import { appendAudit } from './audit.js'
 import { fingerprintOf, PROBE_IMAGE } from './fingerprint.js'
 import { contentKey } from './keys.js'
+import { referenceCodeFor } from './reference-code.js'
 import { corpus, type Submission } from './submissions.js'
 
 export interface BatchStarted {
@@ -119,10 +120,17 @@ export async function startBatch(env: Env): Promise<BatchStarted> {
           .prepare(
             `INSERT INTO submission
                (id, job_id, source_name, content_digest, byte_size, content_key, state,
-                failure_cause, created_at)
-             VALUES (?, ?, ?, '', 0, NULL, 'REJECTED', ?, ?)`,
+                failure_cause, created_at, reference_code)
+             VALUES (?, ?, ?, '', 0, NULL, 'REJECTED', ?, ?, ?)`,
           )
-          .bind(p.itemId, jobId, p.submission.sourceName, p.rejection ?? 'Rejected', now),
+          .bind(
+            p.itemId,
+            jobId,
+            p.submission.sourceName,
+            p.rejection ?? 'Rejected',
+            now,
+            await referenceCodeFor(p.itemId),
+          ),
       )
       rejectedItems.push({ itemId: p.itemId, cause: p.rejection ?? 'Rejected' })
       continue
@@ -135,10 +143,20 @@ export async function startBatch(env: Env): Promise<BatchStarted> {
       db
         .prepare(
           `INSERT INTO submission
-             (id, job_id, source_name, content_digest, byte_size, content_key, state, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'QUEUED', ?)`,
+             (id, job_id, source_name, content_digest, byte_size, content_key, state,
+              created_at, reference_code)
+           VALUES (?, ?, ?, ?, ?, ?, 'QUEUED', ?, ?)`,
         )
-        .bind(p.itemId, jobId, p.submission.sourceName, digest, p.bytes.byteLength, key, now),
+        .bind(
+          p.itemId,
+          jobId,
+          p.submission.sourceName,
+          digest,
+          p.bytes.byteLength,
+          key,
+          now,
+          await referenceCodeFor(p.itemId),
+        ),
     )
     messages.push({
       jobId,

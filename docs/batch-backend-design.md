@@ -392,16 +392,31 @@ exist from what must be kept.**
 
 | Data | Held | Lifetime | Rationale |
 |---|---|---|---|
-| Submission bytes | Object store | Job duration, then deleted; TTL as a backstop | Workers must fetch it; nothing needs it afterwards |
-| Rasterised regions | In memory only | The item's processing | Never written down |
+| Submission bytes | Object store | **Review window (14 days from job start), then deleted by a scheduled sweep** | Workers must fetch it — and a reviewer needs it afterwards, which the original entry did not allow for |
+| Rasterised label crop | Object store | Same window | Shown beside the verdict so an agent adjudicates against the artwork (FR-10). Originally "in memory only, never written down", which the review screen made impossible |
+| Rasterised record region | In memory only | The item's processing | Never written down — nothing displays it |
 | Item ledger | Coordinator | Job duration + a short collection window | The client must be able to reconnect (B7) |
 | Results and audit records | Coordinator | Same | Delivered, then dropped |
 | Extracted values | Inside the result | Same | Evidence for the agent (FR-10) |
 | Logs | Log store | Short | Identifiers and timings only, never content (D20) |
 
-**Deletion is a job step, not a sweeper.** Completion deletes staged content
-explicitly; the TTL exists for jobs that never complete. Relying on TTL alone
-means an abandoned job retains submissions for its full window.
+**Deletion is a step the system performs and records, not a bucket lifecycle
+rule.** That is what this decision was protecting, and it still holds: a TTL
+cannot write an audit event, so nothing would be accountable for the deletion.
+
+**What changed, and why.** The step was specified to run *at job completion*.
+It cannot: review happens after a job finishes, and the review screen reads the
+label crop and the submission as filed. Purging at completion would delete both
+and leave the reviewer two broken panels. The window is therefore measured from
+when the job **starts** — which also covers the case this decision names, since
+a job that never completes has no completion to measure from and would
+otherwise retain its content for ever. A job runs for minutes, so
+start-plus-fourteen-days and finish-plus-fourteen-days are the same day.
+
+The window and the reasoning live in `src/batch/retention.ts`; the policy
+string is recorded in `schema_meta.retention_policy` and reported by `/health`
+alongside the constant the sweep actually enforces, so drift between the two is
+visible rather than latent.
 
 **This is a widening of N3 and it should be stated as such.** The prototype's
 "store nothing" posture becomes "store nothing durable, and only what the job
@@ -638,7 +653,7 @@ latency reserve for nothing.
 | B-D7 | Rasterisation runs server-side behind an interface (§4.4) | Client-side for batch | 300 files at 300 DPI is minutes of browser work, and client output would need re-validation anyway | Costly |
 | B-D8 | Region maps are per form version, in configuration (§4.3) | A fixed crop rectangle | An unknown form must be rejected, not cropped blindly and extracted | Easy |
 | B-D9 | Result cache across jobs is not enabled (§9) | Caching by content digest | A digest-keyed cache is retention; N3 forbids it without a policy | Easy |
-| B-D10 | Content is deleted as a job step, with TTL only as a backstop (§10) | TTL alone | An abandoned job would otherwise retain submissions for the full window | Easy |
+| B-D10 | Content is deleted by a scheduled step that records the deletion, a stated review window after the job **starts** (§10) | TTL alone; or deletion at job completion, as originally specified | A TTL cannot write an audit event, so nothing is accountable for the deletion. Completion is the wrong trigger for two reasons: review happens afterwards and reads the content, so purging then breaks the screen the product exists to serve; and a job that never completes never purges — the abandoned-job case this decision was written for. Measuring from the start fixes both, and costs nothing, since a job runs for minutes | Easy |
 | B-D11 | Cost is estimated and confirmed before a job starts (§6.3) | Silent processing | The honest failure of an open batch endpoint is a bill | Easy |
 | B-D12 | The coordinator never performs I/O beyond its own storage (§15.3) | A coordinator that also fetches | Its connection cap and throughput make delegation mandatory | Costly |
 | B-D13 | The bundled corpus ships **pre-rasterised**; only an upload takes the browser path (§4.4) | Rasterising the corpus on every run | The corpus is fixed, and its pixels were already rendered at build time — the generator shoots the label artwork to PNG and embeds it in the PDF, after which the runtime launched a browser to extract the same pixels back. At one new browser per 20 seconds that cost more than the extraction it fed. The label raster is the **affixed, degraded** view, not the artwork: L09's rotation and L10's blur live on the page, so shipping the embedded PNG would have handed the model pristine artwork for the two cases that exist to test degraded input | Easy — but the region map and PDF parsing are no longer exercised by the corpus, and B-Q4 becomes a build-time question |
