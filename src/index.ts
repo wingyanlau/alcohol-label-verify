@@ -306,6 +306,9 @@ export default {
           provider: provider.name,
           model: env.MODEL_ID,
           servedModelVersion: result.provenance.servedModelVersion ?? null,
+          // The envelope's own keys, so what a vendor offers is read rather
+          // than assumed. Three response-shape assumptions were wrong today.
+          envelopeKeys: result.envelopeKeys ?? null,
           vendorRequestId: result.provenance.vendorRequestId ?? null,
           latencyMs: Date.now() - started,
           // The values, not the artwork: enough to see whether it read the

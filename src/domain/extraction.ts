@@ -76,6 +76,13 @@ export interface ExtractionResult {
   readonly provenance: ExtractionProvenance
   /** Exactly as returned. Both the provenance record and the test fixture. */
   readonly rawResponse: string
+  /**
+   * Top-level keys of the vendor's envelope.
+   *
+   * Diagnostic only — names, never values. It exists because what a vendor
+   * reports about its own response is worth reading rather than assuming.
+   */
+  readonly envelopeKeys?: readonly string[]
 }
 
 /** Every provider adapter satisfies this. No vendor concept appears above it. */

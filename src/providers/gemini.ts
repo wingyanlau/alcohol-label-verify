@@ -332,6 +332,7 @@ export function createGeminiProvider(opts: GeminiOptions): Provider {
       return {
         extraction,
         rawResponse: raw,
+        envelopeKeys: Object.keys(envelope as Record<string, unknown>),
         provenance: {
           provider: GEMINI_SPEC.name,
           modelId: opts.modelId,
