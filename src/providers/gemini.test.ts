@@ -215,6 +215,22 @@ describe('the spec', () => {
     )
   })
 
+  // "This model is currently experiencing high demand. Spikes in demand are
+  // usually temporary. Please try again later." — observed live. It is an
+  // instruction to wait, so it belongs with the rate limits rather than with
+  // the faults that redeliver immediately: treating it as merely transient
+  // spends queue attempts hammering a model that has asked for a pause.
+  it('waits out an overloaded model rather than hammering it', () => {
+    const busy = new Error(
+      'provider returned HTTP 503: {"error":{"code":503,"message":"This model is ' +
+        'currently experiencing high demand. Spikes in demand are usually temporary. ' +
+        'Please try again later.","status":"UNAVAILABLE"}}',
+    )
+    expect(GEMINI_SPEC.classify(busy)).toBe('rate-limited')
+    expect(GEMINI_SPEC.classify(new Error('UNAVAILABLE'))).toBe('rate-limited')
+    expect(GEMINI_SPEC.classify(new Error('HTTP 500: INTERNAL'))).toBe('transient')
+  })
+
   it('never waits on a credential or request fault', () => {
     expect(GEMINI_SPEC.classify(new Error('HTTP 403: PERMISSION_DENIED'))).toBe('permanent')
     expect(GEMINI_SPEC.classify(new Error('HTTP 400: invalid API_KEY'))).toBe('permanent')

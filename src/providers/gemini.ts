@@ -102,6 +102,13 @@ export const GEMINI_SPEC: ProviderSpec = {
       const daily = /per day|daily|quota exceeded|billing|free tier/i.test(message)
       return daily ? 'quota-exhausted' : 'rate-limited'
     }
+    // An overloaded model asks to be tried later, and that is a rate limit in
+    // everything but name: observed as `503 UNAVAILABLE — this model is
+    // currently experiencing high demand`. Calling it merely transient
+    // redelivers at once and spends the queue's attempts hammering something
+    // that has explicitly asked for a pause. Other 5xx faults stay transient,
+    // because an internal error carries no such instruction.
+    if (/\b503\b/.test(message) || /UNAVAILABLE/i.test(message)) return 'rate-limited'
     return 'transient'
   },
 }
