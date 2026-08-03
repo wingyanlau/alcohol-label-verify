@@ -107,7 +107,23 @@ jobs:
       - name: Push the gateway account
         run: |
           set -euo pipefail
-          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | npx wrangler secret put AI_GATEWAY_ACCOUNT --env staging
+          if printf '%s' "$CLOUDFLARE_ACCOUNT_ID" \
+               | npx wrangler secret put AI_GATEWAY_ACCOUNT --env staging 2>&1 | tee /tmp/secret.log
+          then
+            exit 0
+          fi
+
+          # A name cannot be a var and a secret at once, so the first run of a
+          # var-to-secret migration collides with the value still deployed
+          # (code 10053). The deploy below removes the var, and the next run
+          # installs the secret — the gateway is simply unrouted in between,
+          # which /health reports rather than hiding.
+          if grep -q '10053' /tmp/secret.log; then
+            echo "::warning::AI_GATEWAY_ACCOUNT is still a deployed var; the secret lands on the next run"
+            exit 0
+          fi
+          echo "::error::could not set AI_GATEWAY_ACCOUNT"
+          exit 1
 
       # Only needed when the gateway has authentication enabled. Absent means
       # the gateway is open and nothing is written, rather than an empty token
