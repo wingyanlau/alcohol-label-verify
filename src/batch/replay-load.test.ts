@@ -12,6 +12,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ApplicationData } from '../domain/types.js'
 import { sha256Hex } from './digest.js'
+import type { RecordedExtraction } from './replay.js'
 import { type ReplayReport, replayVerdict, type StoredVerdict } from './replay-load.js'
 import { AGGREGATION_VERSION, POLICY_VERSION, RULESET_VERSION } from './versions.js'
 
@@ -225,6 +226,12 @@ describe('verdicts older than the record they would need', () => {
   })
 })
 
+/** The same record with its stored reading edited — what tampering looks like. */
+const tampered = (s: StoredVerdict): RecordedExtraction => ({
+  ...(s.extractions[0] as RecordedExtraction),
+  rawResponse: reading({ brandName: 'Old Forester' }),
+})
+
 describe('the reading the verdict was computed from', () => {
   // The gap this closes. The hash chain covers `audit_event`; the readings live
   // in `extraction`, which nothing hashed. Recording the digest of each reading
@@ -248,7 +255,7 @@ describe('the reading the verdict was computed from', () => {
     const s = stored()
     const report = await replayVerdict({
       ...s,
-      extractions: [{ ...s.extractions[0]!, rawResponse: reading({ brandName: 'Old Forester' }) }],
+      extractions: [tampered(s)],
       recordedDigests: { label: await sha256Hex(reading()) },
     })
     expect(report.status).toBe('record-altered')
@@ -264,7 +271,7 @@ describe('the reading the verdict was computed from', () => {
     const report = await replayVerdict({
       ...s,
       rulesetVersion: 'compare@0',
-      extractions: [{ ...s.extractions[0]!, rawResponse: reading({ brandName: 'Old Forester' }) }],
+      extractions: [tampered(s)],
       recordedDigests: { label: await sha256Hex(reading()) },
     })
     expect(report.status).toBe('record-altered')
@@ -274,7 +281,7 @@ describe('the reading the verdict was computed from', () => {
     const s = stored()
     const report = await replayVerdict({
       ...s,
-      extractions: [{ ...s.extractions[0]!, rawResponse: reading({ brandName: 'Old Forester' }) }],
+      extractions: [tampered(s)],
       recordedDigests: { label: await sha256Hex(reading()) },
     })
     expect(report.replayedOutcome).toBeNull()
