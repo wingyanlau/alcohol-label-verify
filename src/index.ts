@@ -15,6 +15,7 @@ import { loadSubmissionDetail } from './batch/detail.js'
 import { startBatch } from './batch/intake.js'
 import { contentKey, labelImageKey } from './batch/keys.js'
 import { processItem } from './batch/pipeline.js'
+import { ExtractionContractError } from './domain/extraction.js'
 import type { Env, WorkMessage } from './env.js'
 import { createProvider, knownProviderNames, specFor } from './providers/registry.js'
 import { PAGE_HTML } from './ui/page.js'
@@ -289,6 +290,12 @@ export default {
             model: env.MODEL_ID,
             latencyMs: Date.now() - started,
             error: e instanceof Error ? e.message : String(e),
+            // Only here, and only for a corpus label someone is deliberately
+            // probing. It never reaches a log or the durable record (D20).
+            raw:
+              e instanceof ExtractionContractError && e.raw !== undefined
+                ? e.raw.slice(0, 600)
+                : undefined,
           },
           502,
         )

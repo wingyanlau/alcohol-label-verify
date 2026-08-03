@@ -72,9 +72,23 @@ export interface ExtractionProvider {
 
 /** Thrown when a provider returns something the contract cannot accept. */
 export class ExtractionContractError extends Error {
-  constructor(reason: string) {
+  /**
+   * What the provider actually said, when the adapter can supply it.
+   *
+   * Deliberately NOT in the message. The message becomes a failure cause in
+   * the durable record and a line in a log, where content must never go (D20);
+   * this property is read only by a diagnostic endpoint someone is looking at.
+   *
+   * It exists because "response was not valid JSON" is a conclusion without
+   * evidence, and a conclusion without evidence is what turned an envelope bug
+   * into three rounds of debugging.
+   */
+  readonly raw?: string
+
+  constructor(reason: string, raw?: string) {
     super(`extraction response violates the contract: ${reason}`)
     this.name = 'ExtractionContractError'
+    if (raw !== undefined) this.raw = raw
   }
 }
 

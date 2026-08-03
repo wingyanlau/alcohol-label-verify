@@ -29,6 +29,6 @@ export function extractJson(text: string): unknown {
         /* fall through */
       }
     }
-    throw new ExtractionContractError('response was not valid JSON')
+    throw new ExtractionContractError('response was not valid JSON', text)
   }
 }

@@ -35,7 +35,17 @@ import { type FaultKind, messageOf, type Provider, type ProviderSpec } from './t
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models'
 
 /** Greedy, and the same budget the sibling adapter uses (§8.7.2). */
-const SAMPLING = { temperature: 0, maxOutputTokens: 1024 } as const
+const SAMPLING = {
+  temperature: 0,
+  // Larger than the sibling adapter's budget, because a thinking model spends
+  // tokens before it answers: at 1024 the reasoning can consume the allowance
+  // and the JSON is truncated or never begins.
+  maxOutputTokens: 4096,
+  // Thinking is not wanted here. Extraction is perception — read what is
+  // printed — and deliberation invites the model to reason its way to a value
+  // it cannot see, which is §8.3.2's failure in a new costume.
+  thinkingConfig: { thinkingBudget: 0 },
+} as const
 
 /**
  * Google's vocabulary, kept where Google is understood.
@@ -146,13 +156,17 @@ function answerText(envelope: unknown): string {
       ? (content as Record<string, unknown>).parts
       : undefined
 
+  // Thought parts are excluded. A thinking model returns its reasoning as
+  // parts alongside the answer, and joining all of them wrapped the JSON in
+  // prose — which the salvage then mis-sliced, reporting "not valid JSON"
+  // about a response that contained perfectly good JSON.
   const text = Array.isArray(parts)
     ? parts
-        .map((part) =>
-          typeof part === 'object' && part !== null
-            ? (part as Record<string, unknown>).text
-            : undefined,
-        )
+        .filter((part) => {
+          if (typeof part !== 'object' || part === null) return false
+          return (part as Record<string, unknown>).thought !== true
+        })
+        .map((part) => (part as Record<string, unknown>).text)
         .filter((t): t is string => typeof t === 'string')
         .join('')
     : ''
