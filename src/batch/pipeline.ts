@@ -20,6 +20,7 @@
  * success path as `INCOMPLETE`.
  */
 
+import type { ApplicationData } from '../domain/types.js'
 import { verifySubmission } from '../domain/verify.js'
 import type { Env, WorkMessage } from '../env.js'
 import { createBrowserNormaliser } from '../normalise/browser-normaliser.js'
@@ -35,6 +36,7 @@ import type { Provider } from '../providers/types.js'
 import { MAX_ATTEMPTS } from './backoff.js'
 import { labelImageKey } from './keys.js'
 import { buildPersistPlan, persistResult } from './persist.js'
+import { applicationDataFrom } from './record.js'
 import { withRateLimitRetry } from './retry.js'
 import { LABEL_RASTER, RECORD_RASTER } from './submissions.js'
 
@@ -63,8 +65,40 @@ function isDeterministicRefusal(error: unknown): boolean {
   return error instanceof IntakeRejected || error instanceof UnknownFormError
 }
 
+/**
+ * The `Lnn` id of a bundled submission, from the raster path the message
+ * already carries. Empty for an upload, which has no corpus identity.
+ */
+function corpusIdOf(message: WorkMessage): string {
+  return message.labelRasterPath?.match(/([^/]+)-label\.png$/)?.[1] ?? ''
+}
+
 function causeOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * The record as the applicant declared it, for a bundled submission.
+ *
+ * Read from the shipped manifest — the same corpus artefact the rasters come
+ * from — and reduced to the compared fields on the way in, so an authored
+ * expected outcome cannot travel with it (see record.ts).
+ *
+ * Null for anything not in the corpus. An upload has no declared record to
+ * read, so it keeps the second extraction until a real COLAs Online
+ * integration supplies one.
+ */
+async function loadDeclaredRecord(env: Env, submissionId: string): Promise<ApplicationData | null> {
+  if (!env.ASSETS) return null
+  const response = await env.ASSETS.fetch(new Request('https://assets.local/manifest.json'))
+  if (!response.ok) return null
+
+  const manifest = (await response.json()) as { cases?: { id?: string; application?: unknown }[] }
+  const entry = manifest.cases?.find((c) => c.id === submissionId)
+  const declared = entry?.application
+  if (typeof declared !== 'object' || declared === null) return null
+
+  return applicationDataFrom(declared as Record<string, unknown>)
 }
 
 /**
@@ -200,10 +234,19 @@ export async function processItem(
         { classify: (e) => (/\b429\b|rate limit/i.test(String(e)) ? 'rate-limited' : 'transient') },
       ))
 
+    // The record is taken as data when the corpus declares it, which halves
+    // the inference per submission and removes the extraction that was
+    // observed inventing "Old Forester" for a compliant label. The label is
+    // untouched: it is still read from pixels, because that is what a consumer
+    // sees (rule 5). An upload has no declared record and keeps both calls.
+    const declared = await loadDeclaredRecord(env, corpusIdOf(message))
     const result = await verifySubmission(
       {
         label: { image: normalised.label.image, mimeType: normalised.label.mimeType },
-        record: { image: normalised.record.image, mimeType: normalised.record.mimeType },
+        record:
+          declared === null
+            ? { image: normalised.record.image, mimeType: normalised.record.mimeType }
+            : { applicationData: declared },
       },
       { provider },
     )
