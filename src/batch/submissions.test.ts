@@ -21,4 +21,15 @@ describe('demonstration corpus', () => {
       expect(s.assetPath).toBe(`submissions/${s.sourceName}`)
     }
   })
+
+  // These paths are a contract with generate.py, which writes the files. A
+  // mismatch does not fail loudly: the worker simply finds no render and falls
+  // back to launching a browser per submission, which is the cost the
+  // pre-rendering exists to avoid.
+  it('names a pre-rasterised label and record for each submission', () => {
+    for (const s of corpus()) {
+      expect(s.labelRasterPath).toBe(`rasters/${s.submissionId}-label.png`)
+      expect(s.recordRasterPath).toBe(`rasters/${s.submissionId}-record.png`)
+    }
+  })
 })

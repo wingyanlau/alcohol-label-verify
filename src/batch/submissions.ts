@@ -15,6 +15,28 @@
 /** Where the submission PDFs live inside the assets directory. */
 export const SUBMISSIONS_PREFIX = 'submissions'
 
+/**
+ * Where the pre-rasterised regions live.
+ *
+ * The corpus is fixed, so its pixels are rendered once at build time rather
+ * than re-derived on every run at the cost of a headless browser per
+ * submission. `generate.py` writes them; the dimensions below must match the
+ * constants there, and the label raster is the *affixed, degraded* view — the
+ * one a reader sees — not the pristine artwork embedded in the PDF.
+ */
+export const RASTERS_PREFIX = 'rasters'
+
+/** Matches LABEL_CSS_W/H x LABEL_SCALE in generate.py. */
+export const LABEL_RASTER = { widthPx: 2353, heightPx: 1241, dpi: 300 } as const
+
+/**
+ * Matches PAGE_W/H x RECORD_SCALE in generate.py.
+ *
+ * Half the label's resolution: the record page carries 9pt form text, not the
+ * 4.5pt warning statement, and at 300 DPI a Legal page is 10.7 megapixels.
+ */
+export const RECORD_RASTER = { widthPx: 1275, heightPx: 2100, dpi: 150 } as const
+
 /** Every bundled submission, in corpus order. */
 export const SUBMISSION_FILES: readonly string[] = [
   'L01-fully-compliant.pdf',
@@ -52,6 +74,14 @@ export interface Submission {
   readonly sourceName: string
   /** Path within the assets directory. */
   readonly assetPath: string
+  /**
+   * Pre-rasterised regions, when the corpus ships them.
+   *
+   * Absent for anything not in the bundled corpus — an upload has no
+   * build-time render, so it takes the browser path.
+   */
+  readonly labelRasterPath: string
+  readonly recordRasterPath: string
 }
 
 /** The `Lnn` prefix of a corpus filename, e.g. `L07-…` → `L07`. */
@@ -62,9 +92,14 @@ export function submissionIdFor(file: string): string {
 
 /** The corpus as structured submissions, ready for intake. */
 export function corpus(): readonly Submission[] {
-  return SUBMISSION_FILES.map((sourceName) => ({
-    submissionId: submissionIdFor(sourceName),
-    sourceName,
-    assetPath: `${SUBMISSIONS_PREFIX}/${sourceName}`,
-  }))
+  return SUBMISSION_FILES.map((sourceName) => {
+    const id = submissionIdFor(sourceName)
+    return {
+      submissionId: id,
+      sourceName,
+      assetPath: `${SUBMISSIONS_PREFIX}/${sourceName}`,
+      labelRasterPath: `${RASTERS_PREFIX}/${id}-label.png`,
+      recordRasterPath: `${RASTERS_PREFIX}/${id}-record.png`,
+    }
+  })
 }

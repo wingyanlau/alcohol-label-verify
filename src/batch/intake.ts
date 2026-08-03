@@ -140,6 +140,8 @@ export async function startBatch(env: Env): Promise<BatchStarted> {
       submissionId: p.itemId,
       contentKey: key,
       contentDigest: digest,
+      labelRasterPath: p.submission.labelRasterPath,
+      recordRasterPath: p.submission.recordRasterPath,
     })
   }
 

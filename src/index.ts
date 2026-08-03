@@ -64,6 +64,15 @@ export interface WorkMessage {
   readonly submissionId: string
   readonly contentKey: string
   readonly contentDigest: string
+  /**
+   * Pre-rasterised regions for a bundled corpus submission.
+   *
+   * Present only for the demonstration corpus, whose pixels are rendered at
+   * build time. An upload carries neither and takes the browser path, so the
+   * real normalisation route stays exercised.
+   */
+  readonly labelRasterPath?: string
+  readonly recordRasterPath?: string
 }
 
 /** Providers whose credential is supplied by a binding rather than a secret. */

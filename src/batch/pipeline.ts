@@ -23,13 +23,19 @@
 import { verifySubmission } from '../domain/verify.js'
 import type { Env, WorkMessage } from '../index.js'
 import { createBrowserNormaliser } from '../normalise/browser-normaliser.js'
-import { checkIntake, type IntakeLimits, IntakeRejected } from '../normalise/normaliser.js'
-import { UnknownFormError } from '../normalise/regions.js'
+import {
+  checkIntake,
+  type IntakeLimits,
+  IntakeRejected,
+  type NormaliseResult,
+} from '../normalise/normaliser.js'
+import { TTB_F5100_31_2023, UnknownFormError } from '../normalise/regions.js'
 import { createWorkersAiProvider } from '../providers/workers-ai.js'
 import { isRateLimited, MAX_ATTEMPTS } from './backoff.js'
 import { labelImageKey } from './keys.js'
 import { buildPersistPlan, persistResult } from './persist.js'
 import { withRateLimitRetry } from './retry.js'
+import { LABEL_RASTER, RECORD_RASTER } from './submissions.js'
 
 export interface ProcessOutcome {
   /** Whether the queue should redeliver this message for another attempt. */
@@ -61,6 +67,56 @@ function causeOf(error: unknown): string {
 }
 
 /**
+ * The build-time render of a bundled submission, if it has one.
+ *
+ * Returns null when the submission is not from the corpus, or when either
+ * region is missing — a half-present render is treated as absent rather than
+ * patched, so the item takes the browser path whole instead of comparing a
+ * shipped label against a freshly rendered record.
+ */
+async function loadPrerendered(env: Env, message: WorkMessage): Promise<NormaliseResult | null> {
+  const { labelRasterPath, recordRasterPath } = message
+  if (!env.ASSETS || !labelRasterPath || !recordRasterPath) return null
+
+  const fetchAsset = async (path: string): Promise<ArrayBuffer | null> => {
+    const response = await env.ASSETS?.fetch(new Request(`https://assets.local/${path}`))
+    if (!response?.ok) return null
+    return response.arrayBuffer()
+  }
+
+  const [label, record] = await Promise.all([
+    fetchAsset(labelRasterPath),
+    fetchAsset(recordRasterPath),
+  ])
+  if (label === null || record === null) return null
+
+  return {
+    form: TTB_F5100_31_2023,
+    label: {
+      region: 'label',
+      image: label,
+      mimeType: 'image/png',
+      widthPx: LABEL_RASTER.widthPx,
+      heightPx: LABEL_RASTER.heightPx,
+      dpi: LABEL_RASTER.dpi,
+    },
+    record: {
+      region: 'record',
+      image: record,
+      mimeType: 'image/png',
+      widthPx: RECORD_RASTER.widthPx,
+      heightPx: RECORD_RASTER.heightPx,
+      dpi: RECORD_RASTER.dpi,
+    },
+    // Never populated for a pre-rendered submission. The record text layer is
+    // an optimisation the PDF path can offer; there is no PDF here, and an
+    // empty string would be indistinguishable from a page with no text.
+    recordTextLayer: null,
+    elapsedMs: 0,
+  }
+}
+
+/**
  * Process one submission.
  *
  * Returns whether the message should be retried. Every terminal path — success,
@@ -80,6 +136,8 @@ export async function processItem(
   }
   const stub = env.JOB.get(env.JOB.idFromName(jobId))
   const dpi = Number(env.RASTER_DPI)
+  // Bound here: the narrowing above does not survive into the retry closure.
+  const browser = env.BROWSER
 
   await stub.startItem(submissionId)
 
@@ -93,12 +151,23 @@ export async function processItem(
     // Cheap structural guards before anything expensive renders (§11).
     checkIntake(bytes, intakeLimits(env))
 
-    const normaliser = createBrowserNormaliser({ browser: env.BROWSER, limits: intakeLimits(env) })
-    // The launch is the only step the provider refuses on rate, and this item
-    // keeps its turn while waiting: releasing the message would release the
-    // slot to the next submission, which is what made failure a function of
-    // queue position rather than of the artwork.
-    const normalised = await withRateLimitRetry(() => normaliser.normalise(bytes, dpi))
+    // A bundled submission ships its regions already rendered, so the browser
+    // is not launched at all. The corpus is fixed: rasterising it on every run
+    // re-derives pixels that were rendered at build time, and each derivation
+    // costs one launch against a ceiling of one every twenty seconds.
+    //
+    // An upload has no build-time render and falls through to the browser, so
+    // the real normalisation path stays exercised rather than bypassed.
+    const prerendered = await loadPrerendered(env, message)
+    const normalised =
+      prerendered ??
+      // The launch is the only step the provider refuses on rate, and this item
+      // keeps its turn while waiting: releasing the message would release the
+      // slot to the next submission, which is what made failure a function of
+      // queue position rather than of the artwork.
+      (await withRateLimitRetry(() =>
+        createBrowserNormaliser({ browser, limits: intakeLimits(env) }).normalise(bytes, dpi),
+      ))
 
     const provider = createWorkersAiProvider({ ai: env.AI, modelId: env.MODEL_ID })
     const result = await verifySubmission(

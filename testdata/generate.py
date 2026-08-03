@@ -41,6 +41,7 @@ from pypdf import PdfReader, PdfWriter
 
 HERE = Path(__file__).parent
 OUT = HERE / "submissions"
+RASTERS = HERE / "rasters"
 WORK = HERE / ".build"
 FORM = HERE / "f510031.pdf"
 FORM_URL = "https://www.ttb.gov/system/files/images/pdfs/forms/f510031.pdf"
@@ -54,6 +55,13 @@ PAGE_W, PAGE_H = 612.0, 1008.0  # the form is Legal, 8.5 x 14 in
 LABEL_CSS_W, LABEL_CSS_H = 753, 397
 LABEL_SCALE = 3.125          # 753 x 3.125 = 2353 px  ->  300 DPI
 LABEL_DPI = 300
+
+# The record page carries 9pt form text, not 4.5pt warning text, so it is
+# rasterised at half the label's resolution. At 300 DPI a Legal page is 2550 x
+# 4200 — 10.7 megapixels — which is both wasteful to ship and a plausible cause
+# of the empty completions seen in the batch.
+RECORD_DPI = 150
+RECORD_SCALE = RECORD_DPI / 96
 
 # 27 CFR 16.21 — mirrors config/warning-statement.json, the single source of truth.
 W_HEAD = "GOVERNMENT WARNING:"
@@ -660,6 +668,48 @@ def shoot(html: Path, png: Path) -> None:
         check=True, capture_output=True)
 
 
+def shoot_at(html: Path, png: Path, css_w: int, css_h: int, scale: float) -> None:
+    """Rasterise an HTML page to PNG at a chosen size and device scale."""
+    subprocess.run(
+        [CHROME, "--headless=new", "--disable-gpu", "--no-sandbox", "--hide-scrollbars",
+         f"--force-device-scale-factor={scale}",
+         f"--window-size={css_w},{css_h}",
+         "--run-all-compositor-stages-before-draw", "--virtual-time-budget=5000",
+         f"--screenshot={png}", html.as_uri()],
+        check=True, capture_output=True)
+
+
+def affixed_label_html(c) -> str:
+    """
+    The label as the page displays it — degradation included.
+
+    NOT the same as `label_page_html`, and the difference is the whole point.
+    That one renders pristine artwork, which is then affixed into the overlay
+    where the scan degradations are applied: L09's rotation and glare and L10's
+    blur live on the page, not on the artwork. Rasterising the pristine PNG
+    would hand the model a clean label for the two cases whose entire purpose
+    is degraded input, and they would pass while proving nothing.
+
+    So this reproduces what a reader actually sees: the artwork, affixed, with
+    the same degradation classes the overlay applies, at the same dimensions
+    the runtime crop produces.
+    """
+    stage = "set"
+    if c["degrade"] == "angle_glare":
+        stage += " deg-angle"
+    elif c["degrade"] == "blur":
+        stage += " deg-blur"
+    glare = '<div class="glare"></div>' if c["degrade"] == "angle_glare" else ""
+
+    return f"""<!doctype html><html><head><meta charset="utf-8"><style>{OVERLAY_CSS}
+html, body {{ margin: 0; padding: 0; background: #fff;
+              width: {LABEL_CSS_W}px; height: {LABEL_CSS_H}px; }}
+.crop {{ position: relative; width: 100%; height: 100%; overflow: hidden; }}
+</style></head><body>
+<div class="crop"><div class="{stage}"><img src="{c['_label_png']}" alt=""></div>{glare}</div>
+</body></html>"""
+
+
 def render(html: Path, pdf: Path) -> None:
     subprocess.run(
         [CHROME, "--headless=new", "--disable-gpu", "--no-sandbox",
@@ -678,8 +728,10 @@ def main() -> int:
 
     shutil.rmtree(OUT, ignore_errors=True)
     shutil.rmtree(WORK, ignore_errors=True)
+    shutil.rmtree(RASTERS, ignore_errors=True)
     OUT.mkdir(parents=True)
     WORK.mkdir(parents=True)
+    RASTERS.mkdir(parents=True)
 
     manifest = []
     for spec in CASES:
@@ -715,6 +767,24 @@ def main() -> int:
         out = OUT / f"{c['id']}-{slug}.pdf"
         with out.open("wb") as fh:
             w.write(fh)
+
+        # Pre-rasterised regions, shipped alongside the PDF.
+        #
+        # The corpus is fixed, so rasterising it on every run re-derives pixels
+        # that were rendered here in the first place — at the cost of one
+        # headless browser per submission, against a provider that admits one
+        # new browser every 20 seconds. Rendering them once at build time is the
+        # same work done in the same engine, minus the queue.
+        #
+        # The label is the *affixed, degraded* view, not the pristine artwork:
+        # see affixed_label_html. The record page is rendered whole, because
+        # there is no region map for it.
+        ah = WORK / f"{c['id']}-a.html"
+        ah.write_text(affixed_label_html(c), encoding="utf-8")
+        shoot_at(ah, RASTERS / f"{c['id']}-label.png",
+                 LABEL_CSS_W, LABEL_CSS_H, LABEL_SCALE)
+        shoot_at(rh, RASTERS / f"{c['id']}-record.png",
+                 round(PAGE_W * 96 / 72), round(PAGE_H * 96 / 72), RECORD_SCALE)
 
         manifest.append({
             "id": c["id"], "file": out.name, "title": c["title"], "serves": c["serves"],
