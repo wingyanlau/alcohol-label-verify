@@ -89,20 +89,23 @@
         // One submission per invocation. Batching would serialise the two
         // parallel extractions against the 6-connection cap (B-D4).
         "max_batch_size": 1,
-        // One submission at a time, across the whole batch.
+        // Three submissions in flight, across the whole batch.
         //
         // Every item launches its own headless browser, and the account's
         // concurrent-browser cap is 3 on the free plan and 10 on paid. Left to
         // autoscale, the queue ran ~26 invocations at once and Browser
         // Rendering refused all but a few: 24 of 26 items failed with
         // `429 Rate limit exceeded` at launch, before any extraction happened.
+        // Nothing bounded item concurrency, because EXTRACT_CONCURRENCY governs
+        // fan-out *inside* an item rather than across them.
         //
-        // Sequential is the prototype's answer, not the product's. It trades
-        // ~40 s of wall clock for ~4 minutes and removes the failure entirely.
-        // Raising this is the first thing to revisit when throughput matters —
-        // batch design §15.4 already prefers Containers over Browser Rendering
-        // for exactly this reason.
-        "max_concurrency": 1,
+        // 3 is the free plan's cap exactly, so it leaves no headroom: a
+        // concurrent browser from anywhere else — notably the /health/raster
+        // deploy probe — can still take a 429 while a batch is running. On the
+        // paid plan's cap of 10 it is comfortable. Raising it further is the
+        // first thing to revisit when throughput matters; batch design §15.4
+        // already prefers Containers over Browser Rendering for this reason.
+        "max_concurrency": 3,
         "max_retries": 3,
         "dead_letter_queue": "alcohol-label-verify-dlq"
       }
@@ -176,8 +179,8 @@
           {
             "queue": "alcohol-label-verify-work-staging",
             "max_batch_size": 1,
-            // Sequential — see the note on the development consumer above.
-            "max_concurrency": 1,
+            // Three in flight — see the note on the development consumer above.
+            "max_concurrency": 3,
             "max_retries": 3,
             "dead_letter_queue": "alcohol-label-verify-dlq-staging"
           }
@@ -226,8 +229,8 @@
           {
             "queue": "alcohol-label-verify-work",
             "max_batch_size": 1,
-            // Sequential — see the note on the development consumer above.
-            "max_concurrency": 1,
+            // Three in flight — see the note on the development consumer above.
+            "max_concurrency": 3,
             "max_retries": 3,
             "dead_letter_queue": "alcohol-label-verify-dlq"
           }
