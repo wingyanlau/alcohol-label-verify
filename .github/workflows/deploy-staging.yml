@@ -328,7 +328,7 @@ jobs:
           url="https://alcohol-label-verify-staging.wing-lawrence.workers.dev"
 
           body=$(curl -sS --max-time 60 "$url/audit/replay?limit=25")
-          echo "$body" | jq '{checked, identical, differs, "not-comparable", "not-re-derivable"}'
+          echo "$body" | jq '{checked, identical, differs, "not-comparable", "not-re-derivable", "record-altered"}'
 
           # Nothing to replay is not a pass. A fresh database would otherwise
           # report zero disagreements and read as verification.
@@ -343,6 +343,18 @@ jobs:
           # be; counting those would leave the gate permanently red, which is
           # the same as having no gate.
           differs=$(echo "$body" | jq -r '.differs // 0')
+          altered=$(echo "$body" | jq -r '.["record-altered"] // 0')
+
+          # An altered reading is the graver of the two. A rule that moved is a
+          # mistake in this revision; a reading whose digest no longer matches
+          # the one committed to the chain means the stored evidence changed
+          # after the verdict was written.
+          if [ "$altered" -ne 0 ]; then
+            echo "$body" | jq '.findings'
+            echo "::error::$altered stored reading(s) no longer match the digest recorded in the audit chain"
+            exit 1
+          fi
+
           if [ "$differs" -ne 0 ]; then
             echo "$body" | jq '.findings'
             echo "::error::$differs stored verdict(s) no longer re-derive from the record"

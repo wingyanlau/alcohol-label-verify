@@ -36,6 +36,7 @@ import { createProvider } from '../providers/registry.js'
 import type { Provider } from '../providers/types.js'
 import { appendAudit } from './audit.js'
 import { MAX_ATTEMPTS } from './backoff.js'
+import { sha256Hex } from './digest.js'
 import { labelImageKey } from './keys.js'
 import { buildPersistPlan, persistResult } from './persist.js'
 import { applicationDataFrom } from './record.js'
@@ -341,6 +342,17 @@ export async function processItem(
           ? [`legibility=${corpus.warningLegibility}/${legibilityFloor}`]
           : []),
         `dpi=${dpi}`,
+        // The readings themselves, by digest. This event is hash-chained; the
+        // `extraction` rows are not, so without this a stored reading could be
+        // edited and nothing would contradict it. Committing the digest here
+        // makes altering a reading require forging the chain, and turns what
+        // used to look like "the rules moved" into "the record changed".
+        // Digests only — a reading is content, and content never enters a log
+        // or an audit detail (D20).
+        `labelDigest=${await sha256Hex(result.rawResponses.label)}`,
+        ...(result.rawResponses.record === null
+          ? []
+          : [`recordDigest=${await sha256Hex(result.rawResponses.record)}`]),
         `reference=${result.warning.referenceDataVersion}`,
         `legible=${result.warning.legible}`,
       ].join(';'),

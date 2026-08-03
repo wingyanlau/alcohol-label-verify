@@ -22,6 +22,7 @@ import { checkIntake, IntakeRejected } from '../normalise/normaliser.js'
 import { PROMPT_VERSION, promptDigest } from '../providers/prompt.js'
 import { createProvider } from '../providers/registry.js'
 import { appendAudit } from './audit.js'
+import { sha256Hex } from './digest.js'
 import { fingerprintOf, PROBE_IMAGE } from './fingerprint.js'
 import { contentKey } from './keys.js'
 import { referenceCodeFor } from './reference-code.js'
@@ -32,11 +33,6 @@ export interface BatchStarted {
   readonly total: number
   readonly accepted: number
   readonly rejected: number
-}
-
-async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', bytes)
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 async function loadAsset(env: Env, path: string): Promise<ArrayBuffer | null> {

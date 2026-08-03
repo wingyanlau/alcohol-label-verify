@@ -19,18 +19,21 @@
  * versioned rules yield the stored verdict.
  *
  * It does not establish that the reading was right — that is B-Q4, and the
- * corpus answers it. Nor does it establish that the record is unaltered: the
- * hash chain covers `audit_event`, not the extraction rows this reads from,
- * and the application data comes from `field_verdict.expected`, so a replay is
- * partly circular by construction. Editing a stored value changes the input
- * and the output together. What replay catches is the rules moving underneath
- * a record, which is the failure it was built for.
+ * corpus answers it.
+ *
+ * It does establish that the reading is the one the verdict was computed from:
+ * its digest is committed to the hash chain (see `checkIntegrity`). What
+ * remains outside that guarantee is the rows derived from the reading —
+ * `field_verdict` and `verdict` are unchained — and the application data,
+ * which is read back from `field_verdict.expected` and so makes the replay
+ * partly circular by construction.
  */
 
 import { warningReference } from '../domain/reference.js'
 import type { ApplicationData, Outcome } from '../domain/types.js'
 import { FIELDS } from '../domain/types.js'
 import { verifySubmission } from '../domain/verify.js'
+import { sha256Hex } from './digest.js'
 import { createReplayProvider, type RecordedExtraction } from './replay.js'
 import { AGGREGATION_VERSION, POLICY_VERSION, RULESET_VERSION } from './versions.js'
 
@@ -73,6 +76,12 @@ export interface StoredVerdict {
   readonly fields: Readonly<Record<string, StoredField>>
   readonly warningSegments: readonly StoredWarningSegment[]
   readonly extractions: readonly RecordedExtraction[]
+  /**
+   * Digests of the readings, as committed to the hash chain when the verdict
+   * was recorded. Null for verdicts written before the digest existed, whose
+   * readings therefore cannot be checked.
+   */
+  readonly recordedDigests?: { readonly label?: string; readonly record?: string } | null
 }
 
 /**
@@ -92,12 +101,27 @@ export interface StoredVerdict {
  * every historical verdict reports "differs", a real regression arrives inside
  * a pile of expected failures and nobody looks.
  */
-export type ReplayStatus = 'identical' | 'differs' | 'not-comparable' | 'not-re-derivable'
+export type ReplayStatus =
+  | 'identical'
+  | 'differs'
+  | 'not-comparable'
+  | 'not-re-derivable'
+  | 'record-altered'
+
+/**
+ * Whether the reading a replay used is the reading that produced the verdict.
+ *
+ *   verified      its digest matches the one committed to the hash chain
+ *   altered       it does not — the record has changed since it was written
+ *   not-recorded  the verdict predates the digest; the reading cannot be checked
+ */
+export type ReplayIntegrity = 'verified' | 'altered' | 'not-recorded'
 
 export interface ReplayReport {
   readonly verdictId: string
   readonly submissionId: string
   readonly status: ReplayStatus
+  readonly integrity: ReplayIntegrity
   readonly storedOutcome: Outcome
   readonly replayedOutcome: Outcome | null
   /** Present only when something is wrong. Empty lists are not findings. */
@@ -144,6 +168,28 @@ async function legibilityRecordedSince(db: D1Database): Promise<string | null> {
   }
 }
 
+/**
+ * The reading digests out of a chained audit detail, if it carries any.
+ *
+ * The detail is a flat `key=value;key=value` string rather than JSON — the
+ * chain digests it byte for byte, so its shape is part of what was signed and
+ * cannot be reformatted without invalidating every event after it.
+ *
+ * Null when absent, which is the normal state for verdicts recorded before the
+ * digest existed. Distinguishing "no digest" from "digest that does not match"
+ * is the whole point: one is an old record, the other is an altered one.
+ */
+function parseDigests(detail: string | null): { label?: string; record?: string } | null {
+  if (detail === null) return null
+  const out: { label?: string; record?: string } = {}
+  for (const part of detail.split(';')) {
+    const [k, v] = part.split('=', 2)
+    if (k === 'labelDigest' && v) out.label = v
+    if (k === 'recordDigest' && v) out.record = v
+  }
+  return out.label === undefined && out.record === undefined ? null : out
+}
+
 /** Read back everything the verdict was computed from. */
 export async function loadStoredVerdict(
   db: D1Database,
@@ -165,7 +211,7 @@ export async function loadStoredVerdict(
     throw new ReplayUnavailableError(`no verdict stored for submission ${submissionId}`)
   }
 
-  const [fieldRows, warningRows, extractionRows, since] = await Promise.all([
+  const [fieldRows, warningRows, extractionRows, since, recordedEvent] = await Promise.all([
     db
       .prepare(`SELECT field, state, expected, observed FROM field_verdict WHERE verdict_id = ?1`)
       .bind(verdict.id)
@@ -194,15 +240,30 @@ export async function loadStoredVerdict(
         latency_ms: number
       }>(),
     legibilityRecordedSince(db),
+    // The digests as committed to the chain. Read from `audit_event` rather
+    // than from a column beside the reading, because a digest stored next to
+    // the thing it protects is no protection at all — both are equally
+    // editable. Its value is that this row is chained.
+    db
+      .prepare(
+        `SELECT detail FROM audit_event
+          WHERE subject_id = ?1 AND action = 'verdict.recorded'
+          ORDER BY seq DESC LIMIT 1`,
+      )
+      .bind(verdict.id)
+      .first<{ detail: string | null }>(),
   ])
 
   const expected = new Map(fieldRows.results.map((r) => [r.field, r.expected]))
   const application = {} as Record<string, string | null>
   for (const field of FIELDS) application[field] = expected.get(field) ?? null
 
+  const digests = parseDigests(recordedEvent?.detail ?? null)
+
   return {
     verdictId: verdict.id,
     submissionId: verdict.submission_id,
+    ...(digests === null ? {} : { recordedDigests: digests }),
     outcome: verdict.outcome as Outcome,
     warningLegible: verdict.warning_legible === 1,
     createdAt: verdict.created_at,
@@ -231,6 +292,57 @@ export async function loadStoredVerdict(
       latencyMs: r.latency_ms,
     })),
   }
+}
+
+/**
+ * Is the reading this replay is about to use the one that produced the verdict?
+ *
+ * The hash chain covers `audit_event`. The readings live in `extraction`, which
+ * nothing hashed — so before the digest existed, an edit to a stored reading
+ * was either invisible or, once replay began comparing values, indistinguishable
+ * from the comparison rules having changed.
+ *
+ * Recording `sha256(raw_response)` in the chained `verdict.recorded` event
+ * fixes both. The digest is now covered by the chain, so altering a reading
+ * requires forging the chain to match; and a mismatch names the record rather
+ * than the rules.
+ *
+ * WHAT IT STILL DOES NOT DO. It commits to the reading, not to the derived
+ * rows: `field_verdict` and `verdict` remain unchained, so an edit made
+ * consistently across the reading AND its digest AND the chain would pass. That
+ * is the property the chain itself provides, and it is why the digest belongs
+ * in the chain rather than beside the reading.
+ */
+async function checkIntegrity(
+  stored: StoredVerdict,
+): Promise<{ status: ReplayIntegrity; differences?: string[] }> {
+  const recorded = stored.recordedDigests
+  if (!recorded || (recorded.label === undefined && recorded.record === undefined)) {
+    // Not a failure. The verdict predates the digest, and "cannot be checked"
+    // is a different statement from "checked and fine" — reported, not assumed.
+    return { status: 'not-recorded' }
+  }
+
+  const differences: string[] = []
+  for (const region of ['label', 'record'] as const) {
+    const expected = recorded[region]
+    if (expected === undefined) continue
+    const row = stored.extractions.find((e) => e.region === region)
+    if (row === undefined) {
+      differences.push(`${region} reading: digest recorded but the extraction row is gone`)
+      continue
+    }
+    const actual = await sha256Hex(row.rawResponse)
+    if (actual !== expected) {
+      // The digests, not the readings. A reading is content, and an error
+      // message that quoted it would put label text somewhere it must not go.
+      differences.push(
+        `${region} reading: digest recorded ${expected.slice(0, 16)}…, stored reading hashes to ${actual.slice(0, 16)}… — the record has changed since the verdict was written`,
+      )
+    }
+  }
+
+  return differences.length === 0 ? { status: 'verified' } : { status: 'altered', differences }
 }
 
 /** Rules that have moved since the verdict was recorded, named. */
@@ -269,11 +381,28 @@ export async function replayVerdict(stored: StoredVerdict): Promise<ReplayReport
     storedOutcome: stored.outcome,
   }
 
+  // FIRST, before anything else. If the inputs are not the recorded inputs then
+  // every comparison below is being made against the wrong thing, and a verdict
+  // derived from them would be reported as though it meant something. It is
+  // also the difference between "a rule moved" and "the record changed" — two
+  // findings that send an investigator to opposite ends of the system.
+  const integrity = await checkIntegrity(stored)
+  if (integrity.status === 'altered') {
+    return {
+      ...base,
+      status: 'record-altered',
+      integrity: 'altered',
+      replayedOutcome: null,
+      differences: integrity.differences ?? [],
+    }
+  }
+
   const drift = versionDrift(stored)
   if (drift.length > 0) {
     return {
       ...base,
       status: 'not-comparable',
+      integrity: integrity.status,
       // Deliberately not re-derived. Producing an outcome here would invite
       // someone to compare it, which is the mistake this branch prevents.
       replayedOutcome: null,
@@ -285,6 +414,7 @@ export async function replayVerdict(stored: StoredVerdict): Promise<ReplayReport
     return {
       ...base,
       status: 'not-re-derivable',
+      integrity: integrity.status,
       replayedOutcome: null,
       differences: [
         'warning legibility was not recorded on this verdict (predates migration 0002), ' +
@@ -351,6 +481,7 @@ export async function replayVerdict(stored: StoredVerdict): Promise<ReplayReport
   return {
     ...base,
     status: differences.length === 0 ? 'identical' : 'differs',
+    integrity: integrity.status,
     replayedOutcome: result.outcome,
     ...(differences.length === 0 ? {} : { differences }),
   }

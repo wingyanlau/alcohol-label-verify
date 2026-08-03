@@ -1734,16 +1734,29 @@ of expected failures.
 Both deploy gates call `GET /audit/replay` and fail on `differs > 0`. An empty
 database is a warning, not a pass.
 
-**What replay still does not establish.** That the record is unaltered. The
-hash chain covers `audit_event`, not the `extraction` rows a replay reads from,
-and no digest of a stored reading is recorded anywhere — so an edit to a
-reading that does not change a field state or the warning is invisible to both
-`/audit/verify` and `/audit/replay`. The application data is also taken from
-`field_verdict.expected`, which makes the replay partly circular by
-construction: editing a stored value changes the input and the output
-together. Replay demonstrates **consistency with the record**, not **integrity
-of the record**; closing that gap means committing a digest of each reading to
-the chain, which enlarges what the chain promises and has not been decided.
+**The reading itself is now committed to the chain.** `sha256(raw_response)`
+for each region is recorded in the `verdict.recorded` event, which is
+hash-chained; the `extraction` rows are not. A replay recomputes the digest
+before it does anything else and reports `record-altered` if it no longer
+matches. Two things follow. Altering a stored reading now requires forging the
+chain, which is the property the chain exists to provide. And a changed reading
+is named as a changed *record* rather than presenting as a rule that moved —
+two findings that send an investigator to opposite ends of the system.
+
+Digests only, never the reading: an audit detail is a log line, and a reading
+is content (D20).
+
+**What it still does not establish.** The digest commits to the reading, not to
+the rows derived from it. `field_verdict` and `verdict` remain unchained, so an
+edit made consistently across the reading, its digest and the chain would pass —
+that is exactly the case the chain is meant to make expensive, not the case it
+makes impossible. The application data is also taken from
+`field_verdict.expected`, which leaves the replay partly circular by
+construction: editing a stored expected value moves the input and the output
+together. And a verdict recorded before the digest existed reports
+`integrity: not-recorded` — its reading cannot be checked at all, which is a
+different statement from checked-and-sound, and is reported as such rather than
+assumed.
 
 **What this concedes.** NFR-14 is met for the layers that exist, not for rule
 provenance. A verdict traces to a rule; it does not yet trace to an approval.

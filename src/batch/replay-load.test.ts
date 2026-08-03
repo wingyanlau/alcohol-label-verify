@@ -11,6 +11,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { ApplicationData } from '../domain/types.js'
+import { sha256Hex } from './digest.js'
 import { type ReplayReport, replayVerdict, type StoredVerdict } from './replay-load.js'
 import { AGGREGATION_VERSION, POLICY_VERSION, RULESET_VERSION } from './versions.js'
 
@@ -221,5 +222,70 @@ describe('verdicts older than the record they would need', () => {
     const report = await replayVerdict(stored({ legibilityRecorded: false }))
     expect(report.replayedOutcome).toBeNull()
     expect(report.status).toBe('not-re-derivable')
+  })
+})
+
+describe('the reading the verdict was computed from', () => {
+  // The gap this closes. The hash chain covers `audit_event`; the readings live
+  // in `extraction`, which nothing hashed. Recording the digest of each reading
+  // in a chained event makes the reading itself tamper-evident, because
+  // altering it now requires forging the chain.
+  it('is verified against the digest recorded in the chain', async () => {
+    const s = stored()
+    const report = await replayVerdict({
+      ...s,
+      recordedDigests: { label: await sha256Hex(reading()) },
+    })
+    expect(report.integrity).toBe('verified')
+    expect(report.status).toBe('identical')
+  })
+
+  // What single-table tampering looks like once the digest exists: not "the
+  // rules moved" — which is what an altered reading looked like before, and
+  // would have sent someone hunting through the comparison code — but the
+  // record itself failing to match what was committed.
+  it('is reported as altered, not as a rule change, when it no longer matches', async () => {
+    const s = stored()
+    const report = await replayVerdict({
+      ...s,
+      extractions: [{ ...s.extractions[0]!, rawResponse: reading({ brandName: 'Old Forester' }) }],
+      recordedDigests: { label: await sha256Hex(reading()) },
+    })
+    expect(report.status).toBe('record-altered')
+    expect(report.integrity).toBe('altered')
+    expect(report.differences?.join(' ')).toMatch(/label reading/i)
+  })
+
+  // Checked before anything else: if the inputs are not the recorded inputs,
+  // every downstream comparison is being made against the wrong thing, and a
+  // verdict derived from them would be reported as though it meant something.
+  it('is checked before the rules are, so tampering is not mistaken for drift', async () => {
+    const s = stored()
+    const report = await replayVerdict({
+      ...s,
+      rulesetVersion: 'compare@0',
+      extractions: [{ ...s.extractions[0]!, rawResponse: reading({ brandName: 'Old Forester' }) }],
+      recordedDigests: { label: await sha256Hex(reading()) },
+    })
+    expect(report.status).toBe('record-altered')
+  })
+
+  it('produces no outcome when the record cannot be trusted', async () => {
+    const s = stored()
+    const report = await replayVerdict({
+      ...s,
+      extractions: [{ ...s.extractions[0]!, rawResponse: reading({ brandName: 'Old Forester' }) }],
+      recordedDigests: { label: await sha256Hex(reading()) },
+    })
+    expect(report.replayedOutcome).toBeNull()
+  })
+
+  // Verdicts recorded before the digest existed. Their readings cannot be
+  // checked, and saying so is different from saying they are fine — but it is
+  // also not a failure, so the replay proceeds and reports the limit.
+  it('says so plainly when no digest was recorded', async () => {
+    const report = await replayVerdict(stored())
+    expect(report.integrity).toBe('not-recorded')
+    expect(report.status).toBe('identical')
   })
 })

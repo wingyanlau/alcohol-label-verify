@@ -606,6 +606,7 @@ export default {
         differs: 0,
         'not-comparable': 0,
         'not-re-derivable': 0,
+        'record-altered': 0,
       }
       const findings: unknown[] = []
       for (const row of rows) {
@@ -614,7 +615,13 @@ export default {
           counts[report.status] = (counts[report.status] ?? 0) + 1
           // Only genuine disagreement is quoted back. The other non-identical
           // statuses are facts about the record's age, not about correctness.
-          if (report.status === 'differs') findings.push(report)
+          // An altered record is quoted back as loudly as a disagreement, and
+          // is the graver of the two: a rule that moved is a mistake in this
+          // revision, a reading that changed means the stored evidence moved
+          // after the verdict was written.
+          if (report.status === 'differs' || report.status === 'record-altered') {
+            findings.push(report)
+          }
         } catch (error) {
           counts.differs = (counts.differs ?? 0) + 1
           findings.push({
@@ -625,7 +632,8 @@ export default {
         }
       }
 
-      return json({ checked: rows.length, ...counts, findings }, counts.differs === 0 ? 200 : 409)
+      const failed = (counts.differs ?? 0) + (counts['record-altered'] ?? 0)
+      return json({ checked: rows.length, ...counts, findings }, failed === 0 ? 200 : 409)
     }
 
     // Re-derive a stored verdict from the record alone (NFR-13).
