@@ -8,6 +8,7 @@
  * §9.5 (configuration).
  */
 
+import { isRateLimited, MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
 import { loadCurrentJob } from './batch/current.js'
 import { loadSubmissionDetail } from './batch/detail.js'
 import { startBatch } from './batch/intake.js'
@@ -459,9 +460,13 @@ export default {
       )
 
       try {
-        const { retry } = await processItem(env, body, message.attempts)
-        if (retry) message.retry()
-        else message.ack()
+        const { retry, delaySeconds } = await processItem(env, body, message.attempts)
+        if (!retry) message.ack()
+        // Holding the message rather than redelivering at once: a rate limit is
+        // an interval to wait out, and an immediate retry is refused before it
+        // could have cleared.
+        else if (delaySeconds === undefined) message.retry()
+        else message.retry({ delaySeconds })
       } catch (e) {
         // An unexpected fault: let the queue redeliver within its budget, then
         // give up to the dead-letter queue rather than spinning.
@@ -474,8 +479,8 @@ export default {
             error: e instanceof Error ? e.message : String(e),
           }),
         )
-        if (message.attempts >= 3) message.ack()
-        else message.retry()
+        if (message.attempts >= MAX_ATTEMPTS) message.ack()
+        else message.retry({ delaySeconds: retryDelaySeconds(message.attempts) })
       }
     }
   },

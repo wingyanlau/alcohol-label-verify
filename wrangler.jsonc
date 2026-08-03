@@ -106,7 +106,7 @@
         // first thing to revisit when throughput matters; batch design §15.4
         // already prefers Containers over Browser Rendering for this reason.
         "max_concurrency": 1,
-        "max_retries": 3,
+        "max_retries": 8,
         "dead_letter_queue": "alcohol-label-verify-dlq"
       }
     ]
@@ -181,7 +181,7 @@
             "max_batch_size": 1,
             // Three in flight — see the note on the development consumer above.
             "max_concurrency": 1,
-            "max_retries": 3,
+            "max_retries": 8,
             "dead_letter_queue": "alcohol-label-verify-dlq-staging"
           }
         ]
@@ -231,7 +231,7 @@
             "max_batch_size": 1,
             // Three in flight — see the note on the development consumer above.
             "max_concurrency": 1,
-            "max_retries": 3,
+            "max_retries": 8,
             "dead_letter_queue": "alcohol-label-verify-dlq"
           }
         ]

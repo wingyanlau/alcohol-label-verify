@@ -26,12 +26,21 @@ import { createBrowserNormaliser } from '../normalise/browser-normaliser.js'
 import { checkIntake, type IntakeLimits, IntakeRejected } from '../normalise/normaliser.js'
 import { UnknownFormError } from '../normalise/regions.js'
 import { createWorkersAiProvider } from '../providers/workers-ai.js'
+import { isRateLimited, MAX_ATTEMPTS, retryDelaySeconds } from './backoff.js'
 import { labelImageKey } from './keys.js'
 import { buildPersistPlan, persistResult } from './persist.js'
 
 export interface ProcessOutcome {
   /** Whether the queue should redeliver this message for another attempt. */
   readonly retry: boolean
+  /**
+   * How long to hold the message before redelivering it.
+   *
+   * Absent means "as soon as convenient". Present when the failure was the
+   * provider refusing on rate: an immediate retry is refused in 40ms and
+   * spends an attempt for nothing.
+   */
+  readonly delaySeconds?: number
 }
 
 function intakeLimits(env: Env): IntakeLimits {
@@ -120,12 +129,18 @@ export async function processItem(
     return { retry: false }
   } catch (error) {
     const cause = causeOf(error)
-    const maxRetries = 3
 
-    if (!isDeterministicRefusal(error) && attempt < maxRetries) {
+    if (!isDeterministicRefusal(error) && attempt < MAX_ATTEMPTS) {
       // Transient: return the item to the queue for a bounded retry (§8). The
       // coordinator keeps it RUNNING; the redelivery starts it again.
-      return { retry: true }
+      //
+      // A rate limit waits longer on each attempt, because the ceiling is
+      // measured over time: retrying immediately is refused in 40ms and burns
+      // the budget without ever crossing it. Other transient faults are not
+      // paced — a provider timeout has no interval to wait out.
+      return isRateLimited(error)
+        ? { retry: true, delaySeconds: retryDelaySeconds(attempt) }
+        : { retry: true }
     }
 
     await env.DB.prepare(`UPDATE submission SET state = ?, failure_cause = ? WHERE id = ?`)
