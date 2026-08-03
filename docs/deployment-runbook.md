@@ -20,7 +20,7 @@ commands in §4 and nothing else.*
 
 | Resource | Name | Identifier | Created |
 |---|---|---|---|
-| Cloudflare account | `Wing.lawrence@gmail.com's Account` | `fb1dbb92cdbbab3ebd151838821ce3e5` | pre-existing |
+| Cloudflare account | `Wing.lawrence@gmail.com's Account` | see `wrangler whoami` — deliberately not committed | pre-existing |
 
 **Production** (`--env production`) — the resources created during setup, now
 addressed by name rather than by default:
@@ -177,9 +177,27 @@ Create it once — **AI → AI Gateway → Create Gateway** in the dashboard, na
 `alcohol-label-verify` — then set two vars per environment in `wrangler.jsonc`:
 
 ```jsonc
-"AI_GATEWAY_ID": "alcohol-label-verify",
-"AI_GATEWAY_ACCOUNT": "fb1dbb92cdbbab3ebd151838821ce3e5"
+"AI_GATEWAY_ID": "alcohol-label-verify"
 ```
+
+The gateway's **name** is configuration and is committed. The **account** it
+lives in is not: together they form a URL, and this repository is meant to be
+readable — by a reviewer, and possibly published. A name on its own addresses
+nothing.
+
+`AI_GATEWAY_ACCOUNT` is therefore installed as a Worker secret by CI, reusing
+the account id it already holds. This is a deliberate exception to "all
+non-secret configuration is version-controlled": the account is an address, not
+a setting, and nothing about a verdict depends on it.
+
+Worth being precise about what the URL would expose if it did leak. A caller
+who has it still cannot spend the Gemini allowance, because **this Worker
+supplies the Google key in the header** — theirs would carry none. They could
+pollute the gateway's analytics and consume its limits, which is an annoyance
+rather than a bill. **That changes entirely if stored keys are ever configured**
+— where Cloudflare holds the vendor credential so callers need not send one —
+because then the URL alone is spendable and authentication stops being
+optional.
 
 Both absent means the providers talk to their vendors directly, exactly as
 before. A half-configured gateway — an id with no account — also falls back to
@@ -347,7 +365,7 @@ GitHub configuration, done once. Both secrets are set on **each** environment,
 |---|---|
 | Environments | `staging`, `production` — created. Add a required reviewer to `production` to gate promotion |
 | Secret `CLOUDFLARE_API_TOKEN` | Workers Scripts Edit (upload), D1 Edit (`migrations apply --remote`), Queues Edit (consumer attach), Browser Run Edit. Or the "Edit Cloudflare Workers" template |
-| Secret `CLOUDFLARE_ACCOUNT_ID` | `fb1dbb92cdbbab3ebd151838821ce3e5` |
+| Secret `CLOUDFLARE_ACCOUNT_ID` | The account id, from `wrangler whoami`. Also installed as `AI_GATEWAY_ACCOUNT` on the worker |
 
 Both secrets are held **per environment**, not at repository scope: `staging`
 and `production` each carry their own `CLOUDFLARE_API_TOKEN` and

@@ -77,8 +77,17 @@
     // because the gateway stores request and response bodies by default and
     // ours are label artwork and the values read from it — content, which logs
     // must never carry (D20).
-    "AI_GATEWAY_ID": "alcohol-label-verify",
-    "AI_GATEWAY_ACCOUNT": "fb1dbb92cdbbab3ebd151838821ce3e5"
+    // The gateway's NAME is configuration; the account it lives in is not.
+    // Together they form a URL, and this repository is intended to be readable
+    // — by a reviewer, and possibly published. A name on its own addresses
+    // nothing.
+    //
+    // AI_GATEWAY_ACCOUNT is therefore a secret, set from the account id CI
+    // already holds. Absent, `gatewayBaseUrl` declines to build an address and
+    // the providers talk to their vendors directly, so a missing secret costs
+    // observability rather than availability. /health reports which is
+    // happening, because a silent fallback is worse than either.
+    "AI_GATEWAY_ID": "alcohol-label-verify"
   },
 
   // Transient content: submission PDFs and rasterised regions, held for the
@@ -200,9 +209,9 @@
         "RASTER_DPI": "300",
         "EXTRACT_CONCURRENCY": "5",
 
-        // See the note on the development block above.
-        "AI_GATEWAY_ID": "alcohol-label-verify",
-        "AI_GATEWAY_ACCOUNT": "fb1dbb92cdbbab3ebd151838821ce3e5"
+        // See the note on the development block above. The account is a
+        // secret; only the gateway's name is configuration.
+        "AI_GATEWAY_ID": "alcohol-label-verify"
       },
 
       // `STAGING` is the transient-content binding (B-D10), unrelated to the
@@ -261,9 +270,9 @@
         "RASTER_DPI": "300",
         "EXTRACT_CONCURRENCY": "5",
 
-        // See the note on the development block above.
-        "AI_GATEWAY_ID": "alcohol-label-verify",
-        "AI_GATEWAY_ACCOUNT": "fb1dbb92cdbbab3ebd151838821ce3e5"
+        // See the note on the development block above. The account is a
+        // secret; only the gateway's name is configuration.
+        "AI_GATEWAY_ID": "alcohol-label-verify"
       },
 
       "r2_buckets": [{ "binding": "STAGING", "bucket_name": "alcohol-label-verify-staging" }],

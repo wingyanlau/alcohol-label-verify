@@ -17,6 +17,7 @@ import { contentKey, labelImageKey } from './batch/keys.js'
 import { processItem } from './batch/pipeline.js'
 import { ExtractionContractError } from './domain/extraction.js'
 import type { Env, WorkMessage } from './env.js'
+import { gatewayFrom } from './providers/gateway.js'
 import { createProvider, knownProviderNames, specFor } from './providers/registry.js'
 import { PAGE_HTML } from './ui/page.js'
 
@@ -103,6 +104,16 @@ function faultOf(env: Env, error: unknown): string | null {
   return spec ? spec.classify(error) : null
 }
 
+/** Whether inference is routed through AI Gateway, and why not if it is not. */
+function gatewayStatus(env: Env): { routed: boolean; id: string | null; reason?: string } {
+  const gateway = gatewayFrom(env)
+  if (gateway === null) return { routed: false, id: null, reason: 'AI_GATEWAY_ID is not set' }
+  if (gateway.accountId === '') {
+    return { routed: false, id: gateway.id, reason: 'AI_GATEWAY_ACCOUNT is not set' }
+  }
+  return { routed: true, id: gateway.id }
+}
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body, null, 2) + '\n', {
     status,
@@ -156,6 +167,11 @@ export default {
           version: env.CF_VERSION_METADATA?.id ?? null,
           model: { provider: env.MODEL_PROVIDER, id: env.MODEL_ID },
           bindings: bindings(env as unknown as Record<string, unknown>),
+          // Whether inference is proxied. The address is built from a secret,
+          // so a missing one degrades silently to direct vendor calls — the
+          // right failure (observability lost, service intact) but only if it
+          // is visible.
+          gateway: gatewayStatus(env),
           schemaVersion: schema,
           problems,
         },

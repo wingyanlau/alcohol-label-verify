@@ -100,6 +100,15 @@ jobs:
           fi
           printf '%s' "$GEMINI_API_KEY" | npx wrangler secret put MODEL_API_KEY --env staging
 
+      # The gateway's address is half configuration and half account
+      # identifier. The name is committed; the account is not, because this
+      # repository is meant to be readable and a name on its own addresses
+      # nothing. Reuses the account id CI already holds — no new secret.
+      - name: Push the gateway account
+        run: |
+          set -euo pipefail
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | npx wrangler secret put AI_GATEWAY_ACCOUNT --env staging
+
       # Only needed when the gateway has authentication enabled. Absent means
       # the gateway is open and nothing is written, rather than an empty token
       # being installed over a working one.
