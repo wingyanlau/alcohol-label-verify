@@ -486,15 +486,59 @@ resort, decided deliberately and recorded.
 ## 14. Portability
 
 D12 required no dependence on one host's proprietary runtime. Batch introduces
-five platform capabilities; each is consumed through an interface.
+six platform capabilities; each is consumed through an interface.
 
-| Capability | Interface | Cloudflare | AWS | Self-hosted |
-|---|---|---|---|---|
-| Object staging | `ContentStore` | R2 | S3 | MinIO / filesystem |
-| Work distribution | `WorkQueue` | Queues | SQS | Redis / RabbitMQ |
-| Job coordination | `JobCoordinator` | Durable Object | DynamoDB + Lambda | Postgres row + advisory lock |
-| Client streaming | `ResultStream` | WebSocket via DO / SSE | API Gateway WS | SSE from the app |
-| PDF rasterisation | `Normaliser` | Container / Browser Rendering | Lambda + layer | Container with poppler |
+| Capability | Interface | Cloudflare | AWS | GCP | Self-hosted |
+|---|---|---|---|---|---|
+| Object staging | `ContentStore` | R2 | S3 | Cloud Storage | MinIO / filesystem |
+| Work distribution | `WorkQueue` | Queues | SQS | Pub/Sub | Redis / RabbitMQ |
+| Job coordination | `JobCoordinator` | Durable Object | DynamoDB + Lambda | Firestore + Cloud Run | Postgres row + advisory lock |
+| Client streaming | `ResultStream` | WebSocket via DO / SSE | API Gateway WS | Cloud Run SSE | SSE from the app |
+| PDF rasterisation | `Normaliser` | Container / Browser Rendering | Lambda + layer | Cloud Run + poppler | Container with poppler |
+| **Inference brokerage** | **the gateway seam** | **AI Gateway** | **Bedrock** | **Vertex AI** | **LiteLLM / Envoy** |
+
+### 14.1 Inference brokerage
+
+*The capability added last, and only because its absence was felt.*
+
+A day's inference allowance was spent without anyone being able to say on what.
+Usage was visible as "it worked" or as a 429, and the accounting afterwards had
+to be reconstructed by reading the code for call sites. That is not an
+observability gap — it is a missing layer, and every platform has one because
+every platform's users hit the same wall.
+
+What the layer provides, and what the provider adapters must therefore **not**:
+
+| Concern | Belongs to the broker | Why not the adapter |
+|---|---|---|
+| Usage and cost accounting | ✓ | Per-vendor totals are meaningless when two vendors serve one workload |
+| Caching | ✓ | A cache in an adapter is invisible to the audit record |
+| Rate limiting and spend caps | ✓ | A spend bound enforced in code is a bound one deploy from being removed |
+| Credential brokerage | ✓ | Optional. It moves the vendor key out of the application entirely |
+| Request and response shape | ✗ | The vendor's contract; the broker forwards it unchanged |
+| Fault classification | ✗ | Only the vendor knows what its own 429 means (D37) |
+
+**The seam is a base URL and a header, not an abstraction.** Cloudflare's AI
+Gateway, Vertex AI and Bedrock all keep the underlying vendor's request and
+response schema and change only where the request is sent — which is why the
+Gemini adapter needed one field, `baseUrl`, and no logic. An interface that
+tried to unify their *management* APIs would be a second abstraction with no
+caller.
+
+**Two properties are not optional, whatever the platform.**
+
+*Absence must degrade, not fail.* An unconfigured or half-configured broker
+falls back to talking to the vendor directly. An observability layer that can
+take the service down is worse than none — but the fallback must be **visible**,
+or a deployment silently stops being measured while appearing healthy. `/health`
+reports whether inference is routed, and why not when it is not.
+
+*Payload logging is off by default.* Brokers store request and response bodies
+as a matter of course, and this system's are label artwork and the values read
+from it — content, which logs must never carry (D20). Enabling a broker for its
+metrics would otherwise persist applicant artwork to a third party as a side
+effect. Metrics, token counts, latency and errors survive the restriction; only
+the artwork and the readings are withheld.
 
 **The coordinator is the one to watch.** Durable Objects give single-threaded
 per-job serialisation for free; on other platforms the same guarantee needs
@@ -600,6 +644,9 @@ latency reserve for nothing.
 | B-D13 | The bundled corpus ships **pre-rasterised**; only an upload takes the browser path (§4.4) | Rasterising the corpus on every run | The corpus is fixed, and its pixels were already rendered at build time — the generator shoots the label artwork to PNG and embeds it in the PDF, after which the runtime launched a browser to extract the same pixels back. At one new browser per 20 seconds that cost more than the extraction it fed. The label raster is the **affixed, degraded** view, not the artwork: L09's rotation and L10's blur live on the page, so shipping the embedded PNG would have handed the model pristine artwork for the two cases that exist to test degraded input | Easy — but the region map and PDF parsing are no longer exercised by the corpus, and B-Q4 becomes a build-time question |
 | B-D14 | A rate-limited item **keeps its queue slot** and waits in place (§8) | Returning it to the queue with a delay | Releasing the message releases the slot, so the next submission takes the turn. Over a corpus that produced bias, not delay: the first eight submissions exhausted their attempts against a saturated ceiling and failed for their position in the queue, while later items succeeded because those failures had thinned the contention. The two the exit criteria name are first in line | Easy |
 | B-D15 | An exhausted allowance **abandons the job**; every remaining item settles with the same cause, in both the ledger and the durable record (§8) | Failing items individually | It does not clear by waiting, so continuing rediscovers the same dead end once per submission and leaves a reviewer with a screen of failures that look like a broken tool rather than a spent budget. Settling the durable record matters as much as the ledger: rows left `QUEUED` make the job read as running for ever, and because starting joins a job in flight, every later batch attaches to the corpse | Easy |
+| B-D16 | Inference brokerage is a platform capability in its own right, behind a base URL rather than an abstraction (§14.1) | Metrics gathered inside the adapters; or a unified broker interface | Two vendors serving one workload make per-vendor totals meaningless, and a spend bound written in code is one deploy from being removed. Every platform has this layer — AI Gateway, Vertex AI, Bedrock — and all of them keep the vendor's own request and response schema, so the seam is a destination, not a translation. A unifying interface would abstract management APIs that nothing calls | Easy |
+| B-D17 | A broker that is absent or half-configured falls back to calling the vendor directly, and `/health` says so (§14.1) | Failing closed when the broker is unreachable | An observability layer that can take the service down is worse than none. But a silent fallback is worse than either: the deployment stops being measured while appearing healthy, which is the failure the layer was added to prevent | Easy |
+| B-D18 | Payload logging at the broker is off unless deliberately enabled (§14.1) | Accepting the broker's default | Brokers store request and response bodies as a matter of course. Here those are label artwork and the values read from it — content, which logs must never carry (D20). Turning on a broker for its metrics would otherwise persist applicant artwork to a third party as a side effect of wanting a request count | Easy |
 
 ---
 
