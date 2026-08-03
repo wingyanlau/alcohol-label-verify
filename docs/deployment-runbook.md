@@ -54,10 +54,12 @@ Renaming the older bucket would mean copying its contents; it holds only
 transient content, so the rename is safe to do later and is not worth a
 migration now.
 
-**No secrets are set.** Workers AI authenticates through its binding, so
-`MODEL_API_KEY` is absent by design — not forgotten. `/health` accounts for this:
-validation is provider-aware, and a binding-authed provider is not asked for a
-credential.
+**Secrets depend on the provider, and the two environments now differ.**
+Production reads with Workers AI, which authenticates through its binding, so
+`MODEL_API_KEY` is absent there by design — not forgotten. Staging reads with
+Gemini, an external API, and therefore requires it. `/health` asks whichever
+vendor is configured whether a credential is needed, so neither environment is
+reported broken for the other's arrangement.
 
 To confirm this list against the account rather than trusting the table:
 
@@ -66,7 +68,8 @@ npx wrangler whoami
 npx wrangler r2 bucket list
 npx wrangler d1 list
 npx wrangler queues list
-npx wrangler secret list          # expect: empty
+npx wrangler secret list --env staging     # expect: MODEL_API_KEY
+npx wrangler secret list --env production  # expect: empty
 npx wrangler deployments list
 ```
 
@@ -156,8 +159,8 @@ dashboard.
 | Setting | Value | Why it is what it is |
 |---|---|---|
 | `compatibility_date` | `2026-08-01` | Pinned. A floating runtime date changes behaviour beneath a recorded audit trail — the same reasoning as D29 |
-| `MODEL_PROVIDER` | `workers-ai` | Gemini was intended; its key has zero project quota |
-| `MODEL_ID` | `@cf/meta/llama-4-scout-17b-16e-instruct` | Fully qualified. The service **refuses to start** on a floating alias (D29) |
+| `MODEL_PROVIDER` | `gemini` (staging), `workers-ai` (production) | Deliberately different. Both adapters use the same instruction and prompt version, so the two environments differ in one variable — who is reading — which is what makes B-Q4 measurable |
+| `MODEL_ID` | `gemini-2.5-flash-002` (staging), `@cf/meta/llama-4-scout-17b-16e-instruct` (production) | Both pinned. The service **refuses to start** on a floating alias, and what floats differs by vendor: Cloudflare by `-latest` suffix, Google by omitting the version (D29) |
 | `RASTER_DPI` | `300` | Set by the smallest text under verification. Recorded per extraction, since `UNREADABLE` may be an artefact of resolution |
 | `EXTRACT_CONCURRENCY` | `5` | Governed by the provider's rate limit, not platform capacity |
 | `MAX_BATCH_ITEMS` | `300` | Peak-season filing size, and a spend bound |
@@ -165,14 +168,32 @@ dashboard.
 
 ### Secrets
 
-None currently. When an external provider is wired:
+Worker secrets, not GitHub secrets: CI passes `CLOUDFLARE_API_TOKEN` to
+`wrangler`, but nothing in a workflow becomes a Worker secret by itself. They
+are set once per *worker*, and survive every later deploy — `wrangler deploy`
+does not clear them.
 
 ```bash
-npx wrangler secret put MODEL_API_KEY
-npx wrangler secret list          # names only; values are never retrievable
+npx wrangler secret put MODEL_API_KEY --env staging   # required: staging uses Gemini
+npx wrangler secret list --env staging                # names only; values are never retrievable
 ```
 
+Production needs none while it reads with Workers AI.
+
+Order matters when switching a provider: set the secret **before** changing
+`MODEL_PROVIDER`. The other way round deploys a worker that cannot
+authenticate, `/health` returns 503 naming the missing setting, and the deploy
+fails at its verification step — loudly, but only after the upload.
+
+There is deliberately no `wrangler secret bulk` step in CI. One secret, set by
+hand, against a health check that fails the deploy when it is missing, is
+simpler than a second copy of the credential living in GitHub. That trade
+changes as soon as there is more than one secret, or an environment has to be
+recreatable from nothing.
+
 Secrets never appear in `wrangler.jsonc`, in the repository, or in logs (D20).
+The Gemini adapter sends its key in a header rather than a query parameter for
+the same reason: a URL is captured by anything that logs one.
 
 ---
 

@@ -144,8 +144,30 @@
 
       "vars": {
         "ENVIRONMENT": "staging",
-        "MODEL_PROVIDER": "workers-ai",
-        "MODEL_ID": "@cf/meta/llama-4-scout-17b-16e-instruct",
+
+        // Staging reads with Gemini; production still reads with Workers AI.
+        //
+        // Deliberately different, and only for as long as the comparison is
+        // wanted. Both adapters use the same instruction and the same
+        // PROMPT_VERSION, so the two environments differ in exactly one
+        // variable — who is reading — and a corpus run under each answers B-Q4
+        // by measurement rather than by preference. Every extraction records
+        // its provider and model, so a verdict always names the reader that
+        // produced it (§8.7.1).
+        //
+        // Requires MODEL_API_KEY on THIS worker:
+        //   wrangler secret put MODEL_API_KEY --env staging
+        // Without it /health returns 503 naming the setting, and the deploy
+        // fails at its verification step rather than reading labels with a
+        // provider it cannot authenticate.
+        "MODEL_PROVIDER": "gemini",
+
+        // Pinned, not `gemini-2.5-flash`. Google floats by omitting the
+        // version, so the bare name resolves to different weights over time
+        // and would silently invalidate every audit record citing it (D29).
+        // The service refuses to start on an unpinned id.
+        "MODEL_ID": "gemini-2.5-flash-002",
+
         "MAX_UPLOAD_BYTES": "10485760",
         "MAX_PAGE_COUNT": "8",
         "MAX_PIXELS": "40000000",
