@@ -18,7 +18,7 @@ import { contentKey, labelImageKey } from './batch/keys.js'
 import { processItem } from './batch/pipeline.js'
 import { isReferenceCode, normaliseReferenceCode } from './batch/reference-code.js'
 import { loadStoredVerdict, ReplayUnavailableError, replayVerdict } from './batch/replay-load.js'
-import { RETENTION_POLICY, REVIEW_WINDOW_DAYS, sweepRetention } from './batch/retention.js'
+import { retentionPolicyText, retentionWindowDays, sweepRetention } from './batch/retention.js'
 import { approvalFor, isApproved } from './domain/approval.js'
 import { ExtractionContractError } from './domain/extraction.js'
 import { referenceIsUnverified, warningReference } from './domain/reference.js'
@@ -89,6 +89,10 @@ export function validateConfig(env: Env): ConfigProblem[] {
     'MAX_BATCH_ITEMS',
     'RASTER_DPI',
     'EXTRACT_CONCURRENCY',
+    // Unset retention is a misconfiguration, not a default. See
+    // `retentionWindowDays` — a deployment that never chose a window must not
+    // quietly delete applicant content on one.
+    'RETENTION_WINDOW_DAYS',
   ] as const) {
     positiveInt(k)
   }
@@ -119,6 +123,38 @@ function bindings(env: Record<string, unknown>): Record<string, boolean> {
 function faultOf(env: Env, error: unknown): string | null {
   const spec = specFor((env.MODEL_PROVIDER ?? '').trim())
   return spec ? spec.classify(error) : null
+}
+
+/**
+ * What the deployment promises about applicant content, and whether the two
+ * places that say so agree (D32).
+ *
+ * `stated` is the policy recorded in the database — the durable statement, the
+ * one an auditor would read. `enforced` is what the sweep will actually do
+ * tonight, derived from the configured window. They are reported as a pair
+ * because a retention promise that has drifted from the deletion schedule is
+ * worse than one nobody made: it is a false statement about someone's data,
+ * and nothing else in the system would reveal it.
+ */
+function retentionReport(
+  env: Env,
+  stated: string | null,
+): {
+  stated: string | null
+  enforced: string | null
+  windowDays: number | null
+  agrees: boolean | null
+} {
+  const windowDays = retentionWindowDays(env)
+  const enforced = windowDays === null ? null : retentionPolicyText(windowDays)
+  return {
+    stated,
+    enforced,
+    windowDays,
+    // Null, not false, when either side is absent: unknown is not disagreement,
+    // and the missing piece is already reported as its own problem.
+    agrees: stated === null || enforced === null ? null : stated === enforced,
+  }
 }
 
 /** Whether inference is routed through AI Gateway, and why not if it is not. */
@@ -173,6 +209,21 @@ export default {
               problem: 'schema_meta is empty — migrations not applied',
             })
           }
+
+          // The recorded policy and the enforced one must say the same thing.
+          // Treated as a startup problem, like an unapproved model, because the
+          // deployment would otherwise publish a retention promise it does not
+          // keep — and the deploy gate is the last place that can catch it.
+          const retention = retentionReport(env, storedRetention)
+          if (retention.agrees === false) {
+            problems.push({
+              setting: 'RETENTION_WINDOW_DAYS',
+              problem:
+                `the recorded policy and the configured window disagree. ` +
+                `Recorded: "${retention.stated}". Enforced: "${retention.enforced}". ` +
+                `Update schema_meta.retention_policy in a migration to match.`,
+            })
+          }
         } catch (e) {
           problems.push({
             setting: 'DB',
@@ -202,11 +253,7 @@ export default {
           // window lives in two places — a migration and a constant — and a
           // policy that has drifted from what the sweep actually deletes is
           // worse than one that was never stated.
-          retention: {
-            stated: storedRetention,
-            enforced: RETENTION_POLICY,
-            agrees: storedRetention === null ? null : storedRetention === RETENTION_POLICY,
-          },
+          retention: retentionReport(env, storedRetention),
           problems,
         },
         problems.length === 0 ? 200 : 503,
@@ -694,8 +741,14 @@ export default {
     // candidate already marked and does nothing.
     if (pathname === '/retention/sweep' && request.method === 'POST') {
       if (!env.DB || !env.STAGING) return json({ error: 'unavailable' }, 503)
-      const result = await sweepRetention(env.DB, env.STAGING, new Date())
-      return json({ ...result, windowDays: REVIEW_WINDOW_DAYS })
+      const windowDays = retentionWindowDays(env)
+      // Refused rather than defaulted. Deleting applicant content on a window
+      // nobody configured is the one outcome worse than not deleting it.
+      if (windowDays === null) {
+        return json({ error: 'unconfigured', reason: 'RETENTION_WINDOW_DAYS is not set' }, 503)
+      }
+      const result = await sweepRetention(env.DB, env.STAGING, new Date(), windowDays)
+      return json({ ...result, windowDays })
     }
 
     // Find a review from the code an agent quoted (D21).
@@ -785,7 +838,14 @@ export default {
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     if (!env.DB || !env.STAGING) return
 
-    ctx.waitUntil(sweepRetention(env.DB as D1Database, env.STAGING as R2Bucket, new Date()))
+    // No window, no sweep. The schedule fires nightly and a default here would
+    // delete content on a policy the deployment was never given.
+    const windowDays = retentionWindowDays(env)
+    if (windowDays === null) return
+
+    ctx.waitUntil(
+      sweepRetention(env.DB as D1Database, env.STAGING as R2Bucket, new Date(), windowDays),
+    )
   },
 
   async queue(batch: MessageBatch<WorkMessage>, env: Env): Promise<void> {

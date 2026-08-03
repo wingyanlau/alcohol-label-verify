@@ -61,6 +61,12 @@
     // verdict may be an artefact of resolution rather than of the artwork (B-Q4).
     "RASTER_DPI": "300",
 
+    // How long staged content is kept after a job starts, before the nightly
+    // sweep deletes it (B-D10, D32). Configuration because it is a records
+    // decision, not a fact about the code — an agency whose schedule says 30
+    // days sets 30 here. There is no default: unset is a startup problem.
+    "RETENTION_WINDOW_DAYS": "14",
+
     // Extraction concurrency across a batch. Governed by the provider's rate
     // limit, not by platform capacity (batch design §6.1).
     "EXTRACT_CONCURRENCY": "5",
@@ -207,6 +213,12 @@
         "MAX_PIXELS": "40000000",
         "MAX_BATCH_ITEMS": "300",
         "RASTER_DPI": "300",
+
+        // How long staged content is kept after a job starts, before the nightly
+        // sweep deletes it (B-D10, D32). Configuration because it is a records
+        // decision, not a fact about the code — an agency whose schedule says 30
+        // days sets 30 here. There is no default: unset is a startup problem.
+        "RETENTION_WINDOW_DAYS": "14",
         "EXTRACT_CONCURRENCY": "5",
 
         // See the note on the development block above. The account is a
@@ -274,6 +286,12 @@
         "MAX_PIXELS": "40000000",
         "MAX_BATCH_ITEMS": "300",
         "RASTER_DPI": "300",
+
+        // How long staged content is kept after a job starts, before the nightly
+        // sweep deletes it (B-D10, D32). Configuration because it is a records
+        // decision, not a fact about the code — an agency whose schedule says 30
+        // days sets 30 here. There is no default: unset is a startup problem.
+        "RETENTION_WINDOW_DAYS": "14",
         "EXTRACT_CONCURRENCY": "5",
 
         // See the note on the development block above. The account is a

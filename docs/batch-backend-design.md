@@ -392,7 +392,7 @@ exist from what must be kept.**
 
 | Data | Held | Lifetime | Rationale |
 |---|---|---|---|
-| Submission bytes | Object store | **Review window (14 days from job start), then deleted by a scheduled sweep** | Workers must fetch it — and a reviewer needs it afterwards, which the original entry did not allow for |
+| Submission bytes | Object store | **Review window (`RETENTION_WINDOW_DAYS` from job start; ships as 14), then deleted by a scheduled sweep** | Workers must fetch it — and a reviewer needs it afterwards, which the original entry did not allow for |
 | Rasterised label crop | Object store | Same window | Shown beside the verdict so an agent adjudicates against the artwork (FR-10). Originally "in memory only, never written down", which the review screen made impossible |
 | Rasterised record region | In memory only | The item's processing | Never written down — nothing displays it |
 | Item ledger | Coordinator | Job duration + a short collection window | The client must be able to reconnect (B7) |
@@ -413,10 +413,18 @@ a job that never completes has no completion to measure from and would
 otherwise retain its content for ever. A job runs for minutes, so
 start-plus-fourteen-days and finish-plus-fourteen-days are the same day.
 
-The window and the reasoning live in `src/batch/retention.ts`; the policy
-string is recorded in `schema_meta.retention_policy` and reported by `/health`
-alongside the constant the sweep actually enforces, so drift between the two is
-visible rather than latent.
+**The window is configuration, not a constant.** How long an agency may hold a
+submission comes from a records schedule (Q-PRV-03), so it is
+`RETENTION_WINDOW_DAYS`, set per environment beside the other operational
+limits. There is no default: an unset window is a startup problem, because a
+deployment that never chose one must not quietly delete applicant content on a
+schedule nobody picked.
+
+The policy the deployment *states* is recorded separately, in
+`schema_meta.retention_policy`, and `/health` reports the two together. A
+mismatch fails the deploy gate — a promise that has drifted from the deletion
+schedule is a false statement about someone's data, and nothing else in the
+system would reveal it.
 
 **This is a widening of N3 and it should be stated as such.** The prototype's
 "store nothing" posture becomes "store nothing durable, and only what the job

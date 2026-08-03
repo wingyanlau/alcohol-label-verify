@@ -49,26 +49,55 @@
  * WHAT THIS CONCEDES. It is a widening of N3, and the README must say so in
  * these words rather than repeat a stronger claim: the prototype stores
  * nothing durable *except* the record, and keeps submitted content for as long
- * as the review window. Fourteen days is a prototype's number, chosen to
- * outlast a reviewer's weekend and nothing more. A production deployment sets
- * it from a records schedule, which is Q-PRV-03 and is not ours to answer.
+ * as the review window.
+ *
+ * The length of that window is NOT decided here. It is `RETENTION_WINDOW_DAYS`,
+ * set per deployment, because how long an agency may hold a submission comes
+ * from a records schedule (Q-PRV-03) and not from a developer's judgement. The
+ * repository ships 14 as a starting value — long enough to outlast a
+ * reviewer's weekend — and an agency that says thirty sets thirty without
+ * touching this file.
  */
 
 import { appendAudit } from './audit.js'
 import { labelImageKey } from './keys.js'
 
 /**
- * How long content outlives the job that staged it.
+ * How long content outlives the job that staged it — from configuration.
  *
- * Long enough that a review begun on Friday can be finished the following
- * week; short enough that it is a window rather than an archive.
+ * NOT A CONSTANT, deliberately. How long an agency may hold a submission is a
+ * records-retention decision belonging to whoever answers Q-PRV-03, and a
+ * number compiled into the code says that decision was the developer's. An
+ * agency whose schedule says thirty days must be able to say thirty days by
+ * changing a setting, in the same place every other operational limit lives.
+ *
+ * Returns null rather than a default when the setting is missing or unusable.
+ * A default would mean a deployment that never configured retention still
+ * deletes applicant content on a schedule nobody chose, while reporting a
+ * policy it was never given — the failure being silent is what makes it worse
+ * than refusing. `validateConfig` turns the null into a startup problem, so
+ * the deployment says so at its first request rather than at 03:20 some night.
  */
-export const REVIEW_WINDOW_DAYS = 14
+export function retentionWindowDays(env: { RETENTION_WINDOW_DAYS?: string }): number | null {
+  const raw = (env.RETENTION_WINDOW_DAYS ?? '').trim()
+  if (raw === '') return null
+  const n = Number(raw)
+  return Number.isInteger(n) && n > 0 ? n : null
+}
 
-/** Recorded in `schema_meta`, so the deployment states its own policy (D32). */
-export const RETENTION_POLICY =
-  `Content (submission PDF, label crop) purged ${REVIEW_WINDOW_DAYS} days after the job starts; ` +
-  `record (verdict, extraction, audit chain) retained indefinitely pending Q-PRV-03`
+/**
+ * What the deployment publishes about itself (D32), in terms of the window it
+ * is actually enforcing.
+ *
+ * Derived rather than stored beside the number, so the statement cannot
+ * describe a policy the sweep stopped applying.
+ */
+export function retentionPolicyText(windowDays: number): string {
+  return (
+    `Content (submission PDF, label crop) purged ${windowDays} days after the job starts; ` +
+    `record (verdict, extraction, audit chain) retained indefinitely pending Q-PRV-03`
+  )
+}
 
 export interface PurgeCandidate {
   readonly submissionId: string
@@ -83,7 +112,7 @@ export interface PurgeOutcome {
 }
 
 /** The cutoff: content staged by jobs started before this is due for deletion. */
-export function purgeCutoff(now: Date, windowDays = REVIEW_WINDOW_DAYS): string {
+export function purgeCutoff(now: Date, windowDays: number): string {
   return new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000).toISOString()
 }
 
@@ -190,7 +219,7 @@ export async function runPurge(
   db: D1Database,
   bucket: R2Bucket,
   now: Date,
-  windowDays = REVIEW_WINDOW_DAYS,
+  windowDays: number,
 ): Promise<PurgeOutcome & { readonly cutoff: string }> {
   const cutoff = purgeCutoff(now, windowDays)
   const candidates = await findPurgeCandidates(db, cutoff, PURGE_BATCH)
@@ -238,8 +267,9 @@ export async function sweepRetention(
   db: D1Database,
   bucket: R2Bucket,
   now: Date,
+  windowDays: number,
 ): Promise<PurgeOutcome & { readonly cutoff: string }> {
-  const result = await runPurge(db, bucket, now)
+  const result = await runPurge(db, bucket, now, windowDays)
   if (result.purged === 0) return result
 
   // Recorded in the chain, because a deletion is a thing that happened to a
@@ -251,7 +281,7 @@ export async function sweepRetention(
     action: 'content.purged',
     subjectType: 'job',
     subjectId: 'retention-sweep',
-    detail: `submissions=${result.purged};objects=${result.objectsDeleted};cutoff=${result.cutoff};windowDays=${REVIEW_WINDOW_DAYS}`,
+    detail: `submissions=${result.purged};objects=${result.objectsDeleted};cutoff=${result.cutoff};windowDays=${windowDays}`,
   })
 
   return result

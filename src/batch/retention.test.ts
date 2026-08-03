@@ -11,8 +11,8 @@ import {
   type PurgeCandidate,
   purgeContent,
   purgeCutoff,
-  RETENTION_POLICY,
-  REVIEW_WINDOW_DAYS,
+  retentionPolicyText,
+  retentionWindowDays,
 } from './retention.js'
 
 const AT = new Date('2026-08-03T12:00:00.000Z')
@@ -35,26 +35,27 @@ const candidate = (n: number): PurgeCandidate => ({
   contentKey: `job-1/sub-${n}.pdf`,
 })
 
+const WINDOW = 14
+
 describe('the retention window', () => {
   it('is stated, not implied', () => {
-    expect(REVIEW_WINDOW_DAYS).toBeGreaterThan(0)
     // The policy string is what the deployment publishes about itself (D32).
     // It has to name both halves — what goes and what stays — because the
     // difference between them is the whole privacy claim.
-    expect(RETENTION_POLICY).toContain(String(REVIEW_WINDOW_DAYS))
-    expect(RETENTION_POLICY).not.toContain('UNSET')
+    expect(retentionPolicyText(WINDOW)).toContain(String(WINDOW))
+    expect(retentionPolicyText(WINDOW)).not.toContain('UNSET')
   })
 
   it('puts the cutoff a full window behind now', () => {
-    const cutoff = new Date(purgeCutoff(AT))
-    expect(AT.getTime() - cutoff.getTime()).toBe(REVIEW_WINDOW_DAYS * 86_400_000)
+    const cutoff = new Date(purgeCutoff(AT, WINDOW))
+    expect(AT.getTime() - cutoff.getTime()).toBe(WINDOW * 86_400_000)
   })
 
   it('does not purge a job started inside the window', () => {
     // The boundary in the direction that matters: purging early destroys the
     // evidence a reviewer is in the middle of adjudicating.
-    const justInside = new Date(AT.getTime() - (REVIEW_WINDOW_DAYS - 1) * 86_400_000)
-    expect(justInside.toISOString() > purgeCutoff(AT)).toBe(true)
+    const justInside = new Date(AT.getTime() - (WINDOW - 1) * 86_400_000)
+    expect(justInside.toISOString() > purgeCutoff(AT, WINDOW)).toBe(true)
   })
 })
 
@@ -101,5 +102,42 @@ describe('purging content', () => {
     const r2 = fakeBucket()
     const result = await purgeContent(r2 as never, [])
     expect(result).toEqual({ purged: 0, objectsDeleted: 0, submissionIds: [] })
+  })
+})
+
+describe('where the window comes from', () => {
+  // The window is a records-retention decision, not a fact about the code. An
+  // agency whose schedule says 30 days must be able to say 30 days without a
+  // code change, and the deployment must state what it is actually enforcing.
+  it('is read from configuration', () => {
+    expect(retentionWindowDays({ RETENTION_WINDOW_DAYS: '30' })).toBe(30)
+    expect(retentionWindowDays({ RETENTION_WINDOW_DAYS: '14' })).toBe(14)
+  })
+
+  // No silent fallback. A default would mean a deployment that forgot to set
+  // the window still deletes applicant content on a schedule nobody chose —
+  // and reports a policy it was never configured with. Refusing is louder.
+  it('refuses a missing or unusable value rather than defaulting', () => {
+    expect(retentionWindowDays({})).toBeNull()
+    expect(retentionWindowDays({ RETENTION_WINDOW_DAYS: '' })).toBeNull()
+    expect(retentionWindowDays({ RETENTION_WINDOW_DAYS: 'soon' })).toBeNull()
+    expect(retentionWindowDays({ RETENTION_WINDOW_DAYS: '0' })).toBeNull()
+    expect(retentionWindowDays({ RETENTION_WINDOW_DAYS: '-5' })).toBeNull()
+    expect(retentionWindowDays({ RETENTION_WINDOW_DAYS: '14.5' })).toBeNull()
+  })
+
+  it('states the policy in terms of the configured window', () => {
+    expect(retentionPolicyText(30)).toContain('30 days')
+    expect(retentionPolicyText(14)).toContain('14 days')
+    // Both halves, always: what goes and what stays. The difference between
+    // them is the entire privacy claim.
+    expect(retentionPolicyText(30)).toContain('purged')
+    expect(retentionPolicyText(30)).toContain('retained indefinitely')
+  })
+
+  it('measures the cutoff from the configured window, not a constant', () => {
+    const at = new Date('2026-08-03T12:00:00.000Z')
+    expect(purgeCutoff(at, 30)).toBe('2026-07-04T12:00:00.000Z')
+    expect(purgeCutoff(at, 1)).toBe('2026-08-02T12:00:00.000Z')
   })
 })

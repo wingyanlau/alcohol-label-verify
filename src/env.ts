@@ -21,6 +21,14 @@ export interface Env {
   RASTER_DPI: string
   EXTRACT_CONCURRENCY: string
   /**
+   * How many days staged content is kept after a job starts (B-D10, D32).
+   *
+   * Configuration, not a constant: how long an agency may hold a submission is
+   * a records-retention decision, and compiling it in would make it ours. No
+   * default — an unset value is a startup problem, not a silent fallback.
+   */
+  RETENTION_WINDOW_DAYS: string
+  /**
    * AI Gateway, optional.
    *
    * Set `AI_GATEWAY_ID` to route inference through it and get per-request

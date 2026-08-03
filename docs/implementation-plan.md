@@ -188,7 +188,9 @@ passing review.
       window**, not at completion. Completion is when the content starts being
       needed: the review screen shows the label crop and the submission as
       filed, so purging then would leave a reviewer two broken panels. A daily
-      sweep deletes both objects 14 days after the job starts, marks the
+      sweep deletes both objects `RETENTION_WINDOW_DAYS` after the job starts
+      (configuration, shipped as 14 — it is a records decision, not a
+      constant), marks the
       record, and appends `content.purged` to the chain. The policy is recorded
       in `schema_meta` and reported by `/health` beside the constant the sweep
       enforces. See B-D10, which was rewritten rather than merely ticked
