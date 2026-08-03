@@ -165,9 +165,12 @@ export const PAGE_HTML = `<!doctype html>
   // The button reflects the job, not this tab. A session that merely joined a
   // running batch must not offer to start another one.
   function setButton(mode) {
-    // Offered only while work is outstanding. A finished job has nothing to
-    // stop, and a button that does nothing is worse than no button.
-    resetBtn.classList.toggle('hidden', mode !== 'running')
+    // Shown whenever a job exists, running or not. Offering it only during a
+    // fault makes it a control nobody knows about until they are already
+    // stuck; and clearing a settled run before starting fresh is a reasonable
+    // thing to want. The label says which of the two it is about to do.
+    resetBtn.classList.remove('hidden')
+    resetBtn.textContent = mode === 'running' ? 'Stop and reset' : 'Clear results'
     if (mode === 'running') {
       startBtn.disabled = true
       startBtn.textContent = 'Checking…'
@@ -315,19 +318,31 @@ export const PAGE_HTML = `<!doctype html>
   })
 
   resetBtn.addEventListener('click', function () {
+    var wasRunning = startBtn.disabled
     resetBtn.disabled = true
-    resetBtn.textContent = 'Stopping…'
+    resetBtn.textContent = wasRunning ? 'Stopping…' : 'Clearing…'
     fetch('/batch/reset', { method: 'POST' })
       .then(function (r) { if (!r.ok) throw new Error('reset failed'); return r.json() })
       .then(function () {
-        // The coordinator broadcasts the abort and a fresh snapshot, so the
-        // worklist updates itself. Nothing to do here but restore the control.
         resetBtn.disabled = false
-        resetBtn.textContent = 'Stop and reset'
+        // Clearing a settled job has nothing to broadcast — no item changes
+        // state — so the page tidies itself rather than waiting for an event
+        // that will never arrive.
+        if (!wasRunning) {
+          rows.clear()
+          batchSection.classList.add('hidden')
+          resetBtn.classList.add('hidden')
+          setButton('idle')
+          resetBtn.classList.add('hidden')
+        } else {
+          // A running job settles through the coordinator's abort broadcast,
+          // which carries a fresh snapshot, so the worklist updates itself.
+          resetBtn.textContent = 'Clear results'
+        }
       })
       .catch(function () {
         resetBtn.disabled = false
-        resetBtn.textContent = 'Stop and reset'
+        resetBtn.textContent = wasRunning ? 'Stop and reset' : 'Clear results'
         startErr.textContent = 'The check could not be stopped. Please try again in a moment.'
         startErr.classList.remove('hidden')
       })
