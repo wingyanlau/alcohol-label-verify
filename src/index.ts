@@ -8,7 +8,7 @@
  * §9.5 (configuration).
  */
 
-import { isRateLimited, MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
+import { MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
 import { loadCurrentJob } from './batch/current.js'
 import { loadSubmissionDetail } from './batch/detail.js'
 import { startBatch } from './batch/intake.js'
