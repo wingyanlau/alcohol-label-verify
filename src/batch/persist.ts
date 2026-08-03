@@ -59,6 +59,15 @@ export interface VerdictRow {
   readonly policyVersion: string
   readonly aggregationVersion: string
   readonly extractionIds: string
+  /**
+   * Whether the warning was legible enough to verify.
+   *
+   * Stored because the verdict depends on it and it cannot be recomputed: the
+   * measurement is taken from pixels that are transient, so a replay reading
+   * only the record would default to legible and reach a different verdict
+   * than the one it is supposed to reproduce (NFR-13).
+   */
+  readonly warningLegible: boolean
 }
 
 export interface PersistPlan {
@@ -165,6 +174,7 @@ export function buildPersistPlan(
       policyVersion: POLICY_VERSION,
       aggregationVersion: AGGREGATION_VERSION,
       extractionIds: JSON.stringify(extractions.map((e) => e.id)),
+      warningLegible: result.warning.legible,
     },
     fields: fieldRows(result.fields),
     warning: warningRows(result.warning),
@@ -217,8 +227,9 @@ export async function persistResult(
       .prepare(
         `INSERT INTO verdict
            (id, submission_id, outcome, ruleset_version, reference_data_version,
-            policy_version, aggregation_version, extraction_ids, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            policy_version, aggregation_version, extraction_ids, created_at,
+            warning_legible)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         plan.verdict.id,
@@ -230,6 +241,7 @@ export async function persistResult(
         plan.verdict.aggregationVersion,
         plan.verdict.extractionIds,
         now,
+        plan.verdict.warningLegible ? 1 : 0,
       ),
   )
 

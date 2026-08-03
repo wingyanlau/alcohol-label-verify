@@ -76,6 +76,18 @@ export interface VerifyOptions {
   readonly warningRef?: WarningReference
   /** Injected so timings are deterministic in tests (test-plan §17). */
   readonly now?: () => number
+  /**
+   * The legibility decision, already made.
+   *
+   * Exists for replay (NFR-13). Legibility is measured from pixels, and by the
+   * time a verdict is re-derived the pixels are gone — what survives is the
+   * conclusion drawn from them, stored on the verdict row. Supplying the
+   * measurement here instead would mean inventing an edge-energy number that
+   * was never observed, so the decision is passed as the decision.
+   *
+   * Live callers leave this unset and supply `label.warningLegibility`.
+   */
+  readonly warningLegible?: boolean
 }
 
 /** Turn a record-region extraction into application data. */
@@ -99,8 +111,9 @@ export async function verifySubmission(
   // by heart: shown an illegible warning it returns the canonical text and
   // reports success. Measured from pixels, or assumed legible when unmeasured.
   const warningLegible =
-    input.label.warningLegibility === undefined ||
-    input.label.warningLegibility >= WARNING_LEGIBILITY_FLOOR
+    opts.warningLegible ??
+    (input.label.warningLegibility === undefined ||
+      input.label.warningLegibility >= WARNING_LEGIBILITY_FLOOR)
 
   const extractStarted = now()
   // Concurrent, and separate. See the module comment.

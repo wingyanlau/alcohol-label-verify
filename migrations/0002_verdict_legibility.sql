@@ -1,0 +1,13 @@
+-- The verdict depends on whether the warning was legible, and that was not
+-- recorded — so a verdict could not be re-derived from the record, and NFR-13
+-- was false without anything saying so.
+--
+-- Legibility is measured from the pixels rather than claimed by the extractor
+-- (D5, UT-G05), which is precisely why it cannot be recomputed at replay time:
+-- the pixels are transient and the measurement is not reproducible from what
+-- survives. It has to be stored with the verdict it decided.
+--
+-- Existing rows default to legible, which is historically accurate: every
+-- verdict written before the rule existed was reached as though the artwork
+-- could be read.
+ALTER TABLE verdict ADD COLUMN warning_legible INTEGER NOT NULL DEFAULT 1;

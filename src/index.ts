@@ -16,6 +16,7 @@ import { loadSubmissionDetail } from './batch/detail.js'
 import { startBatch } from './batch/intake.js'
 import { contentKey, labelImageKey } from './batch/keys.js'
 import { processItem } from './batch/pipeline.js'
+import { loadStoredVerdict, ReplayUnavailableError, replayVerdict } from './batch/replay-load.js'
 import { approvalFor, isApproved } from './domain/approval.js'
 import { ExtractionContractError } from './domain/extraction.js'
 import { referenceIsUnverified, warningReference } from './domain/reference.js'
@@ -489,6 +490,42 @@ export default {
         },
         brokenAt === null ? 200 : 409,
       )
+    }
+
+    // Re-derive a stored verdict from the record alone (NFR-13).
+    //
+    // The audit record's central claim is that a verdict can be produced again
+    // without the model, the artwork, or the run that made it. This is where
+    // that claim is tested rather than asserted — and it goes through the same
+    // `verifySubmission` the live path uses, so a rule that changed without a
+    // version bump shows up here as a disagreement instead of staying quiet.
+    //
+    // Disagreement is reported, not thrown: "stored CLEAR, replayed
+    // DISCREPANCIES_FOUND" is the finding, and a 409 makes it hard to ignore.
+    if (pathname.startsWith('/audit/replay/') && request.method === 'GET') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+
+      const submissionId = decodeURIComponent(pathname.slice('/audit/replay/'.length))
+      if (submissionId === '') return json({ error: 'no submission id' }, 400)
+
+      try {
+        const report = await replayVerdict(await loadStoredVerdict(env.DB, submissionId))
+        return json(report, report.identical ? 200 : 409)
+      } catch (error) {
+        if (error instanceof ReplayUnavailableError) {
+          return json({ error: 'not-found', reason: error.message }, 404)
+        }
+        // A reading that no longer parses is itself the finding: the record
+        // holds something the current contract cannot accept, which is a
+        // re-derivability failure and not a server fault.
+        return json(
+          {
+            error: 'not-replayable',
+            reason: error instanceof Error ? error.message : String(error),
+          },
+          409,
+        )
+      }
     }
 
     // Which job every session should be showing. The page asks on load, so a
