@@ -29,6 +29,8 @@ export interface ChainedRow {
   readonly row: AuditRow
   readonly prevDigest: string
   readonly digest: string
+  /** Present when read back; absent when a chain is built in a test. */
+  readonly seq?: number
 }
 
 /** The chain's first link. */
@@ -132,15 +134,23 @@ export async function appendAudit(db: D1Database, row: AuditRow, attempts = 5): 
   return false
 }
 
-/** Read the chain back, oldest first. */
-export async function readChain(db: D1Database, limit = 1000): Promise<ChainedRow[]> {
+/**
+ * Read the chain back, oldest first.
+ *
+ * `limit` is a page size, not a ceiling — see `readWholeChain`. A verifier that
+ * silently examined a prefix and reported "ok" would be worse than no verifier,
+ * because it would answer the question it was asked with evidence about a
+ * different question.
+ */
+export async function readChain(db: D1Database, limit = 1000, afterSeq = 0): Promise<ChainedRow[]> {
   const { results } = await db
     .prepare(
-      `SELECT at, actor, action, subject_type, subject_id, detail, prev_digest, digest
-         FROM audit_event ORDER BY seq ASC LIMIT ?`,
+      `SELECT seq, at, actor, action, subject_type, subject_id, detail, prev_digest, digest
+         FROM audit_event WHERE seq > ? ORDER BY seq ASC LIMIT ?`,
     )
-    .bind(limit)
+    .bind(afterSeq, limit)
     .all<{
+      seq: number
       at: string
       actor: string
       action: string
@@ -162,5 +172,26 @@ export async function readChain(db: D1Database, limit = 1000): Promise<ChainedRo
     },
     prevDigest: r.prev_digest,
     digest: r.digest,
+    seq: r.seq,
   }))
+}
+
+/**
+ * Every event, in pages.
+ *
+ * The chain is append-only and unbounded; a verification that stopped at a
+ * fixed count would report a healthy prefix while an alteration sat beyond it.
+ * Paging costs a few round trips and removes an entire class of false
+ * assurance.
+ */
+export async function readWholeChain(db: D1Database, pageSize = 1000): Promise<ChainedRow[]> {
+  const all: ChainedRow[] = []
+  let after = 0
+  for (;;) {
+    const page = await readChain(db, pageSize, after)
+    if (page.length === 0) return all
+    all.push(...page)
+    after = page[page.length - 1]?.seq ?? after
+    if (page.length < pageSize) return all
+  }
 }

@@ -345,6 +345,19 @@ export async function processItem(
       )
         .bind(reason, jobId)
         .run()
+      // The most consequential event in a run, and it was the one the history
+      // did not record: a job abandoning twenty-five submissions left a chain
+      // showing only the individual failures that preceded it, with nothing
+      // saying why the rest never ran.
+      await appendAudit(env.DB, {
+        at: new Date().toISOString(),
+        actor: 'system',
+        action: 'job.abandoned',
+        subjectType: 'job',
+        subjectId: jobId,
+        detail: `fault=quota-exhausted;provider=${provider.name};at=${submissionId}`,
+      })
+
       await stub.abort(reason)
       return { retry: false }
     }

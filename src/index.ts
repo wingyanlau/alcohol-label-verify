@@ -9,7 +9,7 @@
  * §9.5 (configuration).
  */
 
-import { readChain, verifyChain } from './batch/audit.js'
+import { readWholeChain, verifyChain } from './batch/audit.js'
 import { MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
 import { loadCurrentJob } from './batch/current.js'
 import { loadSubmissionDetail } from './batch/detail.js'
@@ -423,7 +423,7 @@ export default {
     if (pathname === '/audit/verify' && request.method === 'GET') {
       if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
 
-      const chain = await readChain(env.DB)
+      const chain = await readWholeChain(env.DB)
       const brokenAt = await verifyChain(chain)
 
       return json(
