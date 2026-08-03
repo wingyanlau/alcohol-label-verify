@@ -14,6 +14,7 @@ import { loadSubmissionDetail } from './batch/detail.js'
 import { startBatch } from './batch/intake.js'
 import { contentKey, labelImageKey } from './batch/keys.js'
 import { processItem } from './batch/pipeline.js'
+import { createWorkersAiProvider } from './providers/workers-ai.js'
 import { PAGE_HTML } from './ui/page.js'
 
 export interface Env {
@@ -380,6 +381,82 @@ export default {
       }
 
       return json({ status: 'ok', model: env.MODEL_ID, imageBytes: bytes.byteLength, results })
+    }
+
+    // Why an extraction comes back empty.
+    //
+    // The failure is `provider returned an empty response`: the model answers
+    // with nothing at all, which the contract rejects rather than guessing
+    // around. It is not the image transport — /health/vision proves that reads
+    // fine — and not the placeholder guard, which reports itself.
+    //
+    // Two candidates remain, and they are distinguishable: the images
+    // themselves, or the fact that a submission runs both extractions
+    // concurrently (verify.ts, Promise.all). This runs the *production*
+    // provider over the shipped rasters — label alone, record alone, then both
+    // together — so whichever of the three comes back empty names the cause.
+    if (pathname === '/health/extract') {
+      if (!env.AI) return json({ status: 'unavailable', reason: 'no AI binding' }, 503)
+      if (!env.ASSETS) return json({ status: 'unavailable', reason: 'no ASSETS binding' }, 503)
+
+      const url = new URL(request.url)
+      const id = url.searchParams.get('id') ?? 'L01'
+      const fields = ['brandName', 'classType', 'alcoholContent', 'netContents'] as const
+
+      const asset = async (path: string): Promise<ArrayBuffer | null> => {
+        const r = await env.ASSETS?.fetch(new Request(`https://assets.local/${path}`))
+        return r?.ok ? r.arrayBuffer() : null
+      }
+      const [labelImage, recordImage] = await Promise.all([
+        asset(`rasters/${id}-label.png`),
+        asset(`rasters/${id}-record.png`),
+      ])
+      if (!labelImage || !recordImage) {
+        return json({ status: 'error', reason: `no shipped rasters for ${id}` }, 404)
+      }
+
+      const provider = createWorkersAiProvider({ ai: env.AI, modelId: env.MODEL_ID })
+      const call = (image: ArrayBuffer, region: 'label' | 'record') =>
+        provider.extract({
+          region,
+          image,
+          mimeType: 'image/png',
+          fields: [...fields],
+          includeWarning: region === 'label',
+        })
+
+      const attempt = async (name: string, run: () => Promise<unknown>) => {
+        const started = Date.now()
+        try {
+          await run()
+          return { [name]: { ok: true, latencyMs: Date.now() - started } }
+        } catch (e) {
+          return {
+            [name]: {
+              ok: false,
+              latencyMs: Date.now() - started,
+              error: e instanceof Error ? e.message : String(e),
+            },
+          }
+        }
+      }
+
+      // Sequential first, so a concurrency effect cannot contaminate them.
+      const labelOnly = await attempt('labelAlone', () => call(labelImage, 'label'))
+      const recordOnly = await attempt('recordAlone', () => call(recordImage, 'record'))
+      const together = await attempt('bothInParallel', () =>
+        Promise.all([call(labelImage, 'label'), call(recordImage, 'record')]),
+      )
+
+      return json({
+        status: 'ok',
+        id,
+        labelBytes: labelImage.byteLength,
+        recordBytes: recordImage.byteLength,
+        ...labelOnly,
+        ...recordOnly,
+        ...together,
+      })
     }
 
     if (pathname === '/health/raster') {
