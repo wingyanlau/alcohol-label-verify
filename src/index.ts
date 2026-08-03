@@ -14,7 +14,7 @@ import { loadSubmissionDetail } from './batch/detail.js'
 import { startBatch } from './batch/intake.js'
 import { contentKey, labelImageKey } from './batch/keys.js'
 import { processItem } from './batch/pipeline.js'
-import { createWorkersAiProvider } from './providers/workers-ai.js'
+import { buildPrompt, createWorkersAiProvider } from './providers/workers-ai.js'
 import { PAGE_HTML } from './ui/page.js'
 
 export interface Env {
@@ -441,6 +441,81 @@ export default {
         }
       }
 
+      // What the API actually returns.
+      //
+      // The adapter reports "empty response" when `response.response` is not a
+      // string — which is an inference, not an observation. If this call
+      // returns a different shape, the content could be present and unread.
+      // So dump the raw envelope before concluding anything about emptiness.
+      const rawShapes: Record<string, unknown> = {}
+      for (const [name, input] of Object.entries({
+        production: {
+          temperature: 0,
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: buildPrompt({
+                    region: 'label',
+                    image: labelImage,
+                    mimeType: 'image/png',
+                    fields: [...fields],
+                    includeWarning: true,
+                  }),
+                },
+                {
+                  type: 'image_url',
+                  image_url: { url: `data:image/png;base64,${bytesToBase64(labelImage)}` },
+                },
+              ],
+            },
+          ],
+        },
+        'no temperature': {
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'List every line of text printed on this label.' },
+                {
+                  type: 'image_url',
+                  image_url: { url: `data:image/png;base64,${bytesToBase64(labelImage)}` },
+                },
+              ],
+            },
+          ],
+        },
+        'short, 64 tokens': {
+          max_tokens: 64,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'What brand name is printed on this label?' },
+                {
+                  type: 'image_url',
+                  image_url: { url: `data:image/png;base64,${bytesToBase64(labelImage)}` },
+                },
+              ],
+            },
+          ],
+        },
+      })) {
+        try {
+          const out = await env.AI.run(env.MODEL_ID as keyof AiModels, input as never)
+          rawShapes[name] = {
+            keys: out && typeof out === 'object' ? Object.keys(out) : typeof out,
+            envelope: JSON.stringify(out).slice(0, 300),
+          }
+        } catch (e) {
+          rawShapes[name] = { threw: e instanceof Error ? e.message : String(e) }
+        }
+      }
+
       // Sequential first, so a concurrency effect cannot contaminate them.
       const labelOnly = await attempt('labelAlone', () => call(labelImage, 'label'))
       const recordOnly = await attempt('recordAlone', () => call(recordImage, 'record'))
@@ -453,6 +528,7 @@ export default {
         id,
         labelBytes: labelImage.byteLength,
         recordBytes: recordImage.byteLength,
+        rawShapes,
         ...labelOnly,
         ...recordOnly,
         ...together,

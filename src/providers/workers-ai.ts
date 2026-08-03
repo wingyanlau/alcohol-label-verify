@@ -44,7 +44,7 @@ const SAMPLING = { temperature: 0, max_tokens: 1024 } as const
  *  3. Asks for the warning statement VERBATIM, including capitalisation, since
  *     FR-6 turns on whether the header is in capitals.
  */
-function buildPrompt(request: ExtractionRequest): string {
+export function buildPrompt(request: ExtractionRequest): string {
   const fieldList = request.fields.map((f) => `  "${f}"  — ${FIELD_LABELS[f]}`).join('\n')
 
   const subject =
