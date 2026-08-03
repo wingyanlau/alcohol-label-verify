@@ -206,7 +206,16 @@ export function createGeminiProvider(opts: GeminiOptions): Provider {
           headers: { 'content-type': 'application/json', 'x-goog-api-key': opts.apiKey },
           body: JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: 'Reply with the single word: ready' }] }],
-            generationConfig: { temperature: 0, maxOutputTokens: 8 },
+            // The same thinking settings the real call uses, and for the same
+            // reason. A liveness check that configures the model differently
+            // from production is not checking production: at 8 tokens with
+            // thinking left on, the budget went entirely to reasoning and the
+            // probe reported a truncation for a model that was perfectly well.
+            generationConfig: {
+              temperature: 0,
+              maxOutputTokens: 64,
+              thinkingConfig: { thinkingBudget: 0 },
+            },
           }),
         },
       )

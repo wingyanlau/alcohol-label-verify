@@ -163,6 +163,32 @@ describe('the envelope', () => {
   })
 })
 
+describe('the liveness check', () => {
+  // It failed a healthy deployment. At 8 output tokens with thinking left on,
+  // the budget went entirely to reasoning and no answer was ever emitted, so
+  // the probe reported a truncation for a model that was answering fine
+  // through the extraction path beside it. A liveness check configured
+  // differently from production is not checking production.
+  it('asks under the same thinking settings the real call uses', async () => {
+    let sent: Record<string, unknown> = {}
+    await provider(
+      () => ok('ready'),
+      async (req) => {
+        sent = (await req.clone().json()) as Record<string, unknown>
+      },
+    ).ping()
+
+    const cfg = sent.generationConfig as Record<string, unknown>
+    expect((cfg.thinkingConfig as Record<string, unknown>).thinkingBudget).toBe(0)
+    expect(cfg.maxOutputTokens as number).toBeGreaterThan(8)
+  })
+
+  it('reports an unreachable model rather than staying silent', async () => {
+    const denied = new Response('PERMISSION_DENIED', { status: 403 })
+    await expect(provider(() => denied).ping()).rejects.toThrow(/HTTP 403/)
+  })
+})
+
 describe('provenance', () => {
   it('reports the vendor, the model and the shared prompt version', async () => {
     const r = await provider(() => ok(JSON.stringify(body))).extract(request)
