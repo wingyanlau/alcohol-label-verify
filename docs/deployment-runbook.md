@@ -260,6 +260,17 @@ bindings reading `false` — were both propagation and resolved on retry.
 | `deploy-production.yml` | push to `prod`, or manual | Migrate → deploy → verify production → tag `release-YYYYMMDD-HHMM` |
 | `quality.yml` | called by the three above | Lint, typecheck, coverage, guard-test presence |
 
+Verification waits for the version it just deployed. `wrangler deploy` prints a
+version id, `/health` reports the id of whichever deployment answered, and the
+check polls until the two match before asserting anything.
+
+That is not decoration. Cloudflare serves the previous worker for a few seconds
+after upload, and the earlier check retried until it received a 200 and then
+asserted — so a healthy PREVIOUS version could satisfy a check about a broken
+new one. It did: a deployment misconfigured for its inference provider passed
+this gate while `/health` was returning 503. The loop written to tolerate
+propagation lag was what made it accept a stale answer.
+
 The gate lives in one reusable workflow so the check a change passes on a pull
 request is the same one it passes on the way to an environment. Each deploy job
 ends with the §6.1 verification as an *assertion* rather than a printout: the

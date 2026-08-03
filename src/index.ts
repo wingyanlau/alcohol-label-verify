@@ -138,6 +138,9 @@ export default {
         {
           status: problems.length === 0 ? 'ok' : 'misconfigured',
           environment: env.ENVIRONMENT,
+          // Which deployment answered. A verification that cannot tell this
+          // from the previous version is not verifying the deploy.
+          version: env.CF_VERSION_METADATA?.id ?? null,
           model: { provider: env.MODEL_PROVIDER, id: env.MODEL_ID },
           bindings: bindings(env as unknown as Record<string, unknown>),
           schemaVersion: schema,

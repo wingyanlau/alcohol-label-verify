@@ -65,18 +65,74 @@ jobs:
       # revision or the API. The verification below is the real arbiter either
       # way: if the deploy did land, it passes; if it did not, it fails.
       - name: Deploy
+        id: deploy
         run: |
           set -euo pipefail
-          npm run deploy:production || {
+          deploy() { npm run deploy:production 2>&1; }
+          # Retried once: the Cloudflare API can return a 521 with an HTML body
+          # on a trailing call, after the script has already uploaded. `wrangler
+          # deploy` is idempotent, so a second attempt settles whether the
+          # failure was the revision or the API.
+          out=$(deploy) || {
             echo "::warning::first deploy attempt failed — retrying once"
             sleep 15
-            npm run deploy:production
+            out=$(deploy)
           }
+          echo "$out"
+
+          # The version this run published. Verification below waits for THIS
+          # id to be the one answering, rather than accepting whichever version
+          # happens to reply first.
+          version=$(printf '%s\n' "$out" | grep -oE 'Current Version ID: [0-9a-fA-F-]{8,}' | tail -1 | sed 's/.*: //')
+          [ -n "$version" ] || { echo "::error::could not read the deployed version id"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "deployed version $version"
 
       - name: Verify deployment
         run: |
           set -euo pipefail
           url="https://alcohol-label-verify.wing-lawrence.workers.dev"
+          want="${{ steps.deploy.outputs.version }}"
+
+          # Wait for the version just deployed to be the one answering.
+          #
+          # Cloudflare serves the previous worker for a few seconds after
+          # upload. The old loop retried until it received a 200 and then
+          # asserted — which meant a healthy PREVIOUS version could satisfy a
+          # check about a broken new one. That is not a hypothetical: a
+          # deployment misconfigured for its provider passed this gate.
+          #
+          # No -f, deliberately: a misconfigured deployment answers 503, and its
+          # body is exactly what has to be read to know it arrived.
+          body=''
+          got=''
+          for attempt in $(seq 1 15); do
+            body=$(curl -sS --max-time 20 "$url/health" || true)
+            got=$(printf '%s' "$body" | jq -r '.version // ""' 2>/dev/null || echo '')
+            [ "$got" = "$want" ] && break
+            echo "attempt $attempt: serving version ${got:-<none>}, waiting for $want"
+            sleep 4
+          done
+
+          [ "$got" = "$want" ] || {
+            echo "::error::the deployed version never became live (still serving ${got:-<none>})"
+            exit 1
+          }
+
+          echo "$body"
+          echo "$body" | jq -e '.status == "ok"' > /dev/null \
+            || { echo "::error::/health reported: $(echo "$body" | jq -c '.problems // .')"; exit 1; }
+          echo "$body" | jq -e '.environment == "production"' > /dev/null \
+            || { echo "::error::deployed worker reports environment $(echo "$body" | jq -r '.environment')"; exit 1; }
+
+          # modelApiKey is absent by design under a binding-authed provider —
+          # asserting that every binding is true would fail such a deploy. These
+          # five are the ones whose absence a successful upload would hide.
+          missing=$(echo "$body" | jq -r '
+            .bindings as $b
+            | ["staging", "database", "inference", "workQueue", "jobCoordinator"]
+            | map(select($b[.] != true)) | join(", ")')
+          [ -z "$missing" ] || { echo "::error::missing bindings: $missing"; exit 1; }
 
           for attempt in 1 2 3 4 5; do
             if body=$(curl -fsS --max-time 20 "$url/health"); then break; fi

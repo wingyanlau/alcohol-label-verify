@@ -37,6 +37,15 @@ export interface Env {
   DB?: D1Database
   /** The bundled demonstration corpus, read at intake (see wrangler `assets`). */
   ASSETS?: Fetcher
+  /**
+   * Which deployment is running.
+   *
+   * Reported by /health so a post-deploy check can tell the version it just
+   * shipped from the one it replaced. Cloudflare serves the previous worker for
+   * a few seconds after upload, so a check that retries until it gets a 200
+   * accepts a stale answer — and certifies a deployment it never looked at.
+   */
+  CF_VERSION_METADATA?: { readonly id: string; readonly tag: string; readonly timestamp: string }
 }
 
 /**

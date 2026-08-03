@@ -20,6 +20,14 @@
   "compatibility_date": "2026-08-01",
   "compatibility_flags": ["nodejs_compat"],
 
+  // Identifies the running deployment to itself, so /health can say WHICH
+  // version answered. Without it a post-deploy check can be satisfied by the
+  // version it is replacing: Cloudflare serves the old worker for a few seconds
+  // after upload, and a verification that retries until it gets a 200 will
+  // happily accept that stale answer — which is how a misconfigured deploy
+  // passed its own gate.
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+
   // Structured logs. Payload-free by policy (D20) — identifiers, classifications
   // and timings only, never label artwork or application values.
   "observability": {
@@ -194,6 +202,7 @@
 
       "ai": { "binding": "AI" },
       "browser": { "binding": "BROWSER" },
+      "version_metadata": { "binding": "CF_VERSION_METADATA" },
 
       "queues": {
         "producers": [{ "binding": "WORK", "queue": "alcohol-label-verify-work-staging" }],
@@ -244,6 +253,7 @@
 
       "ai": { "binding": "AI" },
       "browser": { "binding": "BROWSER" },
+      "version_metadata": { "binding": "CF_VERSION_METADATA" },
 
       "queues": {
         "producers": [{ "binding": "WORK", "queue": "alcohol-label-verify-work" }],
