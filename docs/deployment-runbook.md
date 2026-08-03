@@ -166,6 +166,33 @@ dashboard.
 | `MAX_BATCH_ITEMS` | `300` | Peak-season filing size, and a spend bound |
 | `max_batch_size` (queue) | `1` | One submission per invocation. Batching would serialise the two parallel extractions against the 6-connection cap (B-D4) |
 
+### AI Gateway (optional)
+
+A proxy in front of whichever provider is configured, giving per-request
+analytics, caching and rate-limit control across vendors. It exists because a
+day's inference allowance was spent without anyone being able to say on what:
+usage was visible only as "it worked" or as a 429.
+
+Create it once — **AI → AI Gateway → Create Gateway** in the dashboard, name
+`alcohol-label-verify` — then set two vars per environment in `wrangler.jsonc`:
+
+```jsonc
+"AI_GATEWAY_ID": "alcohol-label-verify",
+"AI_GATEWAY_ACCOUNT": "fb1dbb92cdbbab3ebd151838821ce3e5"
+```
+
+Both absent means the providers talk to their vendors directly, exactly as
+before. A half-configured gateway — an id with no account — also falls back to
+direct rather than building a URL that would 404 every request.
+
+**Caching is off unless `AI_GATEWAY_CACHE_TTL` is set, deliberately.** It would
+make a repeated corpus run nearly free, which is why it must be opted into: a
+run served from cache measures the cache, not the model, and B-Q4 asks which
+model reads a 4.5pt warning best. Turn it on for a demonstration; leave it off
+for a measurement.
+
+---
+
 ### Secrets
 
 Worker secrets, not GitHub secrets: CI passes `CLOUDFLARE_API_TOKEN` to

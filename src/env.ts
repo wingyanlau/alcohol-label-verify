@@ -20,6 +20,17 @@ export interface Env {
   MAX_BATCH_ITEMS: string
   RASTER_DPI: string
   EXTRACT_CONCURRENCY: string
+  /**
+   * AI Gateway, optional.
+   *
+   * Set `AI_GATEWAY_ID` to route inference through it and get per-request
+   * analytics across vendors. `AI_GATEWAY_ACCOUNT` is needed only for an
+   * external provider's URL. Caching is off unless `AI_GATEWAY_CACHE_TTL` is
+   * set, because a corpus run served from cache measures the cache.
+   */
+  AI_GATEWAY_ID?: string
+  AI_GATEWAY_ACCOUNT?: string
+  AI_GATEWAY_CACHE_TTL?: string
   /** Set with `wrangler secret put MODEL_API_KEY`. Never present in config. */
   MODEL_API_KEY?: string
 

@@ -131,6 +131,14 @@ export interface GeminiOptions {
   readonly modelId: string
   /** Injected so tests are deterministic (test-plan §17). */
   readonly now?: () => number
+  /**
+   * Base URL to call instead of Google's own.
+   *
+   * Set when routing through AI Gateway, which keeps Google's request and
+   * response schema and only changes where it is sent — so the adapter needs
+   * nothing else.
+   */
+  readonly baseUrl?: string
   /** Injected so tests never reach the network. */
   readonly fetchImpl?: typeof fetch
 }
@@ -204,6 +212,7 @@ function answerText(envelope: unknown): string {
 export function createGeminiProvider(opts: GeminiOptions): Provider {
   const now = opts.now ?? (() => Date.now())
   const doFetch = opts.fetchImpl ?? fetch
+  const endpoint = opts.baseUrl ? `${opts.baseUrl.replace(/\/$/, '')}/v1/models` : ENDPOINT
 
   return {
     name: GEMINI_SPEC.name,
@@ -211,7 +220,7 @@ export function createGeminiProvider(opts: GeminiOptions): Provider {
 
     async ping(): Promise<void> {
       const response = await doFetch(
-        `${ENDPOINT}/${encodeURIComponent(opts.modelId)}:generateContent`,
+        `${endpoint}/${encodeURIComponent(opts.modelId)}:generateContent`,
         {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-goog-api-key': opts.apiKey },
@@ -238,7 +247,7 @@ export function createGeminiProvider(opts: GeminiOptions): Provider {
     },
 
     async listModels(): Promise<readonly string[]> {
-      const response = await doFetch(ENDPOINT, {
+      const response = await doFetch(endpoint, {
         headers: { 'x-goog-api-key': opts.apiKey },
       })
       if (!response.ok) {
@@ -259,7 +268,7 @@ export function createGeminiProvider(opts: GeminiOptions): Provider {
       const started = now()
 
       const response = await doFetch(
-        `${ENDPOINT}/${encodeURIComponent(opts.modelId)}:generateContent`,
+        `${endpoint}/${encodeURIComponent(opts.modelId)}:generateContent`,
         {
           method: 'POST',
           headers: {

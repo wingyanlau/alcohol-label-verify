@@ -20,6 +20,7 @@ import {
   parseExtractionResponse,
 } from '../domain/extraction.js'
 import { toBase64 } from './base64.js'
+import type { GatewaySettings } from './gateway.js'
 import { extractJson } from './json.js'
 import { buildPrompt, PROMPT_VERSION } from './prompt.js'
 import { type FaultKind, messageOf, type Provider, type ProviderSpec } from './types.js'
@@ -105,12 +106,26 @@ export interface WorkersAiOptions {
   readonly ai: Ai
   /** Fully qualified. Validated by the caller at startup (D29). */
   readonly modelId: string
+  /** Routes through AI Gateway when configured. Absent means talk directly. */
+  readonly gateway?: GatewaySettings
   /** Injected so tests are deterministic (test-plan §17). */
   readonly now?: () => number
 }
 
 export function createWorkersAiProvider(opts: WorkersAiOptions): Provider {
   const now = opts.now ?? (() => Date.now())
+
+  // Undefined rather than an empty object when unconfigured: the binding
+  // treats a present `gateway` as a routing instruction.
+  const routing = opts.gateway
+    ? {
+        gateway: {
+          id: opts.gateway.id,
+          skipCache: opts.gateway.cacheTtlSeconds === 0,
+          cacheTtl: opts.gateway.cacheTtlSeconds,
+        },
+      }
+    : undefined
 
   return {
     name: WORKERS_AI_SPEC.name,
@@ -153,6 +168,7 @@ export function createWorkersAiProvider(opts: WorkersAiOptions): Provider {
             },
           ],
         } as never,
+        routing as never,
       )) as unknown
 
       const latencyMs = now() - started

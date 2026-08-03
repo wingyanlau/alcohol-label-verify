@@ -12,6 +12,7 @@
  * when one may be missing.
  */
 
+import { gatewayBaseUrl, gatewayFrom } from './gateway.js'
 import { createGeminiProvider, GEMINI_SPEC } from './gemini.js'
 import type { Provider, ProviderSpec } from './types.js'
 import { createWorkersAiProvider, WORKERS_AI_SPEC } from './workers-ai.js'
@@ -34,6 +35,10 @@ export interface ProviderEnv {
   readonly MODEL_ID: string
   readonly MODEL_API_KEY?: string
   readonly AI?: Ai
+  /** AI Gateway, when configured. Absent means talk to the vendor directly. */
+  readonly AI_GATEWAY_ID?: string
+  readonly AI_GATEWAY_ACCOUNT?: string
+  readonly AI_GATEWAY_CACHE_TTL?: string
 }
 
 /**
@@ -46,11 +51,16 @@ export interface ProviderEnv {
  */
 export function createProvider(env: ProviderEnv, fetchImpl?: typeof fetch): Provider {
   const name = (env.MODEL_PROVIDER ?? '').trim().toLowerCase()
+  const gateway = gatewayFrom(env)
 
   switch (name) {
     case WORKERS_AI_SPEC.name: {
       if (!env.AI) throw new Error('MODEL_PROVIDER is "workers-ai" but no AI binding is attached')
-      return createWorkersAiProvider({ ai: env.AI, modelId: env.MODEL_ID })
+      return createWorkersAiProvider(
+        gateway
+          ? { ai: env.AI, modelId: env.MODEL_ID, gateway }
+          : { ai: env.AI, modelId: env.MODEL_ID },
+      )
     }
     case GEMINI_SPEC.name: {
       const apiKey = env.MODEL_API_KEY ?? ''
@@ -60,11 +70,15 @@ export function createProvider(env: ProviderEnv, fetchImpl?: typeof fetch): Prov
             'set it with `wrangler secret put MODEL_API_KEY`',
         )
       }
-      return createGeminiProvider(
-        fetchImpl
-          ? { apiKey, modelId: env.MODEL_ID, fetchImpl }
-          : { apiKey, modelId: env.MODEL_ID },
-      )
+      // Google AI Studio keeps its own request and response schema behind the
+      // gateway, so only the destination changes.
+      const baseUrl = gatewayBaseUrl(gateway, 'google-ai-studio')
+      return createGeminiProvider({
+        apiKey,
+        modelId: env.MODEL_ID,
+        ...(baseUrl ? { baseUrl } : {}),
+        ...(fetchImpl ? { fetchImpl } : {}),
+      })
     }
     default:
       throw new Error(`unknown MODEL_PROVIDER "${name}" — known providers: ${knownProviderNames()}`)
