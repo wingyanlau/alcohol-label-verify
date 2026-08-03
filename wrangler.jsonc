@@ -89,7 +89,7 @@
         // One submission per invocation. Batching would serialise the two
         // parallel extractions against the 6-connection cap (B-D4).
         "max_batch_size": 1,
-        // Three submissions in flight, across the whole batch.
+        // One submission in flight, across the whole batch.
         //
         // Every item launches its own headless browser, and the account's
         // concurrent-browser cap is 3 on the free plan and 10 on paid. Left to
@@ -105,7 +105,7 @@
         // paid plan's cap of 10 it is comfortable. Raising it further is the
         // first thing to revisit when throughput matters; batch design §15.4
         // already prefers Containers over Browser Rendering for this reason.
-        "max_concurrency": 3,
+        "max_concurrency": 1,
         "max_retries": 3,
         "dead_letter_queue": "alcohol-label-verify-dlq"
       }
@@ -180,7 +180,7 @@
             "queue": "alcohol-label-verify-work-staging",
             "max_batch_size": 1,
             // Three in flight — see the note on the development consumer above.
-            "max_concurrency": 3,
+            "max_concurrency": 1,
             "max_retries": 3,
             "dead_letter_queue": "alcohol-label-verify-dlq-staging"
           }
@@ -230,7 +230,7 @@
             "queue": "alcohol-label-verify-work",
             "max_batch_size": 1,
             // Three in flight — see the note on the development consumer above.
-            "max_concurrency": 3,
+            "max_concurrency": 1,
             "max_retries": 3,
             "dead_letter_queue": "alcohol-label-verify-dlq"
           }

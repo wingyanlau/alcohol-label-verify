@@ -8,6 +8,7 @@
  * §9.5 (configuration).
  */
 
+import { loadCurrentJob } from './batch/current.js'
 import { loadSubmissionDetail } from './batch/detail.js'
 import { startBatch } from './batch/intake.js'
 import { labelImageKey } from './batch/keys.js'
@@ -315,8 +316,26 @@ export default {
     // Start a batch over the bundled corpus. The honest failure mode of an
     // unauthenticated batch endpoint is a bill (batch design §6.3); the corpus
     // is fixed at 26, so there is nothing here for a caller to inflate.
+    // Which job every session should be showing. The page asks on load, so a
+    // reload — or a second visitor — rejoins the batch in progress instead of
+    // being offered a start button while 26 submissions are being read.
+    if (pathname === '/batch/current' && request.method === 'GET') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+      return json(await loadCurrentJob(env.DB))
+    }
+
     if (pathname === '/batch' && request.method === 'POST') {
       try {
+        // Joining, not starting a second job: two people pressing the button
+        // must converge on one ledger, or "everyone sees the same thing" is
+        // false by construction. It also stops a double-click from costing
+        // another 26 browser launches against the rate limit.
+        if (env.DB) {
+          const current = await loadCurrentJob(env.DB)
+          if (current?.running) {
+            return json({ jobId: current.jobId, joined: true })
+          }
+        }
         return json(await startBatch(env))
       } catch (e) {
         return json(

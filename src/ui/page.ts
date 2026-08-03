@@ -159,11 +159,30 @@ export const PAGE_HTML = `<!doctype html>
     }
   }
 
+  // The button reflects the job, not this tab. A session that merely joined a
+  // running batch must not offer to start another one.
+  function setButton(mode) {
+    if (mode === 'running') {
+      startBtn.disabled = true
+      startBtn.textContent = 'Checking…'
+    } else if (mode === 'rerun') {
+      startBtn.disabled = false
+      startBtn.textContent = 'Check the 26 test submissions again'
+    } else {
+      startBtn.disabled = false
+      startBtn.textContent = 'Check the 26 test submissions'
+    }
+  }
+
   function renderProgress(progress) {
     total = progress.total
     var done = progress.completed + progress.failed
     progressLabel.textContent = 'Checked ' + done + ' of ' + total
     bar.style.width = total ? Math.round((done / total) * 100) + '%' : '0%'
+    // progress.done is the ledger's own judgement that nothing remains —
+    // including a batch where every item failed, which is finished rather
+    // than waiting.
+    setButton(progress.done ? 'rerun' : 'running')
   }
 
   function renderCounts() {
@@ -261,21 +280,41 @@ export const PAGE_HTML = `<!doctype html>
     startBtn.disabled = true
     startBtn.textContent = 'Starting…'
     startErr.classList.add('hidden')
+    // The server returns the job in flight if there is one, so this is a join
+    // rather than a second batch. Nothing here needs to distinguish them.
     fetch('/batch', { method: 'POST' })
       .then(function (r) { if (!r.ok) throw new Error('start failed'); return r.json() })
       .then(function (data) {
         jobId = data.jobId
         batchSection.classList.remove('hidden')
-        startBtn.textContent = 'Checking…'
+        setButton('running')
         connect()
       })
       .catch(function () {
-        startBtn.disabled = false
-        startBtn.textContent = 'Check the 26 test submissions'
+        setButton('idle')
         startErr.textContent = 'The check could not be started. Nothing was saved. Please try again in a moment.'
         startErr.classList.remove('hidden')
       })
   })
+
+  // Adopt whatever the service is already doing. A batch belongs to the
+  // service, not to the tab that started it: reloading, or arriving late,
+  // shows the same worklist everyone else is looking at. The coordinator
+  // sends a full snapshot on connect, so the job id is all this needs.
+  function bootstrap() {
+    fetch('/batch/current')
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (data) {
+        if (!data || !data.jobId) return
+        jobId = data.jobId
+        batchSection.classList.remove('hidden')
+        if (data.running) setButton('running')
+        connect()
+      })
+      .catch(function () { /* no current job to adopt; the button stands */ })
+  }
+
+  bootstrap()
 
   // ---- Detail view (ui-design §5-§7) --------------------------------------
 
