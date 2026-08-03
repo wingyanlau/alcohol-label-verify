@@ -2,11 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { buildInvocation } from './page-script.js'
 
 /** Evaluate an expression the way `page.evaluate` would evaluate a string. */
-const evaluate = (expression: string): unknown =>
-  // biome-ignore lint/security/noGlobalEval: evaluating the expression is the
-  // behaviour under test — the bug this guards was an expression that looked
-  // like a call and was not one. A structural assertion would have passed.
-  new Function(`return ${expression}`)()
+// Evaluating for real, rather than asserting on the string's shape: the bug
+// this guards was an expression that looked like a call and was not one, and a
+// structural assertion would have passed it.
+const evaluate = (expression: string): unknown => new Function(`return ${expression}`)()
 
 describe('in-page invocation', () => {
   // The regression. Passing the source and the arguments separately produced an
