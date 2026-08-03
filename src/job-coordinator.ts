@@ -160,6 +160,32 @@ export class JobCoordinator extends DurableObject<Env> {
   }
 
   /**
+   * Mark a specific item as running.
+   *
+   * The queue delivers one message per item, so a worker starts a NAMED item
+   * rather than pulling the next queued one — `claimNextItem` is the pull-model
+   * alternative the health probe exercises. Like every operation here it is a
+   * single conditional UPDATE (R3): the QUEUED→RUNNING transition happens once,
+   * so a redelivered message cannot double-count an attempt or re-broadcast.
+   */
+  async startItem(itemId: string): Promise<Progress> {
+    const rows = this.#sql
+      .exec<{ item_id: string }>(
+        `UPDATE item
+            SET state = 'RUNNING', attempts = attempts + 1, updated_at = ?
+          WHERE item_id = ? AND state = 'QUEUED'
+      RETURNING item_id`,
+        new Date().toISOString(),
+        itemId,
+      )
+      .toArray()
+
+    const progress = this.#progress()
+    if (rows[0]) this.#broadcast({ type: 'item.started', itemId, progress })
+    return progress
+  }
+
+  /**
    * Record a verdict.
    *
    * `INCOMPLETE` is a COMPLETED item, not a failure (B-D6): a label that could

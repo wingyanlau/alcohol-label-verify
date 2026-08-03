@@ -4,6 +4,17 @@
   "name": "alcohol-label-verify",
   "main": "src/index.ts",
 
+  // The bundled demonstration corpus. `testdata/` ships as static assets so the
+  // batch endpoint can read the 26 submissions through the ASSETS binding
+  // without a separate seeding step. `run_worker_first` keeps the Worker in
+  // control of every route — assets are reachable only via the binding, never
+  // served directly — so the corpus is not a public directory listing.
+  "assets": {
+    "directory": "./testdata",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+
   // Pinned deliberately. A floating runtime date changes behaviour underneath a
   // recorded audit trail, for the same reason D29 refuses a floating model alias.
   "compatibility_date": "2026-08-01",

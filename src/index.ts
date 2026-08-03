@@ -8,6 +8,12 @@
  * §9.5 (configuration).
  */
 
+import { loadSubmissionDetail } from './batch/detail.js'
+import { startBatch } from './batch/intake.js'
+import { labelImageKey } from './batch/keys.js'
+import { processItem } from './batch/pipeline.js'
+import { PAGE_HTML } from './ui/page.js'
+
 export interface Env {
   ENVIRONMENT: string
   MODEL_PROVIDER: string
@@ -33,6 +39,8 @@ export interface Env {
   STAGING?: R2Bucket
   /** The durable record and append-only transaction history (D32). */
   DB?: D1Database
+  /** The bundled demonstration corpus, read at intake (see wrangler `assets`). */
+  ASSETS?: Fetcher
 }
 
 /**
@@ -115,6 +123,7 @@ function bindings(env: Record<string, unknown>): Record<string, boolean> {
     inference: 'AI' in env,
     workQueue: 'WORK' in env,
     jobCoordinator: 'JOB' in env,
+    assets: 'ASSETS' in env,
     modelApiKey: typeof env.MODEL_API_KEY === 'string' && env.MODEL_API_KEY.length > 0,
   }
 }
@@ -301,54 +310,129 @@ export default {
       }
     }
 
+    // ---- Batch application ------------------------------------------------
+
+    // Start a batch over the bundled corpus. The honest failure mode of an
+    // unauthenticated batch endpoint is a bill (batch design §6.3); the corpus
+    // is fixed at 26, so there is nothing here for a caller to inflate.
+    if (pathname === '/batch' && request.method === 'POST') {
+      try {
+        return json(await startBatch(env))
+      } catch (e) {
+        return json(
+          {
+            error: 'batch_unavailable',
+            message: 'The check could not be started. Nothing was saved.',
+            detail: e instanceof Error ? e.message : String(e),
+          },
+          503,
+        )
+      }
+    }
+
+    // Live progress. The Worker only routes the upgrade to the job's
+    // coordinator, which owns the ledger and the fan-out (batch design §7).
+    const stream = pathname.match(/^\/batch\/([^/]+)\/stream$/)
+    if (stream) {
+      const jobId = stream[1]
+      if (jobId) {
+        if (!env.JOB) return json({ error: 'unavailable', reason: 'no JOB binding' }, 503)
+        const stub = env.JOB.get(env.JOB.idFromName(decodeURIComponent(jobId)))
+        return stub.fetch(request)
+      }
+    }
+
+    // The rasterised label crop, kept so the results view shows the artwork.
+    const label = pathname.match(/^\/batch\/([^/]+)\/submission\/([^/]+)\/label\.png$/)
+    if (label && request.method === 'GET') {
+      const jobId = label[1]
+      const itemId = label[2]
+      if (jobId && itemId) {
+        if (!env.STAGING) return new Response('unavailable', { status: 503 })
+        const object = await env.STAGING.get(
+          labelImageKey(decodeURIComponent(jobId), decodeURIComponent(itemId)),
+        )
+        if (object === null) return new Response('not found', { status: 404 })
+        return new Response(object.body, {
+          headers: { 'content-type': 'image/png', 'cache-control': 'no-store' },
+        })
+      }
+    }
+
+    // The full result for one submission, assembled from the durable record.
+    const item = pathname.match(/^\/batch\/([^/]+)\/submission\/([^/]+)$/)
+    if (item && request.method === 'GET') {
+      const jobId = item[1]
+      const itemId = item[2]
+      if (jobId && itemId) {
+        if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+        const labelUrl = `/batch/${encodeURIComponent(jobId)}/submission/${encodeURIComponent(itemId)}/label.png`
+        const detail = await loadSubmissionDetail(env.DB, decodeURIComponent(itemId), labelUrl)
+        if (detail === null) return json({ error: 'not_found' }, 404)
+        return json(detail)
+      }
+    }
+
     if (pathname === '/') {
-      return new Response(
-        'TTB Label Check — deployment skeleton. No application yet.\n' +
-          'Try /health to verify configuration.\n',
-        { headers: { 'content-type': 'text/plain; charset=utf-8' } },
-      )
+      return new Response(PAGE_HTML, {
+        headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
+      })
     }
 
     return json({ error: 'not_found', path: pathname }, 404)
   },
 
   /**
-   * Work consumer — skeleton.
+   * Work consumer — one submission per invocation (B-D4).
    *
-   * One submission per invocation (B-D4): batching would serialise the two
-   * parallel extractions against the 6-connection cap. The verification
-   * pipeline is not built yet, so this validates the message shape and
-   * acknowledges.
-   *
-   * Retry is bounded and permitted here, unlike on the interactive path
-   * (§9.2): the agent is not waiting on any individual batch item, so a retry
-   * is invisible rather than a doubling of worst-case latency.
+   * Batching would serialise the two parallel extractions against the
+   * 6-connection cap, so the queue is configured `max_batch_size: 1` and each
+   * message drives one full pipeline run. Retry is bounded and permitted here,
+   * unlike on the interactive path (§9.2): the agent is not waiting on any
+   * individual batch item, so a retry is invisible rather than a doubling of
+   * worst-case latency.
    */
-  async queue(batch: MessageBatch<WorkMessage>, _env: Env): Promise<void> {
+  async queue(batch: MessageBatch<WorkMessage>, env: Env): Promise<void> {
     for (const message of batch.messages) {
-      const { jobId, submissionId, contentKey } = message.body ?? ({} as WorkMessage)
-      if (!jobId || !submissionId || !contentKey) {
+      const body = message.body ?? ({} as WorkMessage)
+      if (!body.jobId || !body.submissionId || !body.contentKey) {
         // Malformed messages are not retried — redelivery cannot fix them.
         console.log(
-          JSON.stringify({
-            event: 'work.rejected',
-            reason: 'malformed',
-            messageId: message.id,
-          }),
+          JSON.stringify({ event: 'work.rejected', reason: 'malformed', messageId: message.id }),
         )
         message.ack()
         continue
       }
+
       // Payload-free by policy (D20): identifiers and classifications only.
       console.log(
         JSON.stringify({
           event: 'work.received',
-          jobId,
-          submissionId,
+          jobId: body.jobId,
+          submissionId: body.submissionId,
           attempt: message.attempts,
         }),
       )
-      message.ack()
+
+      try {
+        const { retry } = await processItem(env, body, message.attempts)
+        if (retry) message.retry()
+        else message.ack()
+      } catch (e) {
+        // An unexpected fault: let the queue redeliver within its budget, then
+        // give up to the dead-letter queue rather than spinning.
+        console.log(
+          JSON.stringify({
+            event: 'work.error',
+            jobId: body.jobId,
+            submissionId: body.submissionId,
+            attempt: message.attempts,
+            error: e instanceof Error ? e.message : String(e),
+          }),
+        )
+        if (message.attempts >= 3) message.ack()
+        else message.retry()
+      }
     }
   },
 } satisfies ExportedHandler<Env, WorkMessage>
