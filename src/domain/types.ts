@@ -1,3 +1,4 @@
+import type { RuleCitation } from './evidence.js'
 /**
  * Domain types.
  *
@@ -58,8 +59,13 @@ export interface FieldVerdict {
   readonly expected: string | null
   /** As read from the label. `null` when absent or unreadable. */
   readonly observed: string | null
-  /** The rule applied, named so a finding can be defended. */
-  readonly rule: string
+  /**
+   * The rule applied, named so a finding can be defended (FR-10).
+   *
+   * `RuleCitation`, not `string`: it can only be produced by `rule()`, so a
+   * verdict with an empty or placeholder citation does not compile (UT-V03).
+   */
+  readonly rule: RuleCitation
   /**
    * Present only when a rule was actually *exercised* — a tolerance applied, a
    * unit converted, a reading refused. An exact match carries no explanation,

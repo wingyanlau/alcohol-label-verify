@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { rule } from '../domain/evidence.js'
 import type { VerifyResult } from '../domain/verify.js'
 import { buildPersistPlan, type PersistIds } from './persist.js'
 
@@ -21,7 +22,7 @@ function result(overrides: Partial<VerifyResult> = {}): VerifyResult {
         state: 'MATCH',
         expected: 'Old Tom Distillery',
         observed: 'OLD TOM DISTILLERY',
-        rule: 'Matches after ignoring capitalisation, punctuation and spacing',
+        rule: rule('Matches after ignoring capitalisation, punctuation and spacing'),
         explanation: 'Capitalisation differs — treated as a match.',
       },
       {
@@ -29,7 +30,7 @@ function result(overrides: Partial<VerifyResult> = {}): VerifyResult {
         state: 'MISMATCH',
         expected: '45%',
         observed: '40% Alc./Vol.',
-        rule: 'Compared as numbers, ignoring format',
+        rule: rule('Compared as numbers, ignoring format'),
       },
     ],
     warning: {

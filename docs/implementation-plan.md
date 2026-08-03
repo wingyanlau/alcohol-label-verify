@@ -79,8 +79,20 @@ wrong word invalidates every warning verdict the system will ever issue.
 - [ ] Coverage on `src/domain/**` ≥ 95% lines, ≥ 90% branches
 - [ ] No file in `src/domain/` imports a platform API, a clock, or randomness
 - [ ] Every verdict carries the rule that produced it (FR-10)
-- [ ] `UT-A06` and `UT-Q07` are `todo` with Q7 cited, or implemented if M0
+- [x] `UT-A06` and `UT-Q07` are `todo` with Q7 cited, or implemented if M0
       resolved the tolerance question
+- [x] `UT-V01`–`V03` — a verdict carries its evidence, and `rule` is a branded
+      `RuleCitation` that only `rule()` can produce, so a finding with an empty
+      or placeholder citation **does not compile**. "Enforced by the type, not
+      by convention" was the requirement; a runtime check would have been the
+      convention again
+- [ ] `UT-C01`–`C03` (proof against ABV) — **not implemented, deliberately.**
+      The test plan marks them a proposed addition and Q8 an open question, and
+      an internal-consistency check against 27 CFR is a *policy* check:
+      `numeric-consistency` is one of the check kinds in design §18, and M11
+      says in as many words that this is not done by adding rules to
+      `compare.ts`. Ticking it here would build the thing that section argues
+      against
 
 **Verify:** `npm run quality-check` and `grep -rE "cloudflare:|Date\.now|Math\.random" src/domain/` returns nothing.
 

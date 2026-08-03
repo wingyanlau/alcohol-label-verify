@@ -1986,7 +1986,7 @@ plainly in the README, which is the correct handling of a known limitation.
 | Q5 | ~~Deployment target~~ — **resolved (D12): single container** | — | Host still open; low-stakes by §11.3 |
 | Q6 | Which container host | M8 | Any container-capable host; chosen on time-to-URL |
 | ~~Q7~~ | ~~Does any tolerance apply to ABV comparison?~~ — **resolved**: 27 CFR 5.65 and 5.37 govern *actual contents vs. the label*, not label vs. application. **Exact numeric comparison is correct** (project-reference §8.5) | — | Implemented as exact |
-| Q8 | Should internal label consistency be checked — proof against ABV? | Nothing; a proposed addition | Not implemented; offered as a next step. Costs one comparison, needs no application data and no model |
+| Q8 | Should internal label consistency be checked — proof against ABV? | Nothing; a proposed addition | Still not implemented, and now **deliberately located**: it is a policy check, not a comparison. `numeric-consistency` is one of the check kinds in §18, so it belongs in the versioned rule set where it can be cited, versioned and approved — not in `compare.ts`, where it would be a regulation embedded in code. `parseProof` already exists and is unused, waiting for it |
 
 ---
 

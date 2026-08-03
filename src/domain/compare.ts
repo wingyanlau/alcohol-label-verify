@@ -13,6 +13,7 @@
  * — SRC-4).
  */
 
+import { rule } from './evidence.js'
 import { normalizeText, textEquivalent } from './normalize.js'
 import { CONVERSION_TOLERANCE, parseAbv, parseQuantity } from './parse.js'
 import type {
@@ -54,7 +55,7 @@ function preCompare(
       state: 'NOT_SUPPLIED',
       expected: null,
       observed: observed.raw,
-      rule: 'Not assessed — the application did not supply this field',
+      rule: rule('Not assessed — the application did not supply this field'),
     }
   }
 
@@ -66,7 +67,7 @@ function preCompare(
       state: 'UNREADABLE',
       expected: expectedTrimmed,
       observed: null,
-      rule: 'Could not be read from the image',
+      rule: rule('Could not be read from the image'),
       explanation: 'This part of the image is unclear. A clearer photo is needed.',
     }
   }
@@ -78,7 +79,7 @@ function preCompare(
       state: 'MISSING_ON_LABEL',
       expected: expectedTrimmed,
       observed: null,
-      rule: 'Not found on the label',
+      rule: rule('Not found on the label'),
     }
   }
 
@@ -111,7 +112,7 @@ function describeTextDifference(expected: string, observed: string): string {
 function compareTolerantText(field: FieldName, expected: string, observed: string): FieldVerdict {
   if (expected === observed) {
     // Exact match: no rule was exercised, so no explanation (ui-design §6.3).
-    return { field, state: 'MATCH', expected, observed, rule: 'Exact match' }
+    return { field, state: 'MATCH', expected, observed, rule: rule('Exact match') }
   }
 
   if (textEquivalent(expected, observed)) {
@@ -120,7 +121,7 @@ function compareTolerantText(field: FieldName, expected: string, observed: strin
       state: 'MATCH',
       expected,
       observed,
-      rule: 'Matches after ignoring capitalisation, punctuation and spacing',
+      rule: rule('Matches after ignoring capitalisation, punctuation and spacing'),
       explanation: describeTextDifference(expected, observed),
     }
   }
@@ -130,7 +131,7 @@ function compareTolerantText(field: FieldName, expected: string, observed: strin
     state: 'MISMATCH',
     expected,
     observed,
-    rule: 'Compared ignoring capitalisation, punctuation and spacing',
+    rule: rule('Compared ignoring capitalisation, punctuation and spacing'),
   }
 }
 
@@ -144,7 +145,7 @@ function compareNumeric(field: FieldName, expected: string, observed: string): F
       state: 'UNREADABLE',
       expected,
       observed,
-      rule: 'No alcohol content could be read from this text',
+      rule: rule('No alcohol content could be read from this text'),
       explanation: 'The label text did not contain a recognisable percentage or proof.',
     }
   }
@@ -155,7 +156,7 @@ function compareNumeric(field: FieldName, expected: string, observed: string): F
       state: 'MISMATCH',
       expected,
       observed,
-      rule: 'The application value could not be read as a number',
+      rule: rule('The application value could not be read as a number'),
     }
   }
 
@@ -169,7 +170,7 @@ function compareNumeric(field: FieldName, expected: string, observed: string): F
       state: 'MATCH',
       expected,
       observed,
-      rule: 'Compared as numbers, ignoring format',
+      rule: rule('Compared as numbers, ignoring format'),
       ...(viaProof ? { explanation: 'Proof converted to alcohol by volume.' } : {}),
     }
   }
@@ -179,7 +180,7 @@ function compareNumeric(field: FieldName, expected: string, observed: string): F
     state: 'MISMATCH',
     expected,
     observed,
-    rule: 'Compared as numbers, ignoring format',
+    rule: rule('Compared as numbers, ignoring format'),
     explanation: `Application states ${expectedAbv.value}%, the label states ${observedAbv.value}%.`,
   }
 }
@@ -194,7 +195,7 @@ function compareQuantity(field: FieldName, expected: string, observed: string): 
       state: 'UNREADABLE',
       expected,
       observed,
-      rule: 'No net contents could be read from this text',
+      rule: rule('No net contents could be read from this text'),
     }
   }
 
@@ -204,7 +205,7 @@ function compareQuantity(field: FieldName, expected: string, observed: string): 
       state: 'MISMATCH',
       expected,
       observed,
-      rule: 'The application value could not be read as a quantity',
+      rule: rule('The application value could not be read as a quantity'),
     }
   }
 
@@ -221,7 +222,7 @@ function compareQuantity(field: FieldName, expected: string, observed: string): 
       state: 'MISMATCH',
       expected,
       observed,
-      rule: 'Compared by volume, after converting units',
+      rule: rule('Compared by volume, after converting units'),
     }
   }
 
@@ -231,7 +232,7 @@ function compareQuantity(field: FieldName, expected: string, observed: string): 
       state: 'LOW_CONFIDENCE',
       expected,
       observed,
-      rule: 'Compared by volume, after converting units',
+      rule: rule('Compared by volume, after converting units'),
       explanation: 'No unit was found on the label; millilitres assumed. Please double-check.',
     }
   }
@@ -241,7 +242,7 @@ function compareQuantity(field: FieldName, expected: string, observed: string): 
     state: 'MATCH',
     expected,
     observed,
-    rule: 'Compared by volume, after converting units',
+    rule: rule('Compared by volume, after converting units'),
     ...(converted ? { explanation: 'Units differ but the volume is the same.' } : {}),
   }
 }

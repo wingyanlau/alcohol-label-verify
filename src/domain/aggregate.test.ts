@@ -1,3 +1,4 @@
+import { rule } from './evidence.js'
 /**
  * Unit tests for outcome aggregation.
  *
@@ -18,7 +19,7 @@ const field = (state: FieldVerdictState, name: FieldName = 'brandName'): FieldVe
   state,
   expected: 'Old Tom',
   observed: 'Old Tom',
-  rule: 'test fixture',
+  rule: rule('test fixture'),
 })
 
 const warning = (ok: boolean, legible = true): WarningVerdict => ({
