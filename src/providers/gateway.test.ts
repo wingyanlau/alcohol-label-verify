@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gatewayBaseUrl, gatewayFrom } from './gateway.js'
+import { gatewayBaseUrl, gatewayFrom, gatewayHeaders } from './gateway.js'
 
 describe('gateway configuration', () => {
   it('is absent unless an id is set, so nothing changes by default', () => {
@@ -19,6 +19,22 @@ describe('gateway configuration', () => {
     expect(gatewayFrom({ AI_GATEWAY_ID: 'g', AI_GATEWAY_CACHE_TTL: '3600' })?.cacheTtlSeconds).toBe(
       3600,
     )
+  })
+
+  // AI Gateway stores request and response bodies by default, and this
+  // system's are a label image and the values read from it — content, which
+  // logs must never carry (D20). Metrics are kept either way.
+  it('withholds payloads from the gateway log unless explicitly allowed', () => {
+    const g = gatewayFrom({ AI_GATEWAY_ID: 'g' })
+    expect(g?.logPayloads).toBe(false)
+    expect(gatewayHeaders(g)['cf-aig-collect-log-payload']).toBe('false')
+
+    const debugging = gatewayFrom({ AI_GATEWAY_ID: 'g', AI_GATEWAY_LOG_PAYLOADS: 'true' })
+    expect(gatewayHeaders(debugging)['cf-aig-collect-log-payload']).toBe('true')
+  })
+
+  it('adds no headers when there is no gateway', () => {
+    expect(gatewayHeaders(null)).toEqual({})
   })
 
   it('addresses a provider through the account and gateway', () => {

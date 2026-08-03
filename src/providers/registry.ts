@@ -12,7 +12,7 @@
  * when one may be missing.
  */
 
-import { gatewayBaseUrl, gatewayFrom } from './gateway.js'
+import { gatewayBaseUrl, gatewayFrom, gatewayHeaders } from './gateway.js'
 import { createGeminiProvider, GEMINI_SPEC } from './gemini.js'
 import type { Provider, ProviderSpec } from './types.js'
 import { createWorkersAiProvider, WORKERS_AI_SPEC } from './workers-ai.js'
@@ -73,10 +73,11 @@ export function createProvider(env: ProviderEnv, fetchImpl?: typeof fetch): Prov
       // Google AI Studio keeps its own request and response schema behind the
       // gateway, so only the destination changes.
       const baseUrl = gatewayBaseUrl(gateway, 'google-ai-studio')
+      const extraHeaders = gatewayHeaders(gateway)
       return createGeminiProvider({
         apiKey,
         modelId: env.MODEL_ID,
-        ...(baseUrl ? { baseUrl } : {}),
+        ...(baseUrl ? { baseUrl, extraHeaders } : {}),
         ...(fetchImpl ? { fetchImpl } : {}),
       })
     }

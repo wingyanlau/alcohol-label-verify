@@ -27,6 +27,22 @@ export interface GatewaySettings {
    * measurement.
    */
   readonly cacheTtlSeconds: number
+
+  /**
+   * Whether the gateway may store request and response bodies.
+   *
+   * False by default, and that is a policy decision rather than a preference.
+   * AI Gateway stores payloads by default, and this system's payloads are a
+   * base64 label image on the way out and the values read from it on the way
+   * back — content, which logs must never carry (D20, §9.3). Metrics, token
+   * counts, latency and errors are all retained either way; only the artwork
+   * and the readings are withheld.
+   *
+   * Worth enabling against the synthetic corpus when debugging an adapter,
+   * because nothing there belongs to an applicant. Never against real
+   * submissions.
+   */
+  readonly logPayloads: boolean
 }
 
 /** Settings from the environment, or null when the gateway is not configured. */
@@ -34,6 +50,7 @@ export function gatewayFrom(env: {
   AI_GATEWAY_ID?: string
   AI_GATEWAY_ACCOUNT?: string
   AI_GATEWAY_CACHE_TTL?: string
+  AI_GATEWAY_LOG_PAYLOADS?: string
 }): GatewaySettings | null {
   const id = (env.AI_GATEWAY_ID ?? '').trim()
   if (id === '') return null
@@ -43,6 +60,22 @@ export function gatewayFrom(env: {
     id,
     accountId: (env.AI_GATEWAY_ACCOUNT ?? '').trim(),
     cacheTtlSeconds: Number.isFinite(ttl) && ttl > 0 ? Math.floor(ttl) : 0,
+    logPayloads: (env.AI_GATEWAY_LOG_PAYLOADS ?? '').trim().toLowerCase() === 'true',
+  }
+}
+
+/**
+ * Headers that tell the gateway how to treat a request.
+ *
+ * Empty when the gateway is not configured, so an adapter can spread them
+ * unconditionally.
+ */
+export function gatewayHeaders(gateway: GatewaySettings | null): Record<string, string> {
+  if (gateway === null) return {}
+  return {
+    // Explicit in both directions: the default is to store payloads, so
+    // silence here would mean label content persisted to a third-party log.
+    'cf-aig-collect-log-payload': gateway.logPayloads ? 'true' : 'false',
   }
 }
 

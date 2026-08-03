@@ -139,6 +139,8 @@ export interface GeminiOptions {
    * nothing else.
    */
   readonly baseUrl?: string
+  /** Gateway directives, when routing through one. */
+  readonly extraHeaders?: Record<string, string>
   /** Injected so tests never reach the network. */
   readonly fetchImpl?: typeof fetch
 }
@@ -223,7 +225,11 @@ export function createGeminiProvider(opts: GeminiOptions): Provider {
         `${endpoint}/${encodeURIComponent(opts.modelId)}:generateContent`,
         {
           method: 'POST',
-          headers: { 'content-type': 'application/json', 'x-goog-api-key': opts.apiKey },
+          headers: {
+            'content-type': 'application/json',
+            'x-goog-api-key': opts.apiKey,
+            ...(opts.extraHeaders ?? {}),
+          },
           body: JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: 'Reply with the single word: ready' }] }],
             // The same thinking settings the real call uses, and for the same
@@ -276,6 +282,7 @@ export function createGeminiProvider(opts: GeminiOptions): Provider {
             // Header rather than a query parameter, so the credential cannot
             // be captured by anything that logs a URL (§9.3, D20).
             'x-goog-api-key': opts.apiKey,
+            ...(opts.extraHeaders ?? {}),
           },
           body: JSON.stringify({
             contents: [

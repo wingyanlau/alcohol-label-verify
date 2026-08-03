@@ -31,6 +31,7 @@ export interface Env {
   AI_GATEWAY_ID?: string
   AI_GATEWAY_ACCOUNT?: string
   AI_GATEWAY_CACHE_TTL?: string
+  AI_GATEWAY_LOG_PAYLOADS?: string
   /** Set with `wrangler secret put MODEL_API_KEY`. Never present in config. */
   MODEL_API_KEY?: string
 
