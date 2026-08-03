@@ -88,6 +88,7 @@ export const PAGE_HTML = `<!doctype html>
   .field .vals .k { color: var(--muted); min-width: 92px; }
   .field .rule { color: var(--muted); font-size: 15px; margin-top: 4px; font-style: italic; }
   .imgpanel img { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  .imgpanel .pdf { width: 100%; height: 460px; margin-top: 14px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
   .imgpanel .cap { color: var(--muted); font-size: 14px; margin-top: 6px; }
   .warning-seg { padding: 8px 0; }
   .warning-seg .dev { color: var(--muted); font-size: 15px; }
@@ -447,6 +448,26 @@ export const PAGE_HTML = `<!doctype html>
     img.addEventListener('error', function () { right.classList.add('hidden') })
     right.appendChild(img)
     right.appendChild(el('div', 'cap', 'The label as read. Adjudicate against the artwork, not the verdict.'))
+
+    // The whole submission, below the crop. The crop shows what the model was
+    // given; this shows what the applicant filed. A verdict that disagrees with
+    // the document — or a crop that caught the wrong region — is visible only
+    // by looking at both.
+    if (d.sourceUrl) {
+      var frame = document.createElement('iframe')
+      frame.className = 'pdf'
+      frame.src = d.sourceUrl
+      frame.title = 'The submission as filed'
+      right.appendChild(frame)
+      var link = document.createElement('a')
+      link.href = d.sourceUrl
+      link.target = '_blank'
+      link.rel = 'noopener'
+      link.textContent = 'Open the submission in a new tab'
+      var cap = el('div', 'cap')
+      cap.appendChild(link)
+      right.appendChild(cap)
+    }
     layout.appendChild(right)
 
     sheet.appendChild(layout)
@@ -466,7 +487,11 @@ export const PAGE_HTML = `<!doctype html>
     lastFocused = document.activeElement
     fetch('/batch/' + jobId + '/submission/' + encodeURIComponent(itemId))
       .then(function (r) { if (!r.ok) throw new Error('detail failed'); return r.json() })
-      .then(renderDetail)
+      .then(function (d) {
+        // The submission as filed, alongside the crop the model was shown.
+        d.sourceUrl = '/batch/' + jobId + '/submission/' + encodeURIComponent(itemId) + '/source.pdf'
+        renderDetail(d)
+      })
       .catch(function () {
         detail.textContent = ''
         var sheet = el('div', 'sheet')

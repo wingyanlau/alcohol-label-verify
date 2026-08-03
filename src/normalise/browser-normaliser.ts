@@ -21,6 +21,7 @@ import {
   type NormaliseResult,
   type Normaliser,
 } from './normaliser.js'
+import { buildInvocation } from './page-script.js'
 import { identifyForm } from './regions.js'
 
 /** pdf.js, pinned. A floating version would change rendering under a fixed audit trail. */
@@ -146,15 +147,20 @@ export function createBrowserNormaliser(opts: BrowserNormaliserOptions): Normali
         // form is rejected rather than cropped on assumption (B-D8). A first
         // pass reads the shape using the default map's page numbers, which are
         // safe for any document with at least two pages.
+        // The invocation is built rather than passed as arguments: a string
+        // first argument to `page.evaluate` is evaluated as an expression and
+        // any arguments after it are ignored. See page-script.ts.
+        const encoded = arrayBufferToBase64(pdf)
         const probe = (await page.evaluate(
-          RENDER_SCRIPT,
-          arrayBufferToBase64(pdf),
-          dpi,
-          { x0: 0, y0: 0, x1: 1, y1: 1 },
-          1,
-          1,
-          PDFJS_URL,
-          PDFJS_WORKER,
+          buildInvocation(RENDER_SCRIPT, [
+            encoded,
+            dpi,
+            { x0: 0, y0: 0, x1: 1, y1: 1 },
+            1,
+            1,
+            PDFJS_URL,
+            PDFJS_WORKER,
+          ]),
         )) as RenderedRegions
 
         const form = identifyForm({
@@ -168,14 +174,15 @@ export function createBrowserNormaliser(opts: BrowserNormaliserOptions): Normali
         checkPixelBudget(widthPx, heightPx, opts.limits)
 
         const rendered = (await page.evaluate(
-          RENDER_SCRIPT,
-          arrayBufferToBase64(pdf),
-          dpi,
-          form.labelRegion,
-          form.labelPage,
-          Math.min(form.recordPage, probe.pageCount),
-          PDFJS_URL,
-          PDFJS_WORKER,
+          buildInvocation(RENDER_SCRIPT, [
+            encoded,
+            dpi,
+            form.labelRegion,
+            form.labelPage,
+            Math.min(form.recordPage, probe.pageCount),
+            PDFJS_URL,
+            PDFJS_WORKER,
+          ]),
         )) as RenderedRegions
 
         return {

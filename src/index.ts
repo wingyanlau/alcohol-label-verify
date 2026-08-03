@@ -11,7 +11,7 @@
 import { loadCurrentJob } from './batch/current.js'
 import { loadSubmissionDetail } from './batch/detail.js'
 import { startBatch } from './batch/intake.js'
-import { labelImageKey } from './batch/keys.js'
+import { contentKey, labelImageKey } from './batch/keys.js'
 import { processItem } from './batch/pipeline.js'
 import { PAGE_HTML } from './ui/page.js'
 
@@ -374,6 +374,31 @@ export default {
         if (object === null) return new Response('not found', { status: 404 })
         return new Response(object.body, {
           headers: { 'content-type': 'image/png', 'cache-control': 'no-store' },
+        })
+      }
+    }
+
+    // The submission as filed. The label crop shows what the model was given;
+    // this shows what the applicant sent, so a reviewer can check a verdict
+    // against the whole document rather than the region the crop happened to
+    // capture — which is also how a bad region map would be spotted.
+    const source = pathname.match(/^\/batch\/([^/]+)\/submission\/([^/]+)\/source\.pdf$/)
+    if (source && request.method === 'GET') {
+      const jobId = source[1]
+      const itemId = source[2]
+      if (jobId && itemId) {
+        if (!env.STAGING) return new Response('unavailable', { status: 503 })
+        const object = await env.STAGING.get(
+          contentKey(decodeURIComponent(jobId), decodeURIComponent(itemId)),
+        )
+        if (object === null) return new Response('not found', { status: 404 })
+        return new Response(object.body, {
+          headers: {
+            'content-type': 'application/pdf',
+            // Inline so the browser's own viewer renders it in the panel.
+            'content-disposition': 'inline',
+            'cache-control': 'no-store',
+          },
         })
       }
     }
