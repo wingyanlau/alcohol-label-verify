@@ -71,6 +71,7 @@ export interface Snapshot {
 type Event =
   | { type: 'snapshot'; snapshot: Snapshot }
   | { type: 'item.started'; itemId: string; progress: Progress }
+  | { type: 'item.deferred'; itemId: string; progress: Progress }
   | { type: 'item.completed'; item: ItemRow; progress: Progress }
   | { type: 'item.failed'; item: ItemRow; progress: Progress }
   | { type: 'job.completed'; progress: Progress }
@@ -129,6 +130,35 @@ export class JobCoordinator extends DurableObject<Env> {
       )
     }
     return this.#progress()
+  }
+
+  /**
+   * Return an item to the queue because its attempt was deferred, not because
+   * it progressed.
+   *
+   * An item held for a rate-limit backoff is waiting, not running, and the
+   * ledger has to say so: with waits of 5 to 40 seconds across eight attempts,
+   * leaving it RUNNING makes the whole worklist read "Checking…" while exactly
+   * one item holds a browser. It also restores the QUEUED that `startItem`
+   * requires, so the next attempt counts — otherwise a redelivered item is
+   * already RUNNING, the guarded update matches nothing, and `attempts` stops
+   * advancing.
+   */
+  async deferItem(itemId: string): Promise<Progress> {
+    const rows = this.#sql
+      .exec<{ item_id: string }>(
+        `UPDATE item
+            SET state = 'QUEUED', updated_at = ?
+          WHERE item_id = ? AND state = 'RUNNING'
+      RETURNING item_id`,
+        new Date().toISOString(),
+        itemId,
+      )
+      .toArray()
+
+    const progress = this.#progress()
+    if (rows[0]) this.#broadcast({ type: 'item.deferred', itemId, progress })
+    return progress
   }
 
   /**

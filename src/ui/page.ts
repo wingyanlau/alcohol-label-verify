@@ -255,6 +255,10 @@ export const PAGE_HTML = `<!doctype html>
     } else if (msg.type === 'item.started') {
       var r = rows.get(msg.itemId); if (r) r.state = 'RUNNING'
       renderProgress(msg.progress)
+    } else if (msg.type === 'item.deferred') {
+      // Held for a backoff: waiting again, not still being checked.
+      var q = rows.get(msg.itemId); if (q) q.state = 'QUEUED'
+      renderProgress(msg.progress)
     } else if (msg.type === 'item.completed' || msg.type === 'item.failed') {
       upsert(msg.item)
       renderProgress(msg.progress)

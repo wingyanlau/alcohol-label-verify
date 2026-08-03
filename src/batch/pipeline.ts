@@ -134,6 +134,11 @@ export async function processItem(
       // Transient: return the item to the queue for a bounded retry (§8). The
       // coordinator keeps it RUNNING; the redelivery starts it again.
       //
+      // Hand the item back to the ledger as queued. It is waiting, not
+      // running, and a wait of up to 40 seconds is long enough that the
+      // difference is what the worklist shows.
+      await stub.deferItem(submissionId)
+
       // A rate limit waits longer on each attempt, because the ceiling is
       // measured over time: retrying immediately is refused in 40ms and burns
       // the budget without ever crossing it. Other transient faults are not
