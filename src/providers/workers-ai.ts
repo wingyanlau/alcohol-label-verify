@@ -116,6 +116,19 @@ export function createWorkersAiProvider(opts: WorkersAiOptions): Provider {
     name: WORKERS_AI_SPEC.name,
     spec: WORKERS_AI_SPEC,
 
+    async ping(): Promise<void> {
+      const out = (await opts.ai.run(
+        opts.modelId as keyof AiModels,
+        {
+          messages: [{ role: 'user', content: 'Reply with the single word: ready' }],
+          max_tokens: 8,
+        } as never,
+      )) as unknown
+      if (answerText(out).trim() === '') {
+        throw new Error('the model returned nothing to a trivial prompt')
+      }
+    },
+
     async extract(request: ExtractionRequest): Promise<ExtractionResult> {
       const started = now()
 

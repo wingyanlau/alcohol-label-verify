@@ -15,6 +15,7 @@
  */
 
 import puppeteer from '@cloudflare/puppeteer'
+import { toBase64 } from '../providers/base64.js'
 import {
   checkPixelBudget,
   type IntakeLimits,
@@ -118,16 +119,6 @@ function base64ToArrayBuffer(b64: string): ArrayBuffer {
   return out.buffer
 }
 
-function arrayBufferToBase64(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf)
-  let binary = ''
-  const chunk = 0x8000 // avoid blowing the argument limit on large files
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
-  }
-  return btoa(binary)
-}
-
 export function createBrowserNormaliser(opts: BrowserNormaliserOptions): Normaliser {
   const now = opts.now ?? (() => Date.now())
 
@@ -150,7 +141,7 @@ export function createBrowserNormaliser(opts: BrowserNormaliserOptions): Normali
         // The invocation is built rather than passed as arguments: a string
         // first argument to `page.evaluate` is evaluated as an expression and
         // any arguments after it are ignored. See page-script.ts.
-        const encoded = arrayBufferToBase64(pdf)
+        const encoded = toBase64(pdf)
         const probe = (await page.evaluate(
           buildInvocation(RENDER_SCRIPT, [
             encoded,

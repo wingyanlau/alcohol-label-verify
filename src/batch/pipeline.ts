@@ -21,7 +21,7 @@
  */
 
 import { verifySubmission } from '../domain/verify.js'
-import type { Env, WorkMessage } from '../index.js'
+import type { Env, WorkMessage } from '../env.js'
 import { createBrowserNormaliser } from '../normalise/browser-normaliser.js'
 import {
   checkIntake,
@@ -130,7 +130,11 @@ export async function processItem(
   attempt: number,
 ): Promise<ProcessOutcome> {
   const { jobId, submissionId, contentKey } = message
-  if (!env.JOB || !env.DB || !env.STAGING || !env.BROWSER || !env.AI) {
+  // The AI binding is deliberately absent from this list: whether inference
+  // needs a binding at all is the provider's business, and `createProvider`
+  // below reports its own missing dependency by name. Requiring it here would
+  // have made a Gemini deployment fail with no explanation.
+  if (!env.JOB || !env.DB || !env.STAGING || !env.BROWSER) {
     // A missing binding is an operator error, not an item fault. Fail the item
     // loudly rather than retrying against an unfixable environment.
     return { retry: false }

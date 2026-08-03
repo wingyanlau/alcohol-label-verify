@@ -64,6 +64,17 @@ export interface ProviderSpec {
 /** An extraction provider, plus what the batch layer needs to run it. */
 export interface Provider extends ExtractionProvider {
   readonly spec: ProviderSpec
+
+  /**
+   * Cheapest call that proves the model is reachable.
+   *
+   * Here rather than in a health endpoint because "reachable" is asked
+   * differently of every vendor — a binding call for one, an authenticated
+   * request for another. Throws with the vendor's own words on failure, which
+   * is what the deploy gate reads to tell an exhausted allowance from a broken
+   * deployment.
+   */
+  ping(): Promise<void>
 }
 
 /** Convenience for classifiers, which all match on message text. */

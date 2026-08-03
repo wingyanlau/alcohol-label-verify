@@ -162,6 +162,25 @@ export function createGeminiProvider(opts: GeminiOptions): Provider {
     name: GEMINI_SPEC.name,
     spec: GEMINI_SPEC,
 
+    async ping(): Promise<void> {
+      const response = await doFetch(
+        `${ENDPOINT}/${encodeURIComponent(opts.modelId)}:generateContent`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-goog-api-key': opts.apiKey },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: 'Reply with the single word: ready' }] }],
+            generationConfig: { temperature: 0, maxOutputTokens: 8 },
+          }),
+        },
+      )
+      if (!response.ok) {
+        const detail = (await response.text().catch(() => '')).slice(0, 300)
+        throw new Error(`provider returned HTTP ${response.status}${detail ? `: ${detail}` : ''}`)
+      }
+      answerText(await response.json())
+    },
+
     async extract(request: ExtractionRequest): Promise<ExtractionResult> {
       const started = now()
 

@@ -1,3 +1,4 @@
+// Re-exported: wrangler and existing imports resolve the worker's types here.
 /**
  * Deployment skeleton.
  *
@@ -14,59 +15,9 @@ import { loadSubmissionDetail } from './batch/detail.js'
 import { startBatch } from './batch/intake.js'
 import { contentKey, labelImageKey } from './batch/keys.js'
 import { processItem } from './batch/pipeline.js'
-import { knownProviderNames, specFor } from './providers/registry.js'
-import { buildPrompt, createWorkersAiProvider } from './providers/workers-ai.js'
+import type { Env, WorkMessage } from './env.js'
+import { createProvider, knownProviderNames, specFor } from './providers/registry.js'
 import { PAGE_HTML } from './ui/page.js'
-
-export interface Env {
-  ENVIRONMENT: string
-  MODEL_PROVIDER: string
-  MODEL_ID: string
-  MAX_UPLOAD_BYTES: string
-  MAX_PAGE_COUNT: string
-  MAX_PIXELS: string
-  MAX_BATCH_ITEMS: string
-  RASTER_DPI: string
-  EXTRACT_CONCURRENCY: string
-  /** Set with `wrangler secret put MODEL_API_KEY`. Never present in config. */
-  MODEL_API_KEY?: string
-
-  /** One coordinator per batch job (B-D12: it does no I/O beyond its storage). */
-  JOB?: DurableObjectNamespace<import('./job-coordinator.js').JobCoordinator>
-  /** Headless browser for server-side PDF rasterisation (batch path only). */
-  BROWSER?: Fetcher
-  /** On-platform inference. Carries its own auth — no separate credential. */
-  AI?: Ai
-  /** Work distribution. One submission per message (B-D4). */
-  WORK?: Queue<WorkMessage>
-  /** Transient submission content. Purged at job completion (B-D10). */
-  STAGING?: R2Bucket
-  /** The durable record and append-only transaction history (D32). */
-  DB?: D1Database
-  /** The bundled demonstration corpus, read at intake (see wrangler `assets`). */
-  ASSETS?: Fetcher
-}
-
-/**
- * One unit of work: a single submission. Deliberately carries only references —
- * queue messages are capped at 128 KB, so content travels in R2 and its key
- * travels here (batch design §15.1).
- */
-export interface WorkMessage {
-  readonly jobId: string
-  readonly submissionId: string
-  readonly contentKey: string
-  readonly contentDigest: string
-  /**
-   * Pre-rasterised regions for a bundled corpus submission.
-   *
-   * Present only for the demonstration corpus, whose pixels are rendered at
-   * build time. An upload carries neither and takes the browser path, so the
-   * real normalisation route stays exercised.
-   */
-  readonly labelRasterPath?: string
-  readonly recordRasterPath?: string
-}
 
 export type ConfigProblem = { readonly setting: string; readonly problem: string }
 
@@ -139,17 +90,6 @@ function bindings(env: Record<string, unknown>): Record<string, boolean> {
   }
 }
 
-/** Base64 for a data URI, chunked so a large crop cannot blow the call stack. */
-function bytesToBase64(buffer: ArrayBuffer): string {
-  const view = new Uint8Array(buffer)
-  const CHUNK = 0x8000
-  let binary = ''
-  for (let i = 0; i < view.length; i += CHUNK) {
-    binary += String.fromCharCode(...view.subarray(i, i + CHUNK))
-  }
-  return btoa(binary)
-}
-
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body, null, 2) + '\n', {
     status,
@@ -159,6 +99,7 @@ const json = (body: unknown, status = 200) =>
     },
   })
 
+export type { Env, WorkMessage } from './env.js'
 export { JobCoordinator } from './job-coordinator.js'
 
 export default {
@@ -211,21 +152,15 @@ export default {
     // 4.5pt warning statement is a different question, answered by the corpus
     // (B-Q4), not by a health check.
     if (pathname === '/health/inference') {
-      if (!env.AI) return json({ status: 'unavailable', reason: 'no AI binding' }, 503)
       const started = Date.now()
       try {
-        const out = (await env.AI.run(
-          env.MODEL_ID as keyof AiModels,
-          {
-            messages: [{ role: 'user', content: 'Reply with the single word: ready' }],
-            max_tokens: 8,
-          } as never,
-        )) as { response?: string }
+        const provider = createProvider(env)
+        await provider.ping()
         return json({
           status: 'ok',
+          provider: provider.name,
           model: env.MODEL_ID,
           latencyMs: Date.now() - started,
-          reply: (out.response ?? '').trim().slice(0, 40),
         })
       } catch (e) {
         return json(
@@ -295,243 +230,60 @@ export default {
     // server-side, and a Worker cannot do it — 128 MB, no native modules. This
     // checks the one mechanism that can: a headless browser rendering the PDF
     // with pdf.js onto a canvas, at a chosen DPI and crop.
-    // Does the model actually receive the image?
+    // One extraction, through whichever provider is configured.
     //
-    // Nothing proved this before, and it was false: the adapter passed the
-    // image as a sibling of `messages`, the model ignored it, and answered from
-    // the prompt alone — echoing the schema placeholder for the label and
-    // inventing "Old Forester" for the record. Both were schema-valid, so
-    // every check downstream passed them.
-    //
-    // The probe asks a question whose answer is printed on the artwork and
-    // present nowhere in the prompt. A variant that cannot name the brand did
-    // not see the image, whatever else it returns. It reads a crop already in
-    // R2, so it costs no browser and cannot be refused on rate.
-    if (pathname === '/health/vision') {
-      if (!env.AI) return json({ status: 'unavailable', reason: 'no AI binding' }, 503)
-      if (!env.STAGING) return json({ status: 'unavailable', reason: 'no STAGING binding' }, 503)
-
-      const url = new URL(request.url)
-      const jobId = url.searchParams.get('job')
-      const itemId = url.searchParams.get('item')
-      if (!jobId || !itemId) {
-        return json({ status: 'error', reason: 'pass ?job=<jobId>&item=<itemId>' }, 400)
-      }
-
-      const object = await env.STAGING.get(labelImageKey(jobId, itemId))
-      if (object === null)
-        return json({ status: 'error', reason: 'no label crop for that item' }, 404)
-      const bytes = await object.arrayBuffer()
-
-      const question =
-        'What brand name is printed on this label? Reply with only the brand name, nothing else.'
-      const base64 = bytesToBase64(bytes)
-
-      // Three shapes, because the model page documents none of them. A is what
-      // the adapter sends today.
-      const variants: Record<string, unknown> = {
-        'A: top-level image as byte array': {
-          messages: [{ role: 'user', content: question }],
-          image: [...new Uint8Array(bytes)],
-          max_tokens: 64,
-        },
-        'B: image_url content part': {
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: question },
-                { type: 'image_url', image_url: { url: `data:image/png;base64,${base64}` } },
-              ],
-            },
-          ],
-          max_tokens: 64,
-        },
-        'C: top-level image as base64 string': {
-          messages: [{ role: 'user', content: question }],
-          image: base64,
-          max_tokens: 64,
-        },
-      }
-
-      const results: Record<string, unknown> = {}
-      for (const [name, input] of Object.entries(variants)) {
-        const started = Date.now()
-        try {
-          const out = (await env.AI.run(env.MODEL_ID as keyof AiModels, input as never)) as {
-            response?: unknown
-          }
-          const reply = typeof out.response === 'string' ? out.response.trim() : ''
-          results[name] = {
-            ok: true,
-            latencyMs: Date.now() - started,
-            reply: reply.slice(0, 200),
-            // The artwork says "Old Tom Distillery". Naming it is the only
-            // evidence that the image arrived.
-            sawTheImage: /old tom/i.test(reply),
-          }
-        } catch (e) {
-          results[name] = {
-            ok: false,
-            latencyMs: Date.now() - started,
-            error: e instanceof Error ? e.message : String(e),
-          }
-        }
-      }
-
-      return json({ status: 'ok', model: env.MODEL_ID, imageBytes: bytes.byteLength, results })
-    }
-
-    // Why an extraction comes back empty.
-    //
-    // The failure is `provider returned an empty response`: the model answers
-    // with nothing at all, which the contract rejects rather than guessing
-    // around. It is not the image transport — /health/vision proves that reads
-    // fine — and not the placeholder guard, which reports itself.
-    //
-    // Two candidates remain, and they are distinguishable: the images
-    // themselves, or the fact that a submission runs both extractions
-    // concurrently (verify.ts, Promise.all). This runs the *production*
-    // provider over the shipped rasters — label alone, record alone, then both
-    // together — so whichever of the three comes back empty names the cause.
+    // This replaced two probes that hand-built Cloudflare's request shape to
+    // answer "does the image reach the model" — a question now settled in the
+    // adapter's own tests. What is left is the question a deployment actually
+    // needs answered: can the configured reader read a known label? It runs the
+    // production path end to end, so a wrong envelope, a lost image or a
+    // refused credential all surface the same way they would in a batch.
     if (pathname === '/health/extract') {
-      if (!env.AI) return json({ status: 'unavailable', reason: 'no AI binding' }, 503)
       if (!env.ASSETS) return json({ status: 'unavailable', reason: 'no ASSETS binding' }, 503)
 
-      const url = new URL(request.url)
-      const id = url.searchParams.get('id') ?? 'L01'
-      const fields = ['brandName', 'classType', 'alcoholContent', 'netContents'] as const
+      const id = new URL(request.url).searchParams.get('id') ?? 'L01'
+      const asset = await env.ASSETS.fetch(
+        new Request(`https://assets.local/rasters/${id}-label.png`),
+      )
+      if (!asset.ok) return json({ status: 'error', reason: `no shipped raster for ${id}` }, 404)
+      const image = await asset.arrayBuffer()
 
-      const asset = async (path: string): Promise<ArrayBuffer | null> => {
-        const r = await env.ASSETS?.fetch(new Request(`https://assets.local/${path}`))
-        return r?.ok ? r.arrayBuffer() : null
-      }
-      const [labelImage, recordImage] = await Promise.all([
-        asset(`rasters/${id}-label.png`),
-        asset(`rasters/${id}-record.png`),
-      ])
-      if (!labelImage || !recordImage) {
-        return json({ status: 'error', reason: `no shipped rasters for ${id}` }, 404)
-      }
-
-      const provider = createWorkersAiProvider({ ai: env.AI, modelId: env.MODEL_ID })
-      const call = (image: ArrayBuffer, region: 'label' | 'record') =>
-        provider.extract({
-          region,
+      const started = Date.now()
+      try {
+        const provider = createProvider(env)
+        const result = await provider.extract({
+          region: 'label',
           image,
           mimeType: 'image/png',
-          fields: [...fields],
-          includeWarning: region === 'label',
+          fields: ['brandName', 'classType', 'alcoholContent', 'netContents'],
+          includeWarning: true,
         })
-
-      const attempt = async (name: string, run: () => Promise<unknown>) => {
-        const started = Date.now()
-        try {
-          await run()
-          return { [name]: { ok: true, latencyMs: Date.now() - started } }
-        } catch (e) {
-          return {
-            [name]: {
-              ok: false,
-              latencyMs: Date.now() - started,
-              error: e instanceof Error ? e.message : String(e),
-            },
-          }
-        }
+        return json({
+          status: 'ok',
+          provider: provider.name,
+          model: env.MODEL_ID,
+          latencyMs: Date.now() - started,
+          // The values, not the artwork: enough to see whether it read the
+          // label, without putting label content into a log (D20).
+          fields: Object.fromEntries(
+            Object.entries(result.extraction.fields).map(([k, v]) => [
+              k,
+              v.unreadable ? 'UNREADABLE' : (v.raw ?? 'ABSENT'),
+            ]),
+          ),
+          warningRead: result.extraction.warningStatement !== null,
+        })
+      } catch (e) {
+        return json(
+          {
+            status: 'error',
+            model: env.MODEL_ID,
+            latencyMs: Date.now() - started,
+            error: e instanceof Error ? e.message : String(e),
+          },
+          502,
+        )
       }
-
-      // What the API actually returns.
-      //
-      // The adapter reports "empty response" when `response.response` is not a
-      // string — which is an inference, not an observation. If this call
-      // returns a different shape, the content could be present and unread.
-      // So dump the raw envelope before concluding anything about emptiness.
-      const rawShapes: Record<string, unknown> = {}
-      for (const [name, input] of Object.entries({
-        production: {
-          temperature: 0,
-          max_tokens: 1024,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: buildPrompt({
-                    region: 'label',
-                    image: labelImage,
-                    mimeType: 'image/png',
-                    fields: [...fields],
-                    includeWarning: true,
-                  }),
-                },
-                {
-                  type: 'image_url',
-                  image_url: { url: `data:image/png;base64,${bytesToBase64(labelImage)}` },
-                },
-              ],
-            },
-          ],
-        },
-        'no temperature': {
-          max_tokens: 1024,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: 'List every line of text printed on this label.' },
-                {
-                  type: 'image_url',
-                  image_url: { url: `data:image/png;base64,${bytesToBase64(labelImage)}` },
-                },
-              ],
-            },
-          ],
-        },
-        'short, 64 tokens': {
-          max_tokens: 64,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: 'What brand name is printed on this label?' },
-                {
-                  type: 'image_url',
-                  image_url: { url: `data:image/png;base64,${bytesToBase64(labelImage)}` },
-                },
-              ],
-            },
-          ],
-        },
-      })) {
-        try {
-          const out = await env.AI.run(env.MODEL_ID as keyof AiModels, input as never)
-          rawShapes[name] = {
-            keys: out && typeof out === 'object' ? Object.keys(out) : typeof out,
-            envelope: JSON.stringify(out).slice(0, 300),
-          }
-        } catch (e) {
-          rawShapes[name] = { threw: e instanceof Error ? e.message : String(e) }
-        }
-      }
-
-      // Sequential first, so a concurrency effect cannot contaminate them.
-      const labelOnly = await attempt('labelAlone', () => call(labelImage, 'label'))
-      const recordOnly = await attempt('recordAlone', () => call(recordImage, 'record'))
-      const together = await attempt('bothInParallel', () =>
-        Promise.all([call(labelImage, 'label'), call(recordImage, 'record')]),
-      )
-
-      return json({
-        status: 'ok',
-        id,
-        labelBytes: labelImage.byteLength,
-        recordBytes: recordImage.byteLength,
-        rawShapes,
-        ...labelOnly,
-        ...recordOnly,
-        ...together,
-      })
     }
 
     if (pathname === '/health/raster') {

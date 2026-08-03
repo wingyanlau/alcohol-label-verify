@@ -16,7 +16,7 @@
  * silent loss.
  */
 
-import type { Env, WorkMessage } from '../index.js'
+import type { Env, WorkMessage } from '../env.js'
 import { checkIntake, IntakeRejected } from '../normalise/normaliser.js'
 import { contentKey } from './keys.js'
 import { corpus, type Submission } from './submissions.js'

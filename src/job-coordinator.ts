@@ -29,7 +29,7 @@
  */
 
 import { DurableObject } from 'cloudflare:workers'
-import type { Env } from './index.js'
+import type { Env } from './env.js'
 
 export type ItemState = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'REJECTED'
 
