@@ -166,6 +166,34 @@ dashboard.
 | `MAX_BATCH_ITEMS` | `300` | Peak-season filing size, and a spend bound |
 | `max_batch_size` (queue) | `1` | One submission per invocation. Batching would serialise the two parallel extractions against the 6-connection cap (B-D4) |
 
+### Verifying the statutory warning (M0)
+
+FR-5 and FR-6 rest entirely on `config/warning-statement.json`, and the corpus
+cannot check it: the test submissions are generated from that same file, so a
+wrong word would appear on the labels and in the reference and every case would
+agree. It has to be compared against the regulation itself.
+
+```bash
+curl -sS "https://www.ecfr.gov/api/versioner/v1/full/2026-07-30/title-27.xml?part=16&subpart=C" \
+  -o /tmp/ecfr16.xml
+```
+
+Then strip tags, collapse whitespace, and compare the concatenated `segments`
+to the published text **programmatically**. Confirmed 2026-08-03: 283
+characters, byte for byte identical.
+
+The renderer endpoint and a browser show the same wording, and neither is the
+check. A model summarising a legal text may normalise punctuation or
+capitalisation without saying so, and this is a string where one word decides a
+verdict — `birth defect` against `birth defects` is a real corpus case. Compare
+bytes; do not read.
+
+Re-verify when the title is reissued. `referenceIsUnverified()` reports the
+status, and a deployment reading against an unconfirmed reference should say so
+rather than imply an authority it does not have.
+
+---
+
 ### AI Gateway (optional)
 
 A proxy in front of whichever provider is configured, giving per-request

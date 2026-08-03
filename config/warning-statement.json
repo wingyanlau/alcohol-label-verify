@@ -1,14 +1,12 @@
 {
   "$comment": "Operative source of truth for FR-5 and FR-6 (D3). The statutory text appears in exactly one place — here. It is not duplicated in code, in prompts, or in prose. Correcting this file corrects the system. Design rationale in docs/config/warning-statement.md.",
-
   "configVersion": 1,
   "citation": "27 CFR 16.21 (text); 27 CFR 16.22 (formatting)",
   "appliesTo": "All alcoholic beverages — beer, wine, distilled spirits",
-  "retrievedFrom": "Cornell LII mirror of the CFR",
-  "retrievedOn": "2026-07-31",
-  "verificationStatus": "UNCONFIRMED",
-  "verificationNote": "eCFR blocked automated retrieval. Confirm against https://www.ecfr.gov/current/title-27/chapter-I/subchapter-A/part-16/subpart-C/section-16.21 in a browser, then set verificationStatus to CONFIRMED. A single wrong word here silently invalidates every warning-statement verdict (M0, Q1a).",
-
+  "retrievedFrom": "https://www.ecfr.gov/api/versioner/v1/full/2026-07-30/title-27.xml?part=16&subpart=C",
+  "retrievedOn": "2026-08-03",
+  "verificationStatus": "CONFIRMED",
+  "verificationNote": "Confirmed byte for byte against the eCFR versioner API — raw XML, tags stripped, whitespace collapsed, compared programmatically with no model interpreting the text. Title 27 as issued 2026-07-30; 283 characters, identical. The renderer endpoint and a browser both show the same wording, but neither is the check: a legal string where one word decides a verdict is compared, not read. Re-verify by re-running the comparison in docs/deployment-runbook.md §5; the corpus cannot catch an error here because it is generated from this same file.",
   "segments": [
     {
       "id": "header",
@@ -30,7 +28,6 @@
       "caseSensitive": false
     }
   ],
-
   "advisoryChecks": [
     {
       "id": "header_bold",
