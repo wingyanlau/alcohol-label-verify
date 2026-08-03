@@ -314,6 +314,12 @@ export default {
             ]),
           ),
           warningRead: result.extraction.warningStatement !== null,
+          // The transcription itself, for a corpus label someone is
+          // deliberately probing. It answers a question a boolean cannot: a
+          // model that recites a statutory string it knows by heart and one
+          // that reads a degraded scan both report "read", and only the words
+          // separate them. Never logged, never persisted (D20).
+          warning: result.extraction.warningStatement?.slice(0, 300) ?? null,
         })
       } catch (e) {
         return json(
