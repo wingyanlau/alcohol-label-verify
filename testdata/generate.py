@@ -680,7 +680,13 @@ def shoot(html: Path, png: Path) -> None:
 # blur — one saying "birth defect" where the statute says "birth defects" —
 # produced identical canonical transcriptions. Legibility is therefore a
 # property of the pixels, and this is where the pixels are.
-WARNING_LEGIBILITY_FLOOR = 30.0
+#
+# The generator measures; it does not judge. No floor is defined here on
+# purpose — the threshold is LEGIBILITY_FLOOR in the deployment's
+# configuration, because how degraded a scan an agency accepts is its decision
+# and not a property of the corpus. A copy kept here would be a second number
+# to forget, and the manifest records the measurement so a corpus run can be
+# re-scored against any floor without regenerating anything.
 
 
 def warning_legibility(png: Path) -> float:

@@ -20,6 +20,7 @@
  * success path as `INCOMPLETE`.
  */
 
+import { configuredLegibilityFloor } from '../domain/legibility.js'
 import type { ApplicationData } from '../domain/types.js'
 import { verifySubmission } from '../domain/verify.js'
 import type { Env, WorkMessage } from '../env.js'
@@ -256,6 +257,11 @@ export async function processItem(
     // sees (rule 5). An upload has no declared record and keeps both calls.
     const corpus = await loadCorpusEntry(env, corpusIdOf(message))
     const declared = corpus?.declared ?? null
+    // Null when unset, which `validateConfig` already reports as a startup
+    // problem. Here it means the measurement is not applied rather than
+    // applied against a number nobody chose: silently inventing a threshold
+    // would decide real verdicts on a policy the deployment never stated.
+    const legibilityFloor = configuredLegibilityFloor(env)
     const result = await verifySubmission(
       {
         label: {
@@ -264,9 +270,21 @@ export async function processItem(
           // Measured from the pixels, because the extractor cannot be asked:
           // it returns the statutory warning from memory when it cannot read
           // one, and reports success either way.
-          ...(corpus?.warningLegibility === null || corpus?.warningLegibility === undefined
+          //
+          // The floor it is judged against comes from configuration and
+          // travels with the measurement — how degraded a scan an agency will
+          // accept is its decision, and a measurement without the threshold it
+          // was judged against cannot be interpreted afterwards.
+          ...(corpus?.warningLegibility === null ||
+          corpus?.warningLegibility === undefined ||
+          legibilityFloor === null
             ? {}
-            : { warningLegibility: corpus.warningLegibility }),
+            : {
+                warningLegibility: {
+                  measured: corpus.warningLegibility,
+                  floor: legibilityFloor,
+                },
+              }),
         },
         record:
           declared === null
@@ -315,6 +333,13 @@ export async function processItem(
         `served=${result.provenance.label.servedModelVersion ?? 'unreported'}`,
         `prompt=${result.provenance.label.promptVersion}`,
         `record=${result.provenance.record ? 'extracted' : 'declared'}`,
+        // Why the legibility decision went the way it did. The decision itself
+        // is on the verdict row, which is what makes replay possible; this is
+        // the threshold it was judged against, so the record explains itself
+        // to someone reading it after the floor has since been changed.
+        ...(corpus?.warningLegibility != null && legibilityFloor !== null
+          ? [`legibility=${corpus.warningLegibility}/${legibilityFloor}`]
+          : []),
         `dpi=${dpi}`,
         `reference=${result.warning.referenceDataVersion}`,
         `legible=${result.warning.legible}`,

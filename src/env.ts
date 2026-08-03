@@ -29,6 +29,14 @@ export interface Env {
    */
   RETENTION_WINDOW_DAYS: string
   /**
+   * Edge energy below which a warning statement is treated as unreadable
+   * (FR-6, D5). Configuration because it encodes how degraded a scan an agency
+   * is willing to accept, and the right number depends on the scanners in use
+   * — the shipped value is calibrated against a synthetic corpus, which is not
+   * the same evidence.
+   */
+  LEGIBILITY_FLOOR: string
+  /**
    * AI Gateway, optional.
    *
    * Set `AI_GATEWAY_ID` to route inference through it and get per-request

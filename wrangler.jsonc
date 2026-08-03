@@ -67,6 +67,18 @@
     // days sets 30 here. There is no default: unset is a startup problem.
     "RETENTION_WINDOW_DAYS": "14",
 
+    // Edge energy below which the health warning is treated as unreadable
+    // (FR-6, D5). Calibrated against the corpus rather than guessed: every
+    // blurred case scores about 24 and every legible one 33 or above,
+    // including the angle-and-glare scan at 68 which is degraded but readable.
+    // Thirty sits in the gap.
+    //
+    // Configuration, because that calibration is against synthetic vector text
+    // and a deployment reading real scans will land somewhere else. Raising it
+    // fails more submissions as unreadable; lowering it accepts transcriptions
+    // of artwork nobody could actually read, which is the dangerous direction.
+    "LEGIBILITY_FLOOR": "30",
+
     // Extraction concurrency across a batch. Governed by the provider's rate
     // limit, not by platform capacity (batch design §6.1).
     "EXTRACT_CONCURRENCY": "5",
@@ -219,6 +231,9 @@
         // decision, not a fact about the code — an agency whose schedule says 30
         // days sets 30 here. There is no default: unset is a startup problem.
         "RETENTION_WINDOW_DAYS": "14",
+        // See the note on the development block. Calibrated against the corpus,
+        // and worth re-calibrating per deployment against the scans it receives.
+        "LEGIBILITY_FLOOR": "30",
         "EXTRACT_CONCURRENCY": "5",
 
         // See the note on the development block above. The account is a
@@ -292,6 +307,9 @@
         // decision, not a fact about the code — an agency whose schedule says 30
         // days sets 30 here. There is no default: unset is a startup problem.
         "RETENTION_WINDOW_DAYS": "14",
+        // See the note on the development block. Calibrated against the corpus,
+        // and worth re-calibrating per deployment against the scans it receives.
+        "LEGIBILITY_FLOOR": "30",
         "EXTRACT_CONCURRENCY": "5",
 
         // See the note on the development block above. The account is a

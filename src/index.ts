@@ -93,6 +93,10 @@ export function validateConfig(env: Env): ConfigProblem[] {
     // `retentionWindowDays` — a deployment that never chose a window must not
     // quietly delete applicant content on one.
     'RETENTION_WINDOW_DAYS',
+    // An unset floor would leave the system with no opinion on whether a
+    // warning could be read, and UNREADABLE is the verdict that stops a
+    // non-compliant label passing (D5).
+    'LEGIBILITY_FLOOR',
   ] as const) {
     positiveInt(k)
   }

@@ -2239,6 +2239,23 @@ and reported success. Two renderings differing only in `birth defect` versus
 `birth defects` produced identical canonical transcriptions. *Anything the
 model could know without looking cannot be verified by asking it* (D5, UT-G05).
 
+**But where the line falls is the deployment's to draw.** The measurement is
+objective; the threshold is a policy about how degraded a scan an agency will
+accept, and it decides verdicts — below it a submission is `INCOMPLETE`
+whatever the model returned. `LEGIBILITY_FLOOR` therefore sits in
+configuration, with no default: an invented threshold is a policy nobody
+stated. The shipped 30 is calibrated against the corpus (blurred cases score
+~24, legible ones 33+, the angle-and-glare scan 68), but that corpus is
+synthetic vector text, so a deployment reading real scans should re-calibrate
+against its own evidence rather than inherit ours.
+
+The asymmetry matters when tuning it. Raising the floor fails more submissions
+as unreadable, which costs a reviewer time. Lowering it accepts transcriptions
+of artwork nobody could read, and each of those is a non-compliant label
+passing review. The measurement and the floor it was judged against are
+recorded together on each verdict, so a record stays explicable after the
+policy changes.
+
 **Content stops at the adapter.**
 Brokers store request and response bodies by default; here those are label
 artwork and the values read from it. Metrics, tokens, latency and errors may

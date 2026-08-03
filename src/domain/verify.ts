@@ -24,19 +24,27 @@ import type { ExtractionProvenance, ExtractionProvider } from './extraction.js'
 import type { WarningReference } from './reference.js'
 import type { ApplicationData, Extraction, FieldVerdict, Outcome, WarningVerdict } from './types.js'
 import { FIELDS } from './types.js'
-import { verifyWarning, WARNING_LEGIBILITY_FLOOR } from './warning.js'
+import { verifyWarning } from './warning.js'
 
 export interface RegionImage {
   readonly image: ArrayBuffer
   readonly mimeType: string
   /**
-   * Edge energy measured over the region carrying the health warning.
+   * Edge energy over the region carrying the health warning, and the floor it
+   * is judged against.
    *
    * Supplied by whoever produced the pixels, because that is the only place
    * the pixels exist. Absent means unmeasured, which is treated as legible —
    * a missing measurement must not silently fail every submission.
+   *
+   * The two travel together on purpose. The floor is configuration (it decides
+   * how degraded a warning may be before a transcription of it stops meaning
+   * anything, which is a scanner-quality and strictness question, not a fact
+   * about this code), and a measurement recorded without the threshold it was
+   * judged against cannot be interpreted later. Pairing them means "measured
+   * against nothing" is not a state that can be expressed.
    */
-  readonly warningLegibility?: number
+  readonly warningLegibility?: { readonly measured: number; readonly floor: number }
 }
 
 export interface VerifyInput {
@@ -113,7 +121,7 @@ export async function verifySubmission(
   const warningLegible =
     opts.warningLegible ??
     (input.label.warningLegibility === undefined ||
-      input.label.warningLegibility >= WARNING_LEGIBILITY_FLOOR)
+      input.label.warningLegibility.measured >= input.label.warningLegibility.floor)
 
   const extractStarted = now()
   // Concurrent, and separate. See the module comment.
