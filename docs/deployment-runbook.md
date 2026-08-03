@@ -253,6 +253,14 @@ layer, so a browser that cannot render is a batch that cannot start. Its
 assertion includes `bytes > 0`, since a browser that launches and renders
 nothing still reports `ok`.
 
+The deploy step itself retries once. The Cloudflare API can return a 521 with an
+HTML body on a trailing call: on run `30780074509` the script had uploaded and
+the deployment had reached 100%, and only the subdomain registration failed —
+a red run over work that had already landed. `wrangler deploy` is idempotent, so
+the retry costs an upload and settles whether the failure was the revision or
+the API. The verification steps remain the arbiter: a deploy that did land
+passes them, and one that did not, fails.
+
 The raster probe retries once; the inference probe does not. Browser Rendering
 admits roughly 10 new instances per second (§15.4), so a refused launch says
 nothing about the revision being deployed, and failing a good deploy on

@@ -57,8 +57,21 @@ jobs:
       - name: Apply D1 migrations
         run: npm run migrate:production
 
+      # Retried once. The Cloudflare API can return a 521 with an HTML body on a
+      # trailing call — observed on staging run 30780074509, where the script
+      # had already uploaded and the deployment reached 100%, and only the
+      # subdomain registration failed. `wrangler deploy` is idempotent, so a
+      # second attempt costs an upload and settles whether the failure was the
+      # revision or the API. The verification below is the real arbiter either
+      # way: if the deploy did land, it passes; if it did not, it fails.
       - name: Deploy
-        run: npm run deploy:production
+        run: |
+          set -euo pipefail
+          npm run deploy:production || {
+            echo "::warning::first deploy attempt failed — retrying once"
+            sleep 15
+            npm run deploy:production
+          }
 
       - name: Verify deployment
         run: |

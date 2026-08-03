@@ -66,8 +66,22 @@ jobs:
       # No `wrangler secret bulk` step, unlike sibling projects: Workers AI
       # authenticates through its binding, so this deployment holds no secrets
       # at all. /health knows that and does not ask for MODEL_API_KEY.
+      #
+      # Retried once. The Cloudflare API can return a 521 with an HTML body on
+      # a trailing call — observed on run 30780074509, where the script had
+      # already uploaded and the deployment reached 100%, and only the
+      # subdomain registration failed. `wrangler deploy` is idempotent, so a
+      # second attempt costs an upload and settles whether the failure was the
+      # revision or the API. The verification below is the real arbiter either
+      # way: if the deploy did land, it passes; if it did not, it fails.
       - name: Deploy
-        run: npm run deploy:staging
+        run: |
+          set -euo pipefail
+          npm run deploy:staging || {
+            echo "::warning::first deploy attempt failed — retrying once"
+            sleep 15
+            npm run deploy:staging
+          }
 
       # A deploy can succeed with a binding silently missing, and /health is the
       # only thing that notices — it returns 503 with the offending setting
