@@ -15,6 +15,9 @@ Before making changes, review these documents. **They are the specification, not
 background.** When code and a document disagree, one of them is wrong — resolve
 it, do not leave both.
 
+- **[docs/exploration-session.md](docs/exploration-session.md)** — how the
+  problem was worked and what was settled. Read this first if you are picking
+  the work up cold
 - **[docs/design.md](docs/design.md)** — requirements, architecture, verification
   logic, provenance, 32 logged decisions
 - **[docs/test-plan.md](docs/test-plan.md)** — **§3 is the executable spec**:

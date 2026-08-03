@@ -30,6 +30,7 @@ PDF = OUT / "TTB-label-verification-design.pdf"
 
 # Order matters: this is the reading order for a reviewer who starts at page one.
 DOCS = [
+    ("exploration-session.md", "Exploration Session", "How the problem was worked, and what was settled"),
     ("design.md", "Software Design", "Requirements, architecture, verification logic, provenance, delivery"),
     ("batch-backend-design.md", "Batch Processing — Backend", "Job orchestration, document normalisation, platform mapping"),
     ("poc-batch.md", "PoC — Batch Processing the Corpus", "Scope, pipeline, measurements, exit criteria"),
