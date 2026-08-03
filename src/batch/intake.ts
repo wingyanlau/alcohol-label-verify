@@ -18,6 +18,7 @@
 
 import type { Env, WorkMessage } from '../env.js'
 import { checkIntake, IntakeRejected } from '../normalise/normaliser.js'
+import { appendAudit } from './audit.js'
 import { contentKey } from './keys.js'
 import { corpus, type Submission } from './submissions.js'
 
@@ -149,6 +150,15 @@ export async function startBatch(env: Env): Promise<BatchStarted> {
 
   // Settle rejected items on the ledger so the worklist shows them immediately.
   for (const r of rejectedItems) await stub.recordFailure(r.itemId, r.cause)
+
+  await appendAudit(db, {
+    at: now,
+    actor: 'system',
+    action: 'job.opened',
+    subjectType: 'job',
+    subjectId: jobId,
+    detail: `total=${prepared.length};accepted=${messages.length};rejected=${rejectedItems.length}`,
+  })
 
   // Enqueue accepted items. Queue sends are capped per call, so send in batches.
   for (const message of messages) await env.WORK.send(message)

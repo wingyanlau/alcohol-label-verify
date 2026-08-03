@@ -33,6 +33,7 @@ import {
 import { TTB_F5100_31_2023, UnknownFormError } from '../normalise/regions.js'
 import { createProvider } from '../providers/registry.js'
 import type { Provider } from '../providers/types.js'
+import { appendAudit } from './audit.js'
 import { MAX_ATTEMPTS } from './backoff.js'
 import { labelImageKey } from './keys.js'
 import { buildPersistPlan, persistResult } from './persist.js'
@@ -295,6 +296,28 @@ export async function processItem(
     )
     await persistResult(env.DB, plan, 'COMPLETED', new Date().toISOString())
 
+    // What produced this verdict, in identifiers. The values themselves are in
+    // verdict and field_verdict, where they are evidence; here they would be
+    // content in a history that cannot be redacted (D20).
+    await appendAudit(env.DB, {
+      at: new Date().toISOString(),
+      actor: 'system',
+      action: 'verdict.recorded',
+      subjectType: 'verdict',
+      subjectId: plan.verdict.id,
+      detail: [
+        `submission=${submissionId}`,
+        `outcome=${result.outcome}`,
+        `provider=${result.provenance.label.provider}`,
+        `model=${result.provenance.label.modelId}`,
+        `prompt=${result.provenance.label.promptVersion}`,
+        `record=${result.provenance.record ? 'extracted' : 'declared'}`,
+        `dpi=${dpi}`,
+        `reference=${result.warning.referenceDataVersion}`,
+        `legible=${result.warning.legible}`,
+      ].join(';'),
+    })
+
     await stub.recordResult(submissionId, result.outcome, result.summary)
     return { retry: false }
   } catch (error) {
@@ -347,6 +370,17 @@ export async function processItem(
     await env.DB.prepare(`UPDATE submission SET state = ?, failure_cause = ? WHERE id = ?`)
       .bind(isDeterministicRefusal(error) ? 'REJECTED' : 'FAILED', cause, submissionId)
       .run()
+    await appendAudit(env.DB, {
+      at: new Date().toISOString(),
+      actor: 'system',
+      action: isDeterministicRefusal(error) ? 'submission.rejected' : 'submission.failed',
+      subjectType: 'submission',
+      subjectId: submissionId,
+      // The classification, not the message: a cause can quote a provider, and
+      // a provider can quote the label back at us.
+      detail: `job=${jobId};fault=${fault};attempt=${attempt}`,
+    })
+
     await stub.recordFailure(submissionId, cause)
     return { retry: false }
   }

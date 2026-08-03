@@ -9,6 +9,7 @@
  * §9.5 (configuration).
  */
 
+import { readChain, verifyChain } from './batch/audit.js'
 import { MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
 import { loadCurrentJob } from './batch/current.js'
 import { loadSubmissionDetail } from './batch/detail.js'
@@ -413,6 +414,32 @@ export default {
     // Start a batch over the bundled corpus. The honest failure mode of an
     // unauthenticated batch endpoint is a bill (batch design §6.3); the corpus
     // is fixed at 26, so there is nothing here for a caller to inflate.
+    // Recompute the transaction history.
+    //
+    // A chain nobody verifies is decoration: its value is entirely in someone
+    // being able to run this and get an answer that names where the sequence
+    // stops holding. Reported as an index rather than a boolean, because
+    // "something was altered" is not actionable and "event 47 was" is.
+    if (pathname === '/audit/verify' && request.method === 'GET') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+
+      const chain = await readChain(env.DB)
+      const brokenAt = await verifyChain(chain)
+
+      return json(
+        {
+          status: brokenAt === null ? 'ok' : 'broken',
+          events: chain.length,
+          brokenAt,
+          // The most recent link, so an external record can pin the history at
+          // a moment: anything appended later extends this, and anything
+          // altered before it cannot reproduce it.
+          head: chain.length > 0 ? chain[chain.length - 1]?.digest : null,
+        },
+        brokenAt === null ? 200 : 409,
+      )
+    }
+
     // Which job every session should be showing. The page asks on load, so a
     // reload — or a second visitor — rejoins the batch in progress instead of
     // being offered a start button while 26 submissions are being read.
