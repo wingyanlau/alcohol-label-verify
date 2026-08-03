@@ -16,6 +16,7 @@
  * silent loss.
  */
 
+import { isApproved } from '../domain/approval.js'
 import type { Env, WorkMessage } from '../env.js'
 import { checkIntake, IntakeRejected } from '../normalise/normaliser.js'
 import { PROMPT_VERSION, promptDigest } from '../providers/prompt.js'
@@ -197,6 +198,9 @@ export async function startBatch(env: Env): Promise<BatchStarted> {
       `fingerprint=${fingerprint}`,
       `prompt=${PROMPT_VERSION}`,
       `promptDigest=${await promptDigest()}`,
+      // Whether this reader was one an administrator approved. A job that ran
+      // on an unapproved model is not void, but it is distinguishable.
+      `approved=${isApproved(providerName, env.MODEL_ID)}`,
     ].join(';'),
   })
 

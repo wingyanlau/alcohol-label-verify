@@ -1,0 +1,20 @@
+{
+  "$comment": "Which models this deployment is permitted to read labels with. A technical administrator's decision, recorded here because there is nowhere better yet — D14 leaves the prototype unauthenticated, so a runtime admin surface would be an affordance without a gate behind it. Keeping it in the repository means the decision is versioned, reviewed and diffable, which is more than a dashboard setting offers. When an authenticated admin surface exists this file becomes its seed, not its replacement.",
+  "configVersion": 1,
+  "approvals": [
+    {
+      "provider": "workers-ai",
+      "modelId": "@cf/meta/llama-4-scout-17b-16e-instruct",
+      "approvedBy": "unassigned — prototype",
+      "approvedOn": "2026-08-01",
+      "rationale": "Natively multimodal with tool calling; the first reader wired. Fully qualified, so the identifier cannot move under the audit record (D29)."
+    },
+    {
+      "provider": "gemini",
+      "modelId": "gemini-3.5-flash",
+      "approvedBy": "unassigned — prototype",
+      "approvedOn": "2026-08-03",
+      "rationale": "Second reader, added so B-Q4 can be measured rather than argued. Note the weaker pin: Google retired numbered versions after 2.0, so this is a stable name that can be repointed. The per-job fingerprint exists to make that detectable."
+    }
+  ]
+}

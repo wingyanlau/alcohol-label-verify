@@ -16,9 +16,12 @@ import { loadSubmissionDetail } from './batch/detail.js'
 import { startBatch } from './batch/intake.js'
 import { contentKey, labelImageKey } from './batch/keys.js'
 import { processItem } from './batch/pipeline.js'
+import { approvalFor, isApproved } from './domain/approval.js'
 import { ExtractionContractError } from './domain/extraction.js'
+import { referenceIsUnverified, warningReference } from './domain/reference.js'
 import type { Env, WorkMessage } from './env.js'
 import { gatewayFrom } from './providers/gateway.js'
+import { PROMPT_VERSION, promptDigest } from './providers/prompt.js'
 import { createProvider, knownProviderNames, specFor } from './providers/registry.js'
 import { PAGE_HTML } from './ui/page.js'
 
@@ -52,6 +55,16 @@ export function validateConfig(env: Env): ConfigProblem[] {
   const id = (env.MODEL_ID ?? '').trim()
   if (id === '' || id === 'unset') {
     problems.push({ setting: 'MODEL_ID', problem: 'not set' })
+  } else if (spec !== null && !isApproved(providerName, id)) {
+    // Which model reads a label is a governance decision, not a deployment
+    // detail: it determines what every verdict was produced by. Reported
+    // rather than refused — the service says what it is doing instead of
+    // silently doing it — and enforced by the deploy gate, which fails on a
+    // /health that is not ok.
+    problems.push({
+      setting: 'MODEL_ID',
+      problem: `"${id}" is not an approved reader for provider "${providerName}". Approvals are recorded in config/approved-models.json.`,
+    })
   } else if (spec?.isFloatingModelId(id)) {
     problems.push({
       setting: 'MODEL_ID',
@@ -419,6 +432,39 @@ export default {
     // Start a batch over the bundled corpus. The honest failure mode of an
     // unauthenticated batch endpoint is a bill (batch design §6.3); the corpus
     // is fixed at 26, so there is nothing here for a caller to inflate.
+    // What this deployment reads with, and on whose authority.
+    //
+    // Read-only, deliberately. An administrative interface is a production-path
+    // item (§15) and the prototype is unauthenticated by design (D14), so an
+    // endpoint that could repoint the model would be a control with no gate
+    // behind it — the opposite of the governance it appears to offer. Changing
+    // the reader stays a reviewed change to config/approved-models.json and
+    // wrangler.jsonc; this is how an administrator checks what is in force.
+    if (pathname === '/admin/model' && request.method === 'GET') {
+      const providerName = (env.MODEL_PROVIDER ?? '').trim()
+      const modelId = (env.MODEL_ID ?? '').trim()
+      const approval = approvalFor(providerName, modelId)
+      const spec = specFor(providerName)
+
+      return json({
+        inForce: { provider: providerName, modelId },
+        approved: approval !== null,
+        approval,
+        // Whether the identifier can move beneath the record that cites it.
+        // Vendor-specific: Cloudflare floats by suffix, Google by omitting a
+        // version, which is why the fingerprint below exists at all.
+        pinned: spec === null ? null : !spec.isFloatingModelId(modelId),
+        prompt: { version: PROMPT_VERSION, digest: await promptDigest() },
+        referenceData: {
+          configVersion: warningReference().configVersion,
+          verified: !referenceIsUnverified(),
+        },
+        // Identity is established per job and recorded in the chain; this says
+        // where to look rather than repeating it.
+        fingerprint: 'recorded per job as model.fingerprinted — see /audit/verify',
+      })
+    }
+
     // Recompute the transaction history.
     //
     // A chain nobody verifies is decoration: its value is entirely in someone
