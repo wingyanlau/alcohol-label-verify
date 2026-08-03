@@ -153,6 +153,7 @@ export default {
     // (B-Q4), not by a health check.
     if (pathname === '/health/inference') {
       const started = Date.now()
+      const configured = (env.MODEL_PROVIDER ?? '').trim()
       try {
         const provider = createProvider(env)
         await provider.ping()
@@ -166,6 +167,7 @@ export default {
         return json(
           {
             status: 'error',
+            provider: configured,
             model: env.MODEL_ID,
             latencyMs: Date.now() - started,
             error: e instanceof Error ? e.message : String(e),
@@ -249,6 +251,9 @@ export default {
       const image = await asset.arrayBuffer()
 
       const started = Date.now()
+      // Named before the attempt, so a failure says which reader failed. With
+      // one provider that was implicit; with two it is the first thing to know.
+      const configured = (env.MODEL_PROVIDER ?? '').trim()
       try {
         const provider = createProvider(env)
         const result = await provider.extract({
@@ -277,6 +282,7 @@ export default {
         return json(
           {
             status: 'error',
+            provider: configured,
             model: env.MODEL_ID,
             latencyMs: Date.now() - started,
             error: e instanceof Error ? e.message : String(e),
