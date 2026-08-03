@@ -305,6 +305,8 @@ export default {
           status: 'ok',
           provider: provider.name,
           model: env.MODEL_ID,
+          servedModelVersion: result.provenance.servedModelVersion ?? null,
+          vendorRequestId: result.provenance.vendorRequestId ?? null,
           latencyMs: Date.now() - started,
           // The values, not the artwork: enough to see whether it read the
           // label, without putting label content into a log (D20).

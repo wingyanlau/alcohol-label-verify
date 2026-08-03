@@ -310,6 +310,9 @@ export async function processItem(
         `outcome=${result.outcome}`,
         `provider=${result.provenance.label.provider}`,
         `model=${result.provenance.label.modelId}`,
+        // What answered, not what was asked for. Absent when the vendor does
+        // not say, and recorded as such rather than assumed equal.
+        `served=${result.provenance.label.servedModelVersion ?? 'unreported'}`,
         `prompt=${result.provenance.label.promptVersion}`,
         `record=${result.provenance.record ? 'extracted' : 'declared'}`,
         `dpi=${dpi}`,

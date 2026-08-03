@@ -308,8 +308,21 @@ export function createGeminiProvider(opts: GeminiOptions): Provider {
         )
       }
 
-      const raw = answerText(await response.json())
+      const envelope = (await response.json()) as {
+        modelVersion?: unknown
+        responseId?: unknown
+      }
+      const raw = answerText(envelope)
       const latencyMs = now() - started
+
+      // What actually served the request, as distinct from what was asked for.
+      // `gemini-3.5-flash` is a stable name rather than a pinned version — the
+      // numbered pins were retired after 2.0 — so the identifier in the request
+      // can move to new weights without anything in the record showing it. The
+      // vendor reports the version it used; recording that is the difference
+      // between an audit trail that cites a model and one that identifies it.
+      const servedVersion = typeof envelope.modelVersion === 'string' ? envelope.modelVersion : null
+      const responseId = typeof envelope.responseId === 'string' ? envelope.responseId : null
 
       const extraction = parseExtractionResponse(extractJson(raw), {
         fields: request.fields,
@@ -322,6 +335,10 @@ export function createGeminiProvider(opts: GeminiOptions): Provider {
         provenance: {
           provider: GEMINI_SPEC.name,
           modelId: opts.modelId,
+          ...(servedVersion === null ? {} : { servedModelVersion: servedVersion }),
+          // The vendor's own handle for this call. Useless to us and decisive
+          // in a support conversation about a specific verdict.
+          ...(responseId === null ? {} : { vendorRequestId: responseId }),
           promptVersion: PROMPT_VERSION,
           samplingParameters: { ...SAMPLING },
           latencyMs,

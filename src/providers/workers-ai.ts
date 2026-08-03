@@ -172,6 +172,10 @@ export function createWorkersAiProvider(opts: WorkersAiOptions): Provider {
       )) as unknown
 
       const latencyMs = now() - started
+      const served =
+        typeof response === 'object' && response !== null
+          ? (response as Record<string, unknown>).model
+          : undefined
       const raw = answerText(response)
       if (raw.trim() === '') {
         throw new ExtractionContractError('provider returned an empty response')
@@ -188,6 +192,7 @@ export function createWorkersAiProvider(opts: WorkersAiOptions): Provider {
         provenance: {
           provider: WORKERS_AI_SPEC.name,
           modelId: opts.modelId,
+          ...(typeof served === 'string' ? { servedModelVersion: served } : {}),
           promptVersion: PROMPT_VERSION,
           samplingParameters: { ...SAMPLING },
           latencyMs,

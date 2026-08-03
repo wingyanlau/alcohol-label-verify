@@ -52,6 +52,20 @@ export interface ExtractionProvenance {
   readonly provider: string
   /** Fully qualified. Never a floating alias (D29). */
   readonly modelId: string
+  /**
+   * The version the vendor says actually served the request.
+   *
+   * Distinct from `modelId`, which is what was asked for. Where a vendor
+   * publishes only stable names — Google retired numbered pins after 2.0 — the
+   * requested identifier can move to new weights with nothing in the record
+   * showing it. This is the vendor's own statement of what answered, and it is
+   * the difference between citing a model and identifying one.
+   *
+   * Absent when the vendor does not report it.
+   */
+  readonly servedModelVersion?: string
+  /** The vendor's handle for this call, for a support conversation later. */
+  readonly vendorRequestId?: string
   readonly promptVersion: string
   readonly samplingParameters: Readonly<Record<string, unknown>>
   readonly latencyMs: number
