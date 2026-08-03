@@ -21,6 +21,7 @@ import { loadStoredVerdict, ReplayUnavailableError, replayVerdict } from './batc
 import { retentionPolicyText, retentionWindowDays, sweepRetention } from './batch/retention.js'
 import { approvalFor, isApproved } from './domain/approval.js'
 import { ExtractionContractError } from './domain/extraction.js'
+import { configuredLegibilityFloor } from './domain/legibility.js'
 import { referenceIsUnverified, warningReference } from './domain/reference.js'
 import type { Env, WorkMessage } from './env.js'
 import { gatewayFrom } from './providers/gateway.js'
@@ -93,12 +94,21 @@ export function validateConfig(env: Env): ConfigProblem[] {
     // `retentionWindowDays` — a deployment that never chose a window must not
     // quietly delete applicant content on one.
     'RETENTION_WINDOW_DAYS',
-    // An unset floor would leave the system with no opinion on whether a
-    // warning could be read, and UNREADABLE is the verdict that stops a
-    // non-compliant label passing (D5).
-    'LEGIBILITY_FLOOR',
   ] as const) {
     positiveInt(k)
+  }
+
+  // Checked as a positive NUMBER, not a positive integer. Edge energy is a
+  // continuous measurement, so 29.5 is a meaningful floor in a way that half a
+  // day of retention is not — and rejecting it here while the parser accepts
+  // it would fail the deploy gate on a value the system would have honoured.
+  // An unset floor leaves no opinion on whether a warning could be read, and
+  // UNREADABLE is the verdict that stops a non-compliant label passing (D5).
+  if (configuredLegibilityFloor(env) === null) {
+    problems.push({
+      setting: 'LEGIBILITY_FLOOR',
+      problem: `expected a positive number, got "${env.LEGIBILITY_FLOOR}"`,
+    })
   }
 
   return problems
