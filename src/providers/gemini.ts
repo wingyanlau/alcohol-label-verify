@@ -55,16 +55,31 @@ export const GEMINI_SPEC: ProviderSpec = {
   // will report the deployment misconfigured without it.
   requiresCredential: true,
 
+  /**
+   * D29, as strictly as Google's naming permits — and that is less strictly
+   * than it permits for Cloudflare, which is worth recording rather than
+   * hiding.
+   *
+   * The first version of this demanded a `-NNN` suffix, on the reasoning that
+   * `gemini-2.5-flash` must be a moving alias. It is not one in the sense that
+   * matters: Google publishes stable names as the durable identifier and
+   * retired numbered pins after the 1.5/2.0 families. Requiring `-NNN` rejected
+   * every current model — the service refused `gemini-2.5-flash-002` because
+   * that id does not exist, which the API confirmed with a 404.
+   *
+   * So what is refused is what genuinely moves: `-latest`, anything marked
+   * preview or experimental, and dated snapshots. A stable name is the
+   * strongest pin on offer here. It is weaker than a Cloudflare model id, and
+   * an audit record citing one is correspondingly weaker — a fact for the
+   * record, not something a regular expression can fix.
+   */
   isFloatingModelId(modelId: string): boolean {
     const id = modelId.trim().toLowerCase()
-    if (['latest', 'preview', 'stable', 'current', 'exp'].some((s) => id.endsWith(`-${s}`))) {
-      return true
-    }
-    // Google floats by OMITTING a version rather than by suffix:
-    // `gemini-2.5-flash` is an alias that moves, `gemini-2.5-flash-002` is
-    // pinned. A suffix list alone would wave the alias through and silently
-    // invalidate every audit record citing it (D29).
-    return !/-\d{3}$/.test(id)
+    return (
+      ['latest', 'stable', 'current'].some((s) => id.endsWith(`-${s}`)) ||
+      /-(?:preview|exp)\b/.test(id) ||
+      /-\d{2}-\d{2}$/.test(id)
+    )
   },
 
   classify(error: unknown): FaultKind {

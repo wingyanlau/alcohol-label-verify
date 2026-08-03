@@ -48,7 +48,7 @@ const raw = (envelope: unknown, status = 200) =>
 const provider = (respond: (req: Request) => Response, capture?: (req: Request) => void) =>
   createGeminiProvider({
     apiKey: 'test-key',
-    modelId: 'gemini-2.5-flash-002',
+    modelId: 'gemini-2.5-flash',
     now: (() => {
       let t = 1000
       return () => (t += 250)
@@ -167,7 +167,7 @@ describe('provenance', () => {
   it('reports the vendor, the model and the shared prompt version', async () => {
     const r = await provider(() => ok(JSON.stringify(body))).extract(request)
     expect(r.provenance.provider).toBe('gemini')
-    expect(r.provenance.modelId).toBe('gemini-2.5-flash-002')
+    expect(r.provenance.modelId).toBe('gemini-2.5-flash')
     // The same lineage as the other adapter: one instruction, two readers.
     expect(r.provenance.promptVersion).toBe(PROMPT_VERSION)
     expect(r.provenance.samplingParameters.temperature).toBe(0)
@@ -179,13 +179,22 @@ describe('the spec', () => {
     expect(GEMINI_SPEC.requiresCredential).toBe(true)
   })
 
-  // Google floats by OMITTING a version, not by suffix. The suffix list that
-  // guards D29 for Cloudflare would wave `gemini-2.5-flash` straight through.
-  it('treats an unversioned model id as floating', () => {
-    expect(GEMINI_SPEC.isFloatingModelId('gemini-2.5-flash')).toBe(true)
+  // Written the other way round first, demanding a `-NNN` pin, on the
+  // assumption that a bare name must be an alias. The API disagreed with a
+  // 404: Google retired numbered pins after 1.5/2.0, and the stable name is
+  // the durable identifier. What is refused is what actually moves.
+  it('refuses the identifiers that genuinely move', () => {
     expect(GEMINI_SPEC.isFloatingModelId('gemini-2.5-pro-latest')).toBe(true)
     expect(GEMINI_SPEC.isFloatingModelId('gemini-2.0-flash-exp')).toBe(true)
-    expect(GEMINI_SPEC.isFloatingModelId('gemini-2.5-flash-002')).toBe(false)
+    expect(GEMINI_SPEC.isFloatingModelId('gemini-2.5-flash-preview-05-20')).toBe(true)
+    expect(GEMINI_SPEC.isFloatingModelId('gemini-2.5-flash-preview')).toBe(true)
+  })
+
+  it('accepts a stable name, which is the strongest pin Google offers', () => {
+    expect(GEMINI_SPEC.isFloatingModelId('gemini-2.5-flash')).toBe(false)
+    expect(GEMINI_SPEC.isFloatingModelId('gemini-2.5-pro')).toBe(false)
+    // Older families did publish numbered pins; those remain acceptable.
+    expect(GEMINI_SPEC.isFloatingModelId('gemini-2.0-flash-001')).toBe(false)
   })
 
   // Gemini reports both a per-minute limit and a spent daily quota as
