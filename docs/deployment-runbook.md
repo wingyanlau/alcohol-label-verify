@@ -6,9 +6,10 @@ first and a container later.*
 
 | Field | Value |
 |---|---|
-| Status | Current as of 2026-08-01 |
-| Environment | Single — no staging/production split yet |
-| Live | https://alcohol-label-verify.wing-lawrence.workers.dev |
+| Status | Current as of 2026-08-03 |
+| Environments | `staging` and `production`, with disjoint resources |
+| Staging | https://alcohol-label-verify-staging.wing-lawrence.workers.dev — every merge to `main` |
+| Production | https://alcohol-label-verify.wing-lawrence.workers.dev — a push to `prod` |
 
 ---
 
@@ -20,12 +21,38 @@ commands in §4 and nothing else.*
 | Resource | Name | Identifier | Created |
 |---|---|---|---|
 | Cloudflare account | `Wing.lawrence@gmail.com's Account` | `fb1dbb92cdbbab3ebd151838821ce3e5` | pre-existing |
+
+**Production** (`--env production`) — the resources created during setup, now
+addressed by name rather than by default:
+
+| Resource | Name | Identifier | Created |
+|---|---|---|---|
 | Worker | `alcohol-label-verify` | — | 2026-08-01 |
 | R2 bucket | `alcohol-label-verify-staging` | — | 2026-08-01 |
 | D1 database | `alcohol-label-verify` | `ac8a691b-3b4b-4518-9539-54fe81203529` | 2026-08-01 |
 | Queue | `alcohol-label-verify-work` | `a561986bb3c448acacb971970d0f7b68` | 2026-08-01 |
 | Queue | `alcohol-label-verify-dlq` | `99fd0bf7734a4816a8bc2176933ce0d0` | 2026-08-01 |
 | Durable Object | `JobCoordinator` | migration tag `v1`, SQLite-backed | 2026-08-01 |
+
+**Staging** (`--env staging`) — a disjoint set. Nothing is shared with
+production, so a staging run cannot write to the production record:
+
+| Resource | Name | Identifier | Created |
+|---|---|---|---|
+| Worker | `alcohol-label-verify-staging` | — | 2026-08-03 |
+| R2 bucket | `alcohol-label-verify-content-staging` | — | 2026-08-03 |
+| D1 database | `alcohol-label-verify-staging` | `9ac6b347-6668-408f-9c6d-998e27fbdfb1` | 2026-08-03 |
+| Queue | `alcohol-label-verify-work-staging` | `1b21e606324241ae89ebf7a35c820c31` | 2026-08-03 |
+| Queue | `alcohol-label-verify-dlq-staging` | `988cac1ef011491ea793d225e11cc8d6` | 2026-08-03 |
+| Durable Object | `JobCoordinator` | migration tag `v1`, SQLite-backed | 2026-08-03 |
+
+The production R2 bucket is called `…-staging` because `STAGING` is the binding
+for *transient content* (B-D10) — it predates the staging environment and has
+nothing to do with it. The staging environment's equivalent is named
+`…-content-staging` so the two senses stay distinguishable in `r2 bucket list`.
+Renaming the older bucket would mean copying its contents; it holds only
+transient content, so the rename is safe to do later and is not worth a
+migration now.
 
 **No secrets are set.** Workers AI authenticates through its binding, so
 `MODEL_API_KEY` is absent by design — not forgotten. `/health` accounts for this:
@@ -151,10 +178,20 @@ Secrets never appear in `wrangler.jsonc`, in the repository, or in logs (D20).
 
 ## 6. Deploy
 
+Deploying is normally something you *observe*, not something you run: a merge to
+`main` deploys staging, and a push to `prod` deploys production (§6.2). The
+manual commands remain for a first stand-up from nothing, and for the case where
+CI itself is broken.
+
 ```bash
 npm run quality-check     # lint + typecheck + tests with coverage
-npm run deploy
+npm run migrate:staging   # D1 first: the new code must not meet the old schema
+npm run deploy:staging
 ```
+
+Substitute `:production` for a production deploy. There is deliberately no bare
+`npm run deploy` — it would publish the development block, whose bindings point
+at production resources, to whichever worker `name` happens to resolve to.
 
 `quality-check` first, deliberately. The `pre-push` hook enforces the same gate,
 so a deploy that skips it is a deliberate act rather than an oversight.
@@ -166,6 +203,7 @@ npx wrangler deployments list          # confirm the version you expect is live
 curl -s $URL/health | jq
 curl -s $URL/health/inference | jq
 curl -s $URL/health/coordinator | jq
+curl -s $URL/health/raster | jq       # ~1–3 s; browser launch dominates
 ```
 
 **A deploy can succeed with a binding silently missing.** This happened during
@@ -191,6 +229,87 @@ reports every binding `true`. Expected when healthy:
 **Wait a few seconds before diagnosing.** Cloudflare propagation lags briefly
 after a deploy; two apparent failures during setup — an error 1042 on `/` and
 bindings reading `false` — were both propagation and resolved on retry.
+
+### 6.2 Continuous deployment
+
+| Workflow | Trigger | Effect |
+|---|---|---|
+| `ci.yml` | pull request | Quality gate only |
+| `deploy-staging.yml` | push to `main`, or manual | Migrate → deploy → verify staging |
+| `deploy-production.yml` | push to `prod`, or manual | Migrate → deploy → verify production → tag `release-YYYYMMDD-HHMM` |
+| `quality.yml` | called by the three above | Lint, typecheck, coverage, guard-test presence |
+
+The gate lives in one reusable workflow so the check a change passes on a pull
+request is the same one it passes on the way to an environment. Each deploy job
+ends with the §6.1 verification as an *assertion* rather than a printout: the
+run fails if `/health` is not `ok`, if it reports the wrong `environment`, or if
+a required binding is missing.
+
+Inference and rasterisation are then exercised for real, because they are the
+two checks a configuration test cannot make — a binding can be present and the
+dependency behind it still unreachable. Rasterisation earns its ~3 s because it
+is the batch path's entry point (D33): the model is never shown a PDF text
+layer, so a browser that cannot render is a batch that cannot start. Its
+assertion includes `bytes > 0`, since a browser that launches and renders
+nothing still reports `ok`.
+
+The raster probe retries once; the inference probe does not. Browser Rendering
+admits roughly 10 new instances per second (§15.4), so a refused launch says
+nothing about the revision being deployed, and failing a good deploy on
+contention would train people to ignore the check. Workers AI has no comparable
+launch step, so a first failure there is a real one.
+
+`modelApiKey` is excluded from the binding assertion: it is `false` by design
+under Workers AI, so requiring every binding to be `true` would fail every
+deploy.
+
+GitHub configuration, done once. Both secrets are set on **each** environment,
+`staging` and `production`:
+
+| | |
+|---|---|
+| Environments | `staging`, `production` — created. Add a required reviewer to `production` to gate promotion |
+| Secret `CLOUDFLARE_API_TOKEN` | Workers Scripts Edit (upload), D1 Edit (`migrations apply --remote`), Queues Edit (consumer attach), Browser Run Edit. Or the "Edit Cloudflare Workers" template |
+| Secret `CLOUDFLARE_ACCOUNT_ID` | `fb1dbb92cdbbab3ebd151838821ce3e5` |
+
+Both secrets are held **per environment**, not at repository scope: `staging`
+and `production` each carry their own `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID`. Nothing remains at repository level.
+
+Placement is the control, and it is what makes a required reviewer on
+`production` load-bearing rather than advisory. A repository secret is readable
+by any job on any branch, so a token sitting there could be taken by a workflow
+that never declares an environment and never meets the gate. An environment
+secret can only be resolved by a job declaring that environment. Both deploy
+jobs declare one and read the credentials in a single job-level `env` block; the
+two jobs that declare none — `quality` and `tag-release` — need no Cloudflare
+credentials, so nothing is left resolving against an empty scope. Each deploy
+job asserts the credentials resolved before it does anything else, because a
+missing environment secret otherwise surfaces as an opaque `wrangler` auth
+error several minutes in.
+
+The two tokens may hold the same value today, and that is sufficient: Cloudflare's
+Workers, D1 and Queues permissions are account-scoped — there is no per-database
+or per-script resource selector — so a staging-only token could still migrate the
+production database. Distinct values would buy revocation independence and audit
+attribution, not isolation, and can be introduced later by changing one secret
+with no workflow change. The isolation that does exist is structural: disjoint
+resource names, `--env` on every command, and `/health` asserting the deployed
+`environment` matches.
+
+Queues Edit is required because a queue *consumer* is a trigger, attached to the
+queue by a separate API call after the script upload — `wrangler deploy` prints
+it on its own line. It is the only binding here whose deploy mutates a second
+resource.
+
+AI and R2 need no scope: those bindings are declarations in the script metadata,
+and the worker authenticates to Workers AI through the binding at runtime rather
+than through this token — the same fact that makes `MODEL_API_KEY` absent by
+design. Browser Run Edit (the current name for Browser Rendering) is on the
+token by choice rather than requirement.
+
+Promotion to production is a branch push, not a merge to `main`, so that a
+revision has run somewhere real before it is the thing a compliance agent sees.
 
 ---
 
@@ -249,9 +368,9 @@ where live job ledgers sit. Confirm no job is running first.
 
 | Missing | Consequence |
 |---|---|
-| Staging environment | One environment; a deploy goes straight to the live URL |
-| Automated deploy from CI | CI runs quality checks only; deployment is manual |
 | Custom domain | The `workers.dev` subdomain is the only route |
+| Smoke test against the corpus | Staging is verified by health probes, not by submitting a known label and asserting its verdict |
+| Rollback from CI | Rollback is the manual §7 command; no workflow reverts a bad deploy |
 | Retention enforcement | `schema_meta.retention_policy` is `UNSET`; nothing purges the record |
 | Alerting | Logs are queryable; nothing watches them |
 | Authentication | Deliberate for the prototype (D14) — a gated URL fails closed for a reviewer |

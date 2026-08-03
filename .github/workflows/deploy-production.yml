@@ -1,0 +1,144 @@
+name: Deploy Production
+
+# Production is promotion, not merge: a revision reaches it by being pushed to
+# `prod` after it has run on staging. main deploying straight to production
+# would remove the only place a real deploy is observed before it matters.
+on:
+  push:
+    branches: [prod]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+
+  deploy:
+    name: Deploy Production
+    needs: quality
+    runs-on: ubuntu-latest
+    # Add a required reviewer to this GitHub environment to gate the promotion;
+    # the workflow does not encode approval itself, because who may approve is
+    # an organisational fact and does not belong in the repository.
+    environment:
+      name: production
+      url: https://alcohol-label-verify.wing-lawrence.workers.dev
+    permissions:
+      contents: read
+      deployments: write
+    # Credentials are held by the `production` GitHub environment rather than at
+    # repository scope. That is what makes the reviewer above load-bearing: no
+    # job can reach the production credential without declaring this environment
+    # and passing its gate. Declared once here instead of per step.
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      # First, and before the checkout: a missing environment secret otherwise
+      # surfaces as an opaque wrangler auth error several minutes in.
+      - name: Credentials resolved
+        run: |
+          set -euo pipefail
+          : "${CLOUDFLARE_API_TOKEN:?missing — add it under Settings → Environments → production}"
+          : "${CLOUDFLARE_ACCOUNT_ID:?missing — add it under Settings → Environments → production}"
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Apply D1 migrations
+        run: npm run migrate:production
+
+      - name: Deploy
+        run: npm run deploy:production
+
+      - name: Verify deployment
+        run: |
+          set -euo pipefail
+          url="https://alcohol-label-verify.wing-lawrence.workers.dev"
+
+          for attempt in 1 2 3 4 5; do
+            if body=$(curl -fsS --max-time 20 "$url/health"); then break; fi
+            echo "attempt $attempt: /health not healthy yet"
+            body=$(curl -sS --max-time 20 "$url/health" || true)
+            sleep 5
+          done
+
+          echo "$body"
+          echo "$body" | jq -e '.status == "ok"' > /dev/null \
+            || { echo "::error::/health reported: $(echo "$body" | jq -c '.problems // .')"; exit 1; }
+          echo "$body" | jq -e '.environment == "production"' > /dev/null \
+            || { echo "::error::deployed worker reports environment $(echo "$body" | jq -r '.environment')"; exit 1; }
+
+          # modelApiKey is absent by design and reports false — asserting that
+          # every binding is true would fail every deploy. These five are the
+          # ones whose absence a successful upload would otherwise hide.
+          missing=$(echo "$body" | jq -r '
+            .bindings as $b
+            | ["staging", "database", "inference", "workQueue", "jobCoordinator"]
+            | map(select($b[.] != true)) | join(", ")')
+          [ -z "$missing" ] || { echo "::error::missing bindings: $missing"; exit 1; }
+
+      - name: Verify inference reachable
+        run: |
+          set -euo pipefail
+          url="https://alcohol-label-verify.wing-lawrence.workers.dev"
+          body=$(curl -fsS --max-time 60 "$url/health/inference")
+          echo "$body"
+          echo "$body" | jq -e '.status == "ok"' > /dev/null
+
+      # The other dependency no configuration check can prove. Rasterisation is
+      # the batch path's entry point (D33) — the model is never shown a PDF text
+      # layer, so a browser that cannot render is a batch that cannot start.
+      # ~3 s, dominated by browser launch.
+      - name: Verify rasterisation reachable
+        run: |
+          set -euo pipefail
+          url="https://alcohol-label-verify.wing-lawrence.workers.dev"
+
+          # Browser Rendering admits roughly 10 new instances per second, so a
+          # launch can be refused for reasons that have nothing to do with this
+          # revision. One retry, rather than failing a good deploy on contention.
+          for attempt in 1 2; do
+            if body=$(curl -fsS --max-time 90 "$url/health/raster"); then break; fi
+            echo "attempt $attempt: browser launch refused or timed out"
+            body=$(curl -sS --max-time 90 "$url/health/raster" || true)
+            sleep 10
+          done
+
+          echo "$body"
+          echo "$body" | jq -e '.status == "ok"' > /dev/null \
+            || { echo "::error::/health/raster reported: $(echo "$body" | jq -r '.error // .reason // .')"; exit 1; }
+          # A zero-byte screenshot is a browser that launched and rendered
+          # nothing — reported as ok, and useless.
+          echo "$body" | jq -e '.bytes > 0' > /dev/null \
+            || { echo "::error::rasterisation produced an empty image"; exit 1; }
+
+  # A deployed revision must be nameable after the fact. The tag is what an
+  # audit record's `deployment` reference resolves back to.
+  tag-release:
+    name: Tag Release
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create release tag
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          TAG_NAME="release-$(date -u +'%Y%m%d-%H%M')"
+          echo "Creating tag: $TAG_NAME"
+          git tag -a "$TAG_NAME" -m "Production deploy of ${GITHUB_SHA}"
+          git push origin "$TAG_NAME"

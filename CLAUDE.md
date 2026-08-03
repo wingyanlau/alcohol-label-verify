@@ -161,8 +161,9 @@ npm run dev              # Local worker
 npm test                 # Full suite
 npm run quality-check    # Lint + typecheck + tests with coverage
 npm run lint:fix         # Auto-fix
-npm run deploy
-npm run tail             # Live logs
+npm run deploy:staging   # Or :production — there is no bare `deploy`
+npm run migrate:staging  # D1, --remote. Runs before a deploy, never after
+npm run tail:staging     # Live logs
 npm run corpus           # Rebuild the 26 test submissions
 npm run docs:pdf         # Combined design PDF
 ```
@@ -194,9 +195,18 @@ test-plan §12: every Must-priority requirement maps to a passing test.
 
 ## Deployment
 
-- Manual: `npm run deploy`
-- Health: `/health`, `/health/inference`, `/health/coordinator`
-- Secrets via `wrangler secret put`, never in `wrangler.jsonc`
+- **Staging is `main`**: every merge migrates, deploys and health-checks
+  `alcohol-label-verify-staging`. Production is a push to `prod`
+- Environments are disjoint — separate worker, D1, R2 bucket and queues — so a
+  staging run can never write to the production record
+- Manual fallback: `npm run migrate:<env> && npm run deploy:<env>`, in that order
+- Health: `/health`, `/health/inference`, `/health/coordinator`,
+  `/health/raster`. CI asserts on these rather than printing them, including
+  `bytes > 0` on the raster probe; `modelApiKey: false` is correct under
+  Workers AI and is excluded from the binding assertion
+- Secrets via `wrangler secret put`, never in `wrangler.jsonc`. This deployment
+  currently holds none
+- Full detail: [docs/deployment-runbook.md](docs/deployment-runbook.md) §6
 
 ## Open, and Worth Knowing
 

@@ -91,5 +91,123 @@
     "bindings": [{ "name": "JOB", "class_name": "JobCoordinator" }]
   },
 
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["JobCoordinator"] }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["JobCoordinator"] }],
+
+  // ---------------------------------------------------------------------------
+  // Environments
+  //
+  // The block above is the local development target — `wrangler dev` reads it,
+  // and miniflare simulates D1, R2 and the queues, so a local run never touches
+  // the account. Every *deploy* names an environment: package.json exposes
+  // `deploy:staging` and `deploy:production` and nothing else, because a bare
+  // `wrangler deploy` would publish the development block over the live worker.
+  //
+  // Bindings are not inherited by a named environment, and the duplication below
+  // is left explicit rather than factored away: a resource can then never be
+  // shared between environments by omission. What *is* inherited —
+  // `compatibility_date`, `compatibility_flags`, `observability`, `migrations` —
+  // is exactly what must stay identical everywhere, since an audit record from
+  // staging is only comparable to one from production if the runtime that
+  // produced it was the same (D29 applied to the platform rather than the model).
+  // ---------------------------------------------------------------------------
+  "env": {
+    "staging": {
+      "name": "alcohol-label-verify-staging",
+
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "MODEL_PROVIDER": "workers-ai",
+        "MODEL_ID": "@cf/meta/llama-4-scout-17b-16e-instruct",
+        "MAX_UPLOAD_BYTES": "10485760",
+        "MAX_PAGE_COUNT": "8",
+        "MAX_PIXELS": "40000000",
+        "MAX_BATCH_ITEMS": "300",
+        "RASTER_DPI": "300",
+        "EXTRACT_CONCURRENCY": "5"
+      },
+
+      // `STAGING` is the transient-content binding (B-D10), unrelated to the
+      // staging *environment*. The bucket it points at here is suffixed
+      // `-content-staging` so the two senses of the word cannot be confused in
+      // the account listing.
+      "r2_buckets": [
+        { "binding": "STAGING", "bucket_name": "alcohol-label-verify-content-staging" }
+      ],
+
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "alcohol-label-verify-staging",
+          "database_id": "9ac6b347-6668-408f-9c6d-998e27fbdfb1"
+        }
+      ],
+
+      "ai": { "binding": "AI" },
+      "browser": { "binding": "BROWSER" },
+
+      "queues": {
+        "producers": [{ "binding": "WORK", "queue": "alcohol-label-verify-work-staging" }],
+        "consumers": [
+          {
+            "queue": "alcohol-label-verify-work-staging",
+            "max_batch_size": 1,
+            "max_retries": 3,
+            "dead_letter_queue": "alcohol-label-verify-dlq-staging"
+          }
+        ]
+      },
+
+      "durable_objects": {
+        "bindings": [{ "name": "JOB", "class_name": "JobCoordinator" }]
+      }
+    },
+
+    "production": {
+      // The worker that already serves the live URL. Named explicitly, because
+      // the default would be `alcohol-label-verify-production` and would strand
+      // the existing deployment.
+      "name": "alcohol-label-verify",
+
+      "vars": {
+        "ENVIRONMENT": "production",
+        "MODEL_PROVIDER": "workers-ai",
+        "MODEL_ID": "@cf/meta/llama-4-scout-17b-16e-instruct",
+        "MAX_UPLOAD_BYTES": "10485760",
+        "MAX_PAGE_COUNT": "8",
+        "MAX_PIXELS": "40000000",
+        "MAX_BATCH_ITEMS": "300",
+        "RASTER_DPI": "300",
+        "EXTRACT_CONCURRENCY": "5"
+      },
+
+      "r2_buckets": [{ "binding": "STAGING", "bucket_name": "alcohol-label-verify-staging" }],
+
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "alcohol-label-verify",
+          "database_id": "ac8a691b-3b4b-4518-9539-54fe81203529"
+        }
+      ],
+
+      "ai": { "binding": "AI" },
+      "browser": { "binding": "BROWSER" },
+
+      "queues": {
+        "producers": [{ "binding": "WORK", "queue": "alcohol-label-verify-work" }],
+        "consumers": [
+          {
+            "queue": "alcohol-label-verify-work",
+            "max_batch_size": 1,
+            "max_retries": 3,
+            "dead_letter_queue": "alcohol-label-verify-dlq"
+          }
+        ]
+      },
+
+      "durable_objects": {
+        "bindings": [{ "name": "JOB", "class_name": "JobCoordinator" }]
+      }
+    }
+  }
 }

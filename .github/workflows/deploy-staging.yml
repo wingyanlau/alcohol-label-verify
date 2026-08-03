@@ -1,0 +1,141 @@
+name: Deploy Staging
+
+# main is the staging line: every merge lands on
+# https://alcohol-label-verify-staging.wing-lawrence.workers.dev behind the same
+# quality gate a pull request faces. Production is a separate branch (see
+# deploy-production.yml), so a merge to main is never a production event.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One deploy at a time, and a superseded one is cancelled rather than queued:
+# two concurrent runs would race on the D1 migration and on the worker upload.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+
+  deploy:
+    name: Deploy Staging
+    needs: quality
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://alcohol-label-verify-staging.wing-lawrence.workers.dev
+    permissions:
+      contents: read
+      deployments: write
+    # Credentials are held by the `staging` GitHub environment rather than at
+    # repository scope, so a job that does not declare an environment cannot
+    # resolve them at all. Declared once here instead of per step: there is then
+    # a single place where an environment's credentials enter the job, and no
+    # way for a later step to quietly reach for a different set.
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      # First, and before the checkout: a missing environment secret otherwise
+      # surfaces as an opaque wrangler auth error several minutes in. Now that
+      # each environment carries its own set, an environment added later with
+      # one key forgotten is the plausible failure.
+      - name: Credentials resolved
+        run: |
+          set -euo pipefail
+          : "${CLOUDFLARE_API_TOKEN:?missing — add it under Settings → Environments → staging}"
+          : "${CLOUDFLARE_ACCOUNT_ID:?missing — add it under Settings → Environments → staging}"
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Migrations run before the upload, so the new code never meets the old
+      # schema. The audit_event table is append-only (D32), which is what makes
+      # this order safe: a migration adds, it does not rewrite history.
+      - name: Apply D1 migrations
+        run: npm run migrate:staging
+
+      # No `wrangler secret bulk` step, unlike sibling projects: Workers AI
+      # authenticates through its binding, so this deployment holds no secrets
+      # at all. /health knows that and does not ask for MODEL_API_KEY.
+      - name: Deploy
+        run: npm run deploy:staging
+
+      # A deploy can succeed with a binding silently missing, and /health is the
+      # only thing that notices — it returns 503 with the offending setting
+      # named. `environment` is asserted too, because a correct-looking deploy
+      # of the wrong env block is the failure this catches that a 200 does not.
+      - name: Verify deployment
+        run: |
+          set -euo pipefail
+          url="https://alcohol-label-verify-staging.wing-lawrence.workers.dev"
+
+          # Cloudflare propagation lags a few seconds; retry before diagnosing.
+          for attempt in 1 2 3 4 5; do
+            if body=$(curl -fsS --max-time 20 "$url/health"); then break; fi
+            echo "attempt $attempt: /health not healthy yet"
+            body=$(curl -sS --max-time 20 "$url/health" || true)
+            sleep 5
+          done
+
+          echo "$body"
+          echo "$body" | jq -e '.status == "ok"' > /dev/null \
+            || { echo "::error::/health reported: $(echo "$body" | jq -c '.problems // .')"; exit 1; }
+          echo "$body" | jq -e '.environment == "staging"' > /dev/null \
+            || { echo "::error::deployed worker reports environment $(echo "$body" | jq -r '.environment')"; exit 1; }
+
+          # modelApiKey is absent by design and reports false — asserting that
+          # every binding is true would fail every deploy. These five are the
+          # ones whose absence a successful upload would otherwise hide.
+          missing=$(echo "$body" | jq -r '
+            .bindings as $b
+            | ["staging", "database", "inference", "workQueue", "jobCoordinator"]
+            | map(select($b[.] != true)) | join(", ")')
+          [ -z "$missing" ] || { echo "::error::missing bindings: $missing"; exit 1; }
+
+      # The inference binding is exercised separately because it is the one
+      # dependency a config check cannot prove: the binding can be present and
+      # the model still unreachable. Whether the model can *read* a 4.5pt
+      # warning is a corpus measurement (B-Q4), not this.
+      - name: Verify inference reachable
+        run: |
+          set -euo pipefail
+          url="https://alcohol-label-verify-staging.wing-lawrence.workers.dev"
+          body=$(curl -fsS --max-time 60 "$url/health/inference")
+          echo "$body"
+          echo "$body" | jq -e '.status == "ok"' > /dev/null
+
+      # The other dependency no configuration check can prove. Rasterisation is
+      # the batch path's entry point (D33) — the model is never shown a PDF text
+      # layer, so a browser that cannot render is a batch that cannot start.
+      # ~3 s, dominated by browser launch.
+      - name: Verify rasterisation reachable
+        run: |
+          set -euo pipefail
+          url="https://alcohol-label-verify-staging.wing-lawrence.workers.dev"
+
+          # Browser Rendering admits roughly 10 new instances per second, so a
+          # launch can be refused for reasons that have nothing to do with this
+          # revision. One retry, rather than failing a good deploy on contention.
+          for attempt in 1 2; do
+            if body=$(curl -fsS --max-time 90 "$url/health/raster"); then break; fi
+            echo "attempt $attempt: browser launch refused or timed out"
+            body=$(curl -sS --max-time 90 "$url/health/raster" || true)
+            sleep 10
+          done
+
+          echo "$body"
+          echo "$body" | jq -e '.status == "ok"' > /dev/null \
+            || { echo "::error::/health/raster reported: $(echo "$body" | jq -r '.error // .reason // .')"; exit 1; }
+          # A zero-byte screenshot is a browser that launched and rendered
+          # nothing — reported as ok, and useless.
+          echo "$body" | jq -e '.bytes > 0' > /dev/null \
+            || { echo "::error::rasterisation produced an empty image"; exit 1; }
