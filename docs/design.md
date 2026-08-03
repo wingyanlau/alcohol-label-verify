@@ -2025,7 +2025,7 @@ plainly in the README, which is the correct handling of a known limitation.
 | D29 | The service refuses to start on a floating model alias (§9.4.6) | Warning only; or trusting configuration | A mutable identifier silently invalidates every audit record citing it, and the failure is undetectable afterwards. Startup is the only cheap point to catch it | Easy |
 | D32 | The prototype persists a durable record and an append-only transaction history; submission content stays transient (§11.5.1) | Storing nothing (N3, D6); or storing content as well as the record | An audit trail that is produced and discarded demonstrates nothing, and batch needs state regardless (batch §10). Separating *content* from *record* keeps the privacy argument intact: artwork is purged at job completion, digests and extracted values are retained as the evidence an agent acted on. This is §15.1's production posture arriving early | **Costly** — retention becomes a policy obligation (Q-PRV-03) |
 | D31 | Prototype deploys to Cloudflare Workers; the container is the production step, not the prototype's ([`deployment-path.md`](deployment-path.md)) | Containerising now (D12/D13) | A container adds nothing a prototype needs and costs setup the budget cannot spare. Workers' constraints are strictly tighter than a container's — no filesystem, no threads, no native modules, a 6-connection cap — so code that satisfies them ports outward unchanged, while container-first code does not port inward. Production remains containerised and on premise (§15) | Easy — the platform sits behind five adapters (batch §14) |
-| D30 | The prototype's audit record omits rule-set binding, selection inputs, approval reference, policy-store version, and retrieval versions (§11.2.1) | Implementing §8.7.1 in full; or dropping the audit record from the floor | Those fields describe a policy-governance regime the prototype does not have — configuration is the policy store and no approval workflow exists. NFR-13 replayability is preserved in full; only governance metadata is omitted. Documented reduction, not a silent gap | Easy — populating a structure that already exists |
+| D30 | The prototype's audit record omits rule-set binding, selection inputs, approval reference, policy-store version, and retrieval versions (§11.2.1). **The regime that would populate them is designed in §18 and deliberately unbuilt** | Implementing §8.7.1 in full; or dropping the audit record from the floor | Those fields describe a policy-governance regime the prototype does not have — configuration is the policy store and no approval workflow exists. NFR-13 replayability is preserved in full; only governance metadata is omitted. Documented reduction, not a silent gap | Easy — populating a structure that already exists |
 | D33 | Provider identity, credential requirement, floating-alias rules and **fault classification** all belong to the vendor adapter, behind one `ProviderSpec` (`providers/types.ts`) | Central switch statements; shared error matching | Adding a second provider proved the seam had eroded: the batch layer decided retry-versus-abandon by matching Cloudflare's error strings, and configuration validation held a list of floating suffixes describing Cloudflare's naming. Pointed at Gemini, the first called every fault transient and the second waved a genuine alias through. What each vendor knows about itself has to live with that vendor, or the abstraction is decoration | Easy |
 | D34 | Both adapters use one **identical instruction** and one `PROMPT_VERSION`; per-vendor prompt tuning is refused | A prompt optimised per model | Two readers under the same instruction differ in exactly one variable, which is what makes B-Q4 a measurement rather than a preference. Tuned prompts confound every comparison, and an audit record could no longer claim two verdicts were produced under the same conditions | Easy |
 | D35 | Gemini's server-side `responseSchema` is **not** used, though available | Enforced structured output | A hard schema increases the pressure to fill every slot — §8.3.2's fabrication risk, observed live when a model with no image invented `Old Forester` for a label reading `Old Tom Distillery`. It would also confound the comparison in D34 | Easy |
@@ -2355,6 +2355,199 @@ preserve the vendor's own request and response schema, so the seam is a
 destination rather than a translation: the Gemini adapter needed one field and
 no logic. An interface unifying their management APIs would be an abstraction
 with no caller.
+
+---
+
+## 18. The Verification Layer, and the Path to Automation
+
+*Not built. Written before building so the automation path is on record while
+it can still shape the design, rather than being retrofitted onto whatever the
+first implementation happened to do.*
+
+Layer 3a — determinate compliance — is the layer §8.8.1 allocates to code and
+D30 deliberately reduced: *"configuration is the policy store and no approval
+workflow exists."* What exists today is layer 2 (matching label against
+application) and one member of 3a (the statutory warning: exact text,
+capitalisation). What is missing is the rest of 3a — mandatory-element
+presence, permitted formats, thresholds — evaluated against a **stated policy
+set** rather than against rules embedded in code.
+
+Building it closes part of D30 and is the step that turns "these two documents
+disagree" into "this submission does or does not comply, and here is the rule
+that says so".
+
+---
+
+### 18.1 The policy set is versioned data
+
+Following the precedent already set by `config/approved-models.json` and
+`config/warning-statement.json`: a rule set is a **governed artefact**, not
+source code, because the people who own it are not the people who deploy.
+
+```jsonc
+{
+  "policySetVersion": 1,
+  "approvedBy": "IT Systems Administrator (role unfilled — prototype)",
+  "approvedAt": "2026-08-03",
+  "rules": [
+    {
+      "id": "ABV-PROOF-CONSISTENT",
+      "citation": "27 CFR 5.65(a)",
+      "requirement": "Where proof is stated, it is twice the stated alcohol content",
+      "appliesWhen": { "productType": ["Distilled spirits"] },
+      "check": { "kind": "numeric-consistency", "of": "alcoholContent", "rule": "proof=2×abv" },
+      "severity": "blocking",
+      "status": "active",
+      "automation": "advisory"
+    }
+  ]
+}
+```
+
+Rules are **superseded, never deleted** (D27) and carry `status: draft | active
+| superseded`, so nothing is enforced without a named approval and no past
+decision becomes unauditable because a rule was removed.
+
+### 18.2 Checks are a closed vocabulary, not an expression language
+
+The policy file supplies **parameters**; each `kind` is implemented in tested
+code.
+
+| kind | The question it answers |
+|---|---|
+| `field-present` | Is a mandatory element on the label at all |
+| `format-matches` | Is alcohol content stated in a permitted form |
+| `value-in-set` | Is net contents an authorised standard of fill |
+| `numeric-consistency` | Proof equals twice the stated ABV (`UT-C01`–`C03`) |
+| `statutory-text` | The health warning — the one member that exists today |
+
+**No embedded predicates and no evaluator.** A rule language would move logic
+into a file where it cannot be unit-tested, and would re-admit through the back
+door the non-determinism D23 exists to keep out. The cost is that a genuinely
+new *shape* of check needs code; that is the intended cost, because a new shape
+of check is exactly the thing that should be reviewed and tested rather than
+configured.
+
+### 18.3 Selection is a deterministic query, and is bound to the decision
+
+Which rules apply is derived from the **application record** — product type,
+class, container size — and never from the model (D25). The verdict then binds
+`policySetVersion`, the ids of the rules selected, **and the selection inputs**
+(D26).
+
+The distinction matters more than it looks: binding a version alone proves the
+rules were *applied* correctly. Binding the selection inputs proves the
+*correct rules were selected*. Selection error is silent and systematic — the
+same label evaluated against a different rule set on a different day, with
+nothing in the output revealing it.
+
+`policySetVersion` then joins the versioned identity set, so a verdict produced
+under an earlier policy replays as `not-comparable` rather than being silently
+re-derived under today's rules (§17.3).
+
+**Beware the name.** `verdict.policy_version` already exists and means
+something else — the region maps and intake policy (`POLICY_VERSION` in
+`versions.ts`). The rule set needs its own column and its own name; overloading
+the existing one would make two unrelated things move together and neither
+traceable.
+
+### 18.4 It recommends; it does not approve
+
+Each selected rule yields a finding: `SATISFIED`, `VIOLATED`, `NOT_APPLICABLE`
+or `UNDETERMINED`, carrying its citation and the evidence.
+
+`UNDETERMINED` is the load-bearing state. Type size, boldness and separateness
+cannot be judged reliably from artwork, and a check that quietly returns
+"satisfied" when it could not tell is the failure mode this whole system is
+organised against. Those become the advisory checklist that already exists
+(FR-6a), which the agent confirms.
+
+The recommendation stays on the correct side of the governing principle —
+*"Nothing blocking found — ready for your approval"*, never *"Approved"*.
+
+`CLEAR_CONFIRM_FLAGGED` is the natural state for "no blocking violations, but
+advisory items need confirmation" — with one caveat that has to be decided
+rather than assumed. **It is not a free slot:** `aggregate.ts` already returns
+it when a field is `LOW_CONFIDENCE`, and it already has its own headline
+strings. Reusing it would merge two different requests to the agent — *"the
+reader was unsure about this value"* and *"this rule cannot be judged from the
+artwork"* — under one banner. They call for different actions, so either the
+state carries which kind of confirmation is wanted, or advisory findings get
+their own outcome. Deciding that by discovering the collision at implementation
+time is how a vocabulary quietly loses meaning.
+
+---
+
+### 18.5 The path to automation
+
+The prototype should be **extensible to auto-approval without being
+auto-approving**, and the extension should be earned with evidence rather than
+switched on.
+
+**Record the agent's decision against the recommendation.** The chain records
+what the system found; it records nothing about what the human then did.
+Without that there is no ground truth, and any future automation would be
+justified from a synthetic corpus authored alongside the system — which is
+evidence about the author, not about the world. A `decision.recorded` event
+carrying the agent's outcome, whether it agreed with the recommendation, and
+the reason when it did not, turns every real review into a labelled example.
+
+*It is cheap now and impossible to backfill.* Every review that happens before
+it exists is evidence permanently lost.
+
+**Automation is granted per rule, never per submission.** A submission-level
+switch forces the weakest check to hold back the strongest. `statutory-text` is
+exact comparison against text verified byte-for-byte against the eCFR — it
+could be trusted to clear on its own almost immediately. `type-size` may never
+graduate, because the artwork does not carry the answer. So each rule carries
+its own `automation` status:
+
+| | |
+|---|---|
+| `advisory` | The finding is shown; the agent decides |
+| `assisted` | The finding is shown as a recommendation with its measured agreement rate |
+| `automatic` | The rule may clear on its own, within the limits below |
+
+Graduation is a decision by a named person against recorded evidence — the same
+governance as model approval, for the same reason.
+
+**The asymmetry is encoded, not assumed.** A false flag costs an agent a few
+minutes. A false pass is a non-compliant label in market. Therefore:
+
+- automation may **auto-clear**, never auto-reject;
+- thresholds are set on **false-pass rate**, not overall accuracy;
+- a sampled proportion of auto-cleared submissions continues to a human,
+  because an error rate stops being observable the moment nobody looks.
+
+**What is being trained, and what must not be.** The evidence accumulates about
+the **rules**, which are deterministic. "Training" here means calibrating
+thresholds and graduating rules on measured agreement — not fine-tuning a
+model, and not learning a model over the decision as a whole.
+
+That distinction is the design. A learned decision layer would end
+determinism (D23), remove the ability to name the rule behind a finding
+(FR-10), and leave the audit record indefensible — trading the system's
+principal asset for convenience. **The loop makes the deterministic layer more
+confident; it does not replace it.**
+
+### 18.6 Sequence
+
+| | |
+|---|---|
+| 1 | **Recorded-extraction mode.** Re-run the corpus from readings already in D1 instead of calling a vendor, gated by configuration and recorded honestly in the provenance. Makes every iteration below free and instant |
+| 2 | **Policy set, selection, and the first rules** — starting with `UT-C01`–`C03`, already specified in the test plan and simply absent |
+| 3 | **Bind the policy version** into the verdict, the audit event, and the replay drift check. One migration, and one new input to `aggregate({ fields, warning })` — which is the only place in the deterministic core the extension touches |
+| 4 | **Surface findings and the recommendation** in the results panel |
+| 5 | **`decision.recorded`** — though there is a case for pulling this first, since its value compounds with every review that happens before it exists |
+
+### 18.7 What this section does not settle
+
+| | |
+|---|---|
+| Which TTB checks make up the first policy set | Needs the regulations read properly, not five plausible examples |
+| The graduation thresholds | Cannot be chosen before there is real agreement data to choose them from |
+| Who approves a rule, and who approves its graduation | The same unfilled role as model approval — see `project-reference.md` |
+| Whether `assisted` earns its place as a distinct state | It may collapse into `advisory` with a number attached |
 
 ---
 

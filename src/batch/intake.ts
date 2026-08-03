@@ -22,6 +22,7 @@ import { checkIntake, IntakeRejected } from '../normalise/normaliser.js'
 import { PROMPT_VERSION, promptDigest } from '../providers/prompt.js'
 import { createProvider } from '../providers/registry.js'
 import { appendAudit } from './audit.js'
+import { checkBatchSize } from './cap.js'
 import { sha256Hex } from './digest.js'
 import { fingerprintOf, PROBE_IMAGE } from './fingerprint.js'
 import { contentKey } from './keys.js'
@@ -60,9 +61,15 @@ export async function startBatch(env: Env): Promise<BatchStarted> {
     throw new Error('batch bindings are not fully configured')
   }
 
+  const items = corpus()
+
+  // Before anything is staged, queued or charged (ADV-06, B-D11). The cap was
+  // configuration that nothing consulted; refusing here is the only point at
+  // which refusing is free.
+  checkBatchSize(items.length, Number(env.MAX_BATCH_ITEMS))
+
   const jobId = crypto.randomUUID()
   const now = new Date().toISOString()
-  const items = corpus()
 
   // Read and validate every submission first, so the job's item count is known
   // before anything is enqueued.

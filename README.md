@@ -165,8 +165,9 @@ authored expectation**, and both disagreements are understood —
 - `L11` (a shipping label affixed instead of artwork) produced
   `DISCREPANCIES_FOUND` where `INCOMPLETE` was expected. Both are non-passes;
   the system found the right problem and classified it differently.
-- `L26` (a truncated PDF) settled as `FAILED` rather than `INTAKE_ERROR` —
-  a vocabulary difference, though see the defect below.
+- `L26` (a truncated PDF) settled as `FAILED` rather than `INTAKE_ERROR` on
+  that run. It is now refused at intake as incomplete, which is the same
+  judgement in the system's own vocabulary (`REJECTED`).
 
 **The corpus is crisper than reality.** The labels are vector text rendered at
 known DPI, not photographs. Accuracy measured here overstates what a real scan
@@ -177,8 +178,7 @@ degraded submission.
 
 | | |
 |---|---|
-| `L26` fails with a rate-limit message | It should be rejected at intake with a clear cause. Instead the corrupt file reaches the browser path and reports `429`, which reads as a broken tool rather than a bad file (M6 open) |
-| Adversarial cases `ADV-02`–`ADV-06` unwritten | Oversized input, decompression bomb, and corrupt-file handling are specified and untested. `ADV-01` (prompt injection) is covered — `L13` does not return `CLEAR` |
+| `ADV-07` (concurrency) untested | Cross-request state isolation is asserted by design, not by a test |
 | No single-review screen | The batch worklist and detail panel exist; the dedicated one-submission screen in `ui-design.md` §4 does not (M5 open) |
 | Per-stage timings not logged | They are computed and returned, but not emitted as structured log dimensions (M7 open) |
 | Durable Object has no test harness | `vitest.config.ts` runs on Node; the coordinator is exercised only end to end |
@@ -199,23 +199,24 @@ as not re-derivable rather than quietly passing.
 
 In the order I would actually do them.
 
-1. **Finish intake rejection** so a corrupt file is refused with a cause a
-   person can act on, before it ever reaches a browser. It is the most visible
-   defect in the corpus run.
-2. **Write `ADV-02`–`ADV-06`.** Degraded and hostile input is where a
-   compliance tool earns trust, and three of those cases are specified but
-   untested.
-3. **Answer B-Q4 with a measurement.** Two adapters, one instruction, one
+1. **Answer B-Q4 with a measurement.** Two adapters, one instruction, one
    prompt version, one corpus: which model reads a 4.5pt warning statement best
    is a controlled comparison this system is already built for, and nobody has
    run it.
-4. **Rebuild replay around a stored input set** (see `docs/design.md`). The
+2. **Rebuild replay around a stored input set** (see `docs/design.md`). The
    current implementation recovers digests by parsing an audit string and
    infers schema capability from a migration filename — it works and is tested,
    but three parts of it are convention where they should be data.
-5. **Structured logging with stage timings**, which is also what fills the
+3. **Structured logging with stage timings**, which is also what fills the
    latency table above from production rather than from one run.
-6. **Retention driven by a records schedule** rather than a number I chose.
+4. **Retention driven by a records schedule** rather than a number I chose.
+
+Beyond that sits the verification layer proper — checking a submission against
+a versioned, approved policy set rather than only against its own application
+form, and recording what the agent decided against what was recommended so that
+automating any part of it could one day be justified by evidence. It is
+designed in [docs/design.md](docs/design.md) §18 and deliberately unbuilt; the
+current code is aligned to permit it, not to anticipate it.
 
 ---
 

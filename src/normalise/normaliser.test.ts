@@ -45,12 +45,12 @@ describe('checkIntake — cheap checks, before anything expensive', () => {
     expect(() => checkIntake(twoPages, limits)).not.toThrow()
   })
 
-  it('rejects a file that is not a PDF, by content rather than extension', () => {
+  it('ADV-05 — rejects a file that is not a PDF, by content rather than extension', () => {
     const notPdf = new TextEncoder().encode('GIF89a....').buffer as ArrayBuffer
     expect(() => checkIntake(notPdf, limits)).toThrow(/not a PDF/)
   })
 
-  it('rejects an oversized file, and states the limit', () => {
+  it('ADV-02 — rejects an oversized file, and states the limit', () => {
     const big = new ArrayBuffer(11 * 1024 * 1024)
     new Uint8Array(big).set(new TextEncoder().encode('%PDF-1.7'))
     try {
@@ -82,8 +82,16 @@ describe('checkIntake — cheap checks, before anything expensive', () => {
     expect(() => checkIntake(pdf('nothing useful here'), limits)).toThrow(/damaged/)
   })
 
-  it('L26 — a truncated file is rejected at intake', () => {
-    // The corpus case: structurally a PDF, unreadable as one.
+  // Catastrophic truncation, caught by the page check rather than the missing
+  // terminator — 12 bytes leaves no page markers at all.
+  //
+  // This test once claimed to be the L26 corpus case. It was not: L26 is cut to
+  // a THIRD of its length, so its page markers survive and it passed this
+  // check and every other, then failed at the browser with a rate-limit
+  // message. A test named for a scenario it does not exercise is worse than no
+  // test, because it is counted as coverage. The real artefact is used in the
+  // ADV-04 block below.
+  it('rejects a file truncated to nothing', () => {
     const truncated = new Uint8Array(twoPages).slice(0, 12).buffer as ArrayBuffer
     expect(() => checkIntake(truncated, limits)).toThrow(IntakeRejected)
   })
@@ -112,7 +120,7 @@ describe('checkPixelBudget', () => {
     expect(() => checkPixelBudget(2353, 1241, limits)).not.toThrow()
   })
 
-  it('refuses a render that would exceed the budget', () => {
+  it('ADV-03 — refuses a render that would exceed the budget', () => {
     try {
       checkPixelBudget(20000, 20000, limits)
       expect.unreachable('should have thrown')

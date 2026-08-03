@@ -11,6 +11,7 @@
 
 import { readWholeChain, verifyChain } from './batch/audit.js'
 import { MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
+import { BatchTooLarge } from './batch/cap.js'
 import { loadCurrentJob } from './batch/current.js'
 import { loadSubmissionDetail } from './batch/detail.js'
 import { startBatch } from './batch/intake.js'
@@ -728,6 +729,12 @@ export default {
         }
         return json(await startBatch(env))
       } catch (e) {
+        // A batch refused for its size is the caller's to fix, not a fault of
+        // the service: it gets the limit, the number it sent, and a 400. Every
+        // other failure is ours, and says nothing was saved.
+        if (e instanceof BatchTooLarge) {
+          return json({ error: e.reason, reason: e.message }, 400)
+        }
         return json(
           {
             error: 'batch_unavailable',
