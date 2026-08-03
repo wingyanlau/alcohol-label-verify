@@ -75,13 +75,19 @@ export class IntakeRejected extends Error {
       | 'too-many-pixels'
       | 'not-a-pdf'
       | 'encrypted'
-      | 'corrupt',
+      | 'corrupt'
+      // Distinct from 'corrupt' on purpose: a damaged file needs re-exporting,
+      // an incomplete one needs re-sending, and the reviewer is told which.
+      | 'truncated',
     message: string,
   ) {
     super(message)
     this.name = 'IntakeRejected'
   }
 }
+
+/** Every PDF ends with this marker. Its absence means the file was cut short. */
+const PDF_EOF = '%%EOF'
 
 const PDF_MAGIC = '%PDF-'
 
@@ -119,6 +125,32 @@ export function checkIntake(bytes: ArrayBuffer, limits: IntakeLimits): void {
     throw new IntakeRejected(
       'encrypted',
       'This PDF is password-protected and cannot be opened. Please supply an unprotected copy.',
+    )
+  }
+
+  // A PDF ends with %%EOF. A file that does not is not merely damaged — it is
+  // incomplete, and the distinction matters to whoever has to act on it: a
+  // damaged file needs re-exporting, a truncated one needs re-sending.
+  //
+  // Checked separately from the page count because truncation is invisible to
+  // it. The corpus case (L26, ADV-04) is a real submission cut to a third of
+  // its length: the header survives, the page markers survive, and every check
+  // that reads the front of the file passes it. It then reached the browser
+  // and failed with a rate-limit message, which told a reviewer the tool was
+  // broken when the file was.
+  //
+  // The last 2 KB rather than the final bytes, because a valid file may carry
+  // whitespace, a stray newline, or an incremental update's tail after the
+  // marker. Over-rejection is the dangerous direction here — refusing whole
+  // submissions makes the service useless — so the window is generous.
+  const tail = new TextDecoder('latin1').decode(
+    new Uint8Array(bytes, Math.max(0, bytes.byteLength - 2048)),
+  )
+  if (!tail.includes(PDF_EOF)) {
+    throw new IntakeRejected(
+      'truncated',
+      'This PDF is incomplete — it ends part-way through, so the rest of the ' +
+        'document is missing. Please upload the whole file.',
     )
   }
 
