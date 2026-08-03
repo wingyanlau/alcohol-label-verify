@@ -89,6 +89,20 @@
         // One submission per invocation. Batching would serialise the two
         // parallel extractions against the 6-connection cap (B-D4).
         "max_batch_size": 1,
+        // One submission at a time, across the whole batch.
+        //
+        // Every item launches its own headless browser, and the account's
+        // concurrent-browser cap is 3 on the free plan and 10 on paid. Left to
+        // autoscale, the queue ran ~26 invocations at once and Browser
+        // Rendering refused all but a few: 24 of 26 items failed with
+        // `429 Rate limit exceeded` at launch, before any extraction happened.
+        //
+        // Sequential is the prototype's answer, not the product's. It trades
+        // ~40 s of wall clock for ~4 minutes and removes the failure entirely.
+        // Raising this is the first thing to revisit when throughput matters —
+        // batch design §15.4 already prefers Containers over Browser Rendering
+        // for exactly this reason.
+        "max_concurrency": 1,
         "max_retries": 3,
         "dead_letter_queue": "alcohol-label-verify-dlq"
       }
@@ -162,6 +176,8 @@
           {
             "queue": "alcohol-label-verify-work-staging",
             "max_batch_size": 1,
+            // Sequential — see the note on the development consumer above.
+            "max_concurrency": 1,
             "max_retries": 3,
             "dead_letter_queue": "alcohol-label-verify-dlq-staging"
           }
@@ -210,6 +226,8 @@
           {
             "queue": "alcohol-label-verify-work",
             "max_batch_size": 1,
+            // Sequential — see the note on the development consumer above.
+            "max_concurrency": 1,
             "max_retries": 3,
             "dead_letter_queue": "alcohol-label-verify-dlq"
           }
