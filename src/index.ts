@@ -130,6 +130,17 @@ function bindings(env: Record<string, unknown>): Record<string, boolean> {
   }
 }
 
+/** Base64 for a data URI, chunked so a large crop cannot blow the call stack. */
+function bytesToBase64(buffer: ArrayBuffer): string {
+  const view = new Uint8Array(buffer)
+  const CHUNK = 0x8000
+  let binary = ''
+  for (let i = 0; i < view.length; i += CHUNK) {
+    binary += String.fromCharCode(...view.subarray(i, i + CHUNK))
+  }
+  return btoa(binary)
+}
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body, null, 2) + '\n', {
     status,
@@ -275,6 +286,93 @@ export default {
     // server-side, and a Worker cannot do it — 128 MB, no native modules. This
     // checks the one mechanism that can: a headless browser rendering the PDF
     // with pdf.js onto a canvas, at a chosen DPI and crop.
+    // Does the model actually receive the image?
+    //
+    // Nothing proved this before, and it was false: the adapter passed the
+    // image as a sibling of `messages`, the model ignored it, and answered from
+    // the prompt alone — echoing the schema placeholder for the label and
+    // inventing "Old Forester" for the record. Both were schema-valid, so
+    // every check downstream passed them.
+    //
+    // The probe asks a question whose answer is printed on the artwork and
+    // present nowhere in the prompt. A variant that cannot name the brand did
+    // not see the image, whatever else it returns. It reads a crop already in
+    // R2, so it costs no browser and cannot be refused on rate.
+    if (pathname === '/health/vision') {
+      if (!env.AI) return json({ status: 'unavailable', reason: 'no AI binding' }, 503)
+      if (!env.STAGING) return json({ status: 'unavailable', reason: 'no STAGING binding' }, 503)
+
+      const url = new URL(request.url)
+      const jobId = url.searchParams.get('job')
+      const itemId = url.searchParams.get('item')
+      if (!jobId || !itemId) {
+        return json({ status: 'error', reason: 'pass ?job=<jobId>&item=<itemId>' }, 400)
+      }
+
+      const object = await env.STAGING.get(labelImageKey(jobId, itemId))
+      if (object === null)
+        return json({ status: 'error', reason: 'no label crop for that item' }, 404)
+      const bytes = await object.arrayBuffer()
+
+      const question =
+        'What brand name is printed on this label? Reply with only the brand name, nothing else.'
+      const base64 = bytesToBase64(bytes)
+
+      // Three shapes, because the model page documents none of them. A is what
+      // the adapter sends today.
+      const variants: Record<string, unknown> = {
+        'A: top-level image as byte array': {
+          messages: [{ role: 'user', content: question }],
+          image: [...new Uint8Array(bytes)],
+          max_tokens: 64,
+        },
+        'B: image_url content part': {
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: question },
+                { type: 'image_url', image_url: { url: `data:image/png;base64,${base64}` } },
+              ],
+            },
+          ],
+          max_tokens: 64,
+        },
+        'C: top-level image as base64 string': {
+          messages: [{ role: 'user', content: question }],
+          image: base64,
+          max_tokens: 64,
+        },
+      }
+
+      const results: Record<string, unknown> = {}
+      for (const [name, input] of Object.entries(variants)) {
+        const started = Date.now()
+        try {
+          const out = (await env.AI.run(env.MODEL_ID as keyof AiModels, input as never)) as {
+            response?: unknown
+          }
+          const reply = typeof out.response === 'string' ? out.response.trim() : ''
+          results[name] = {
+            ok: true,
+            latencyMs: Date.now() - started,
+            reply: reply.slice(0, 200),
+            // The artwork says "Old Tom Distillery". Naming it is the only
+            // evidence that the image arrived.
+            sawTheImage: /old tom/i.test(reply),
+          }
+        } catch (e) {
+          results[name] = {
+            ok: false,
+            latencyMs: Date.now() - started,
+            error: e instanceof Error ? e.message : String(e),
+          }
+        }
+      }
+
+      return json({ status: 'ok', model: env.MODEL_ID, imageBytes: bytes.byteLength, results })
+    }
+
     if (pathname === '/health/raster') {
       if (!env.BROWSER) return json({ status: 'unavailable', reason: 'no BROWSER binding' }, 503)
       const started = Date.now()
