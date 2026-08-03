@@ -43,6 +43,16 @@ export interface GatewaySettings {
    * submissions.
    */
   readonly logPayloads: boolean
+
+  /**
+   * Token for an authenticated gateway, when one is required.
+   *
+   * A gateway with authentication turned on refuses an unauthenticated request
+   * with its own 401 — `AiGatewayError`, code 2009 — which is distinguishable
+   * from the vendor's errors because the envelope is Cloudflare's rather than
+   * Google's. Empty means the gateway is open.
+   */
+  readonly token: string
 }
 
 /** Settings from the environment, or null when the gateway is not configured. */
@@ -51,6 +61,7 @@ export function gatewayFrom(env: {
   AI_GATEWAY_ACCOUNT?: string
   AI_GATEWAY_CACHE_TTL?: string
   AI_GATEWAY_LOG_PAYLOADS?: string
+  AI_GATEWAY_TOKEN?: string
 }): GatewaySettings | null {
   const id = (env.AI_GATEWAY_ID ?? '').trim()
   if (id === '') return null
@@ -61,6 +72,7 @@ export function gatewayFrom(env: {
     accountId: (env.AI_GATEWAY_ACCOUNT ?? '').trim(),
     cacheTtlSeconds: Number.isFinite(ttl) && ttl > 0 ? Math.floor(ttl) : 0,
     logPayloads: (env.AI_GATEWAY_LOG_PAYLOADS ?? '').trim().toLowerCase() === 'true',
+    token: (env.AI_GATEWAY_TOKEN ?? '').trim(),
   }
 }
 
@@ -76,6 +88,7 @@ export function gatewayHeaders(gateway: GatewaySettings | null): Record<string, 
     // Explicit in both directions: the default is to store payloads, so
     // silence here would mean label content persisted to a third-party log.
     'cf-aig-collect-log-payload': gateway.logPayloads ? 'true' : 'false',
+    ...(gateway.token === '' ? {} : { 'cf-aig-authorization': `Bearer ${gateway.token}` }),
   }
 }
 

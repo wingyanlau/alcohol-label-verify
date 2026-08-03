@@ -39,6 +39,8 @@ export interface ProviderEnv {
   readonly AI_GATEWAY_ID?: string
   readonly AI_GATEWAY_ACCOUNT?: string
   readonly AI_GATEWAY_CACHE_TTL?: string
+  readonly AI_GATEWAY_LOG_PAYLOADS?: string
+  readonly AI_GATEWAY_TOKEN?: string
 }
 
 /**

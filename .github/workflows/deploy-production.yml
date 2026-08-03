@@ -90,6 +90,20 @@ jobs:
           fi
           printf '%s' "$GEMINI_API_KEY" | npx wrangler secret put MODEL_API_KEY --env production
 
+      # Only needed when the gateway has authentication enabled. Absent means
+      # the gateway is open and nothing is written, rather than an empty token
+      # being installed over a working one.
+      - name: Push the gateway token
+        env:
+          AI_GATEWAY_TOKEN: ${{ secrets.AI_GATEWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AI_GATEWAY_TOKEN:-}" ]; then
+            echo "::notice::no AI_GATEWAY_TOKEN for this environment — assuming an open gateway"
+            exit 0
+          fi
+          printf '%s' "$AI_GATEWAY_TOKEN" | npx wrangler secret put AI_GATEWAY_TOKEN --env production
+
       - name: Deploy
         id: deploy
         run: |

@@ -33,6 +33,20 @@ describe('gateway configuration', () => {
     expect(gatewayHeaders(debugging)['cf-aig-collect-log-payload']).toBe('true')
   })
 
+  // An authenticated gateway refuses with its own 401 — AiGatewayError, code
+  // 2009 — whose envelope is Cloudflare's rather than the vendor's. Sending
+  // the token is what distinguishes a gateway we may use from one we may not.
+  it('authorises itself only when the gateway demands it', () => {
+    expect(
+      gatewayHeaders(gatewayFrom({ AI_GATEWAY_ID: 'g' }))['cf-aig-authorization'],
+    ).toBeUndefined()
+    expect(
+      gatewayHeaders(gatewayFrom({ AI_GATEWAY_ID: 'g', AI_GATEWAY_TOKEN: 'tok' }))[
+        'cf-aig-authorization'
+      ],
+    ).toBe('Bearer tok')
+  })
+
   it('adds no headers when there is no gateway', () => {
     expect(gatewayHeaders(null)).toEqual({})
   })
