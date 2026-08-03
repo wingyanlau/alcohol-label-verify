@@ -64,6 +64,32 @@ jobs:
       # second attempt costs an upload and settles whether the failure was the
       # revision or the API. The verification below is the real arbiter either
       # way: if the deploy did land, it passes; if it did not, it fails.
+      # Push the provider credential BEFORE deploying.
+      #
+      # Order matters more than it looks: `wrangler secret put` publishes a new
+      # version of the worker. Setting it after the deploy would make the
+      # version id captured below stale, and the verification would wait for a
+      # version that is no longer the live one.
+      #
+      # The value travels through the environment rather than being
+      # interpolated into the command line: a key containing a quote or a
+      # backslash would break an inline JSON payload, and a command line is a
+      # worse place for a credential than a variable.
+      #
+      # GitHub names the secret after the vendor; the worker names it after the
+      # role it plays, because which vendor fills it is configuration
+      # (MODEL_PROVIDER) rather than a fact about the code.
+      - name: Push the provider credential
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GEMINI_API_KEY:-}" ]; then
+            echo "::notice::no GEMINI_API_KEY for this environment — worker secrets left untouched"
+            exit 0
+          fi
+          printf '%s' "$GEMINI_API_KEY" | npx wrangler secret put MODEL_API_KEY --env production
+
       - name: Deploy
         id: deploy
         run: |

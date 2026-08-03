@@ -185,11 +185,21 @@ Order matters when switching a provider: set the secret **before** changing
 authenticate, `/health` returns 503 naming the missing setting, and the deploy
 fails at its verification step — loudly, but only after the upload.
 
-There is deliberately no `wrangler secret bulk` step in CI. One secret, set by
-hand, against a health check that fails the deploy when it is missing, is
-simpler than a second copy of the credential living in GitHub. That trade
-changes as soon as there is more than one secret, or an environment has to be
-recreatable from nothing.
+CI sets it, from `GEMINI_API_KEY` on each GitHub environment. The names differ
+on purpose: GitHub names a secret after the vendor that issued it, and the
+worker names it after the role it plays, because which vendor fills that role
+is configuration rather than a fact about the code.
+
+The step runs **before** the deploy, and the order is load-bearing:
+`wrangler secret put` publishes a new version of the worker, so setting it
+afterwards would leave the verification waiting for a version id that is no
+longer live.
+
+The value travels through the step's environment rather than being
+interpolated into the command line — a key containing a quote or a backslash
+would break an inline JSON payload, and a command line is a worse place for a
+credential than a variable. An environment with no key configured is left
+untouched rather than having an empty secret written over a good one.
 
 Secrets never appear in `wrangler.jsonc`, in the repository, or in logs (D20).
 The Gemini adapter sends its key in a header rather than a query parameter for
