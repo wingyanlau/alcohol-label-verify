@@ -188,6 +188,7 @@ progress beyond a prototype, not what blocks the prototype itself.*
 | Q-INT-03 | Where is label artwork stored, and under what access controls? | Production reads from the system of record rather than uploads (§15.1) | Records, COLA owner |
 | Q-INT-04 | Is there an existing agency ML or AI platform? | May be mandated; changes the model-hosting question | EA, IT |
 | Q-INT-05 | Are there adjacent systems — formula approval, permits — with the same need? | Affects scope and the business case | EA |
+| Q-INT-06 | **What identifier does an application arrive with — TTB ID, COLA serial, something else — and is it available at the point a label is checked?** | The record can trace a verdict but cannot say *which application* it belongs to. Three identifiers exist on a submission and none is the applicant's: `id` is our UUID, `reference_code` is a code we generate for an agent to quote back (D21), `content_digest` identifies the bytes, and `source_name` is a **filename** — an artefact of the test corpus, not a fact about a filing. An auditor, an applicant, or a dispute would all quote the agency's identifier, and today nothing here holds it. The domain assumption that **each application is unique** is what makes this a gap rather than a nicety: uniqueness has to be expressible in the record, and right now the only thing enforcing it is that we mint a UUID per upload | COLA system owner |
 
 ### 4.3 Security
 
