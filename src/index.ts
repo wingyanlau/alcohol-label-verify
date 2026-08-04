@@ -9,7 +9,7 @@
  * §9.5 (configuration).
  */
 
-import { readWholeChain, verifyChain } from './batch/audit.js'
+import { appendAudit, readWholeChain, verifyChain } from './batch/audit.js'
 import { MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
 import { BatchTooLarge } from './batch/cap.js'
 import { loadCurrentJob } from './batch/current.js'
@@ -17,6 +17,7 @@ import { loadSubmissionDetail } from './batch/detail.js'
 import { sha256Hex } from './batch/digest.js'
 import { startBatch } from './batch/intake.js'
 import { contentKey, labelImageKey } from './batch/keys.js'
+import { buildPersistPlan, persistResult } from './batch/persist.js'
 import { processItem } from './batch/pipeline.js'
 import {
   isReferenceCode,
@@ -865,7 +866,7 @@ export default {
           httpMetadata: { contentType: mimeType },
         })
 
-        const result = await reviewOne(
+        const { view, result } = await reviewOne(
           { application, image: image as ArrayBuffer, mimeType },
           {
             provider: createProvider(env),
@@ -899,7 +900,46 @@ export default {
           )
           .run()
 
-        return json(result)
+        // The record, on the same terms as a batch item: extraction rows, the
+        // verdict with its version set, the field and warning rows, and a
+        // chained event carrying the digest of the reading. Without this a
+        // review would be unreplayable and absent from the audit history while
+        // appearing, on screen, to have been checked exactly like any other.
+        const plan = buildPersistPlan(
+          result,
+          {
+            verdictId: crypto.randomUUID(),
+            submissionId,
+            labelExtractionId: crypto.randomUUID(),
+            recordExtractionId: null,
+          },
+          // No rasterisation happened: the agent supplied the pixels. Recorded
+          // as null rather than as a DPI nobody chose, because an UNREADABLE
+          // here is not an artefact of a resolution this system picked.
+          null,
+        )
+        await persistResult(env.DB, plan, 'COMPLETED', now)
+        await appendAudit(env.DB, {
+          at: now,
+          actor: 'system',
+          action: 'verdict.recorded',
+          subjectType: 'verdict',
+          subjectId: plan.verdict.id,
+          detail: [
+            `submission=${submissionId}`,
+            `outcome=${result.outcome}`,
+            `path=single`,
+            `provider=${result.provenance.label.provider}`,
+            `model=${result.provenance.label.modelId}`,
+            `prompt=${result.provenance.label.promptVersion}`,
+            `record=declared`,
+            `labelDigest=${await sha256Hex(result.rawResponses.label)}`,
+            `reference=${result.warning.referenceDataVersion}`,
+            `legible=${result.warning.legible}`,
+          ].join(';'),
+        })
+
+        return json(view)
       } catch (error) {
         if (error instanceof ReviewRejected) {
           // The field, so the screen can move focus to it (§4.5).

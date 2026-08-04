@@ -31,6 +31,7 @@ import { configuredLegibilityFloor } from '../domain/legibility.js'
 import { referenceIsUnverified, warningReference } from '../domain/reference.js'
 import type { ApplicationData, FieldName } from '../domain/types.js'
 import { FIELD_LABELS, FIELDS } from '../domain/types.js'
+import type { VerifyResult } from '../domain/verify.js'
 import { verifySubmission } from '../domain/verify.js'
 
 /** What the agent typed, before anything has been checked. */
@@ -132,7 +133,7 @@ export async function reviewOne(
     sourceName: string
     env: { LEGIBILITY_FLOOR?: string }
   },
-): Promise<ReviewResult> {
+): Promise<{ view: ReviewResult; result: VerifyResult }> {
   const ref = warningReference()
 
   // Legibility is not measured on this path, and that is stated rather than
@@ -153,7 +154,11 @@ export async function reviewOne(
   const byField = new Map(result.fields.map((f) => [f.field, f]))
   const bySegment = new Map(result.warning.segments.map((s) => [s.segmentId, s]))
 
-  return {
+  // The raw result travels back alongside the view, because the caller has to
+  // persist it. Shaping and storing are different jobs and the shaped form has
+  // already thrown away what the record needs — the provenance, the raw
+  // responses, the version set.
+  const view: ReviewResult = {
     submissionId: opts.submissionId,
     reference: opts.reference,
     state: 'COMPLETED',
@@ -194,4 +199,6 @@ export async function reviewOne(
     contentPurgedAt: null,
     timings: result.timings,
   }
+
+  return { view, result }
 }

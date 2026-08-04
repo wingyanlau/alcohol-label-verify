@@ -59,18 +59,20 @@ const provider: ExtractionProvider = {
   },
 }
 
-const run = () =>
-  reviewOne(
-    { application, image: new ArrayBuffer(8), mimeType: 'image/png' },
-    {
-      provider,
-      submissionId: 's-1',
-      reference: 'ABCD-1234',
-      labelImageUrl: '/review/s-1/label.png',
-      sourceName: 'label.png',
-      env: { LEGIBILITY_FLOOR: '30' },
-    },
-  )
+const run = async () =>
+  (
+    await reviewOne(
+      { application, image: new ArrayBuffer(8), mimeType: 'image/png' },
+      {
+        provider,
+        submissionId: 's-1',
+        reference: 'ABCD-1234',
+        labelImageUrl: '/review/s-1/label.png',
+        sourceName: 'label.png',
+        env: { LEGIBILITY_FLOOR: '30' },
+      },
+    )
+  ).view
 
 describe('validation on submit (§4.5)', () => {
   it('requires only the brand name', () => {
