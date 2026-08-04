@@ -119,8 +119,22 @@ export interface WarningVerdict {
 /** Overall outcome, derived by rule from field verdicts (§8.4.2). Never from a model. */
 export type Outcome = 'CLEAR' | 'CLEAR_CONFIRM_FLAGGED' | 'DISCREPANCIES_FOUND' | 'INCOMPLETE'
 
-/** Values as supplied on the application. Absent fields are `null`, never `undefined`. */
-export type ApplicationData = Readonly<Record<FieldName, string | null>>
+/**
+ * Values as supplied on the application. Absent fields are `null`, never
+ * `undefined`.
+ *
+ * `productType` sits outside `FIELDS` deliberately, and the distinction is
+ * load-bearing. `FIELDS` are *compared* against the label; product type is
+ * not, because no label states "Distilled spirits" — it is the **selection
+ * input** that decides which rules govern the submission (27 CFR 5.141, and
+ * item 5 on TTB F 5100.31, the only place the real form records it).
+ *
+ * Adding it to `FIELDS` would have made the comparison layer look for it on
+ * the artwork and report a discrepancy against every compliant label.
+ */
+export type ApplicationData = Readonly<Record<FieldName, string | null>> & {
+  readonly productType?: string | null
+}
 
 /** One field as read from the label by the extraction layer. */
 export interface ObservedField {

@@ -38,6 +38,11 @@ import { FIELDS } from '../domain/types.js'
 export function applicationDataFrom(declared: Record<string, unknown>): ApplicationData {
   const data = {} as Record<FieldName, string | null>
 
+  // Carried through but never compared: product type selects the rules that
+  // apply (27 CFR 5.141). It is not sent to the extractor — the record region
+  // is declared data on this path — so D4 is untouched.
+  const productType = typeof declared.productType === 'string' ? declared.productType : null
+
   for (const field of FIELDS) {
     const value = declared[field]
     if (typeof value !== 'string') {
@@ -52,5 +57,5 @@ export function applicationDataFrom(declared: Record<string, unknown>): Applicat
     data[field] = trimmed === '' ? null : trimmed
   }
 
-  return data
+  return { ...data, productType }
 }
