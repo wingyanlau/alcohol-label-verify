@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { SYSTEM_AGENT } from './agent.js'
 import { type AuditRow, canonical, chainDigest, GENESIS, verifyChain } from './audit.js'
 
 const row = (over: Partial<AuditRow> = {}): AuditRow => ({
@@ -9,6 +10,8 @@ const row = (over: Partial<AuditRow> = {}): AuditRow => ({
   subjectId: 'v-1',
   detail: null,
   ...over,
+  // After the spread, so an override that names no agent still gets one.
+  agent: over.agent ?? SYSTEM_AGENT,
 })
 
 /** Build a well-formed chain of n rows. */
@@ -37,7 +40,9 @@ describe('canonical form', () => {
   it('distinguishes rows that differ anywhere', () => {
     expect(canonical(row())).not.toBe(canonical(row({ action: 'verdict.amended' })))
     expect(canonical(row())).not.toBe(canonical(row({ detail: 'x' })))
-    expect(canonical(row())).not.toBe(canonical(row({ at: '2026-08-03T12:00:00.001Z' })))
+    expect(canonical(row())).not.toBe(
+      canonical(row({ agent: SYSTEM_AGENT, at: '2026-08-03T12:00:00.001Z' })),
+    )
   })
 
   // D20: the chain records that something happened, never what was on the

@@ -23,6 +23,7 @@
  */
 
 import type { Outcome } from '../domain/types.js'
+import { humanAgent } from './agent.js'
 import { appendAudit } from './audit.js'
 
 /**
@@ -160,6 +161,8 @@ export async function recordDecision(db: D1Database, record: DecisionRecord): Pr
 
   await appendAudit(db, {
     at: record.decidedAt,
+    // A person, by the name they entered — declared, not authenticated (§19.5).
+    agent: humanAgent(record.decidedBy),
     actor: record.decidedBy,
     action: 'decision.recorded',
     // A decision happens to a submission. The chain's subject vocabulary is

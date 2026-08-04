@@ -35,6 +35,7 @@ import { TTB_F5100_31_2023, UnknownFormError } from '../normalise/regions.js'
 import { ruleSetAsAt } from '../policy/archive.js'
 import { createProvider } from '../providers/registry.js'
 import type { Provider } from '../providers/types.js'
+import { SYSTEM_AGENT } from './agent.js'
 import { appendAudit } from './audit.js'
 import { MAX_ATTEMPTS } from './backoff.js'
 import { sha256Hex } from './digest.js'
@@ -354,6 +355,7 @@ export async function processItem(
     // content in a history that cannot be redacted (D20).
     await appendAudit(env.DB, {
       at: new Date().toISOString(),
+      agent: SYSTEM_AGENT,
       actor: 'system',
       action: 'verdict.recorded',
       subjectType: 'verdict',
@@ -451,6 +453,7 @@ export async function processItem(
       // saying why the rest never ran.
       await appendAudit(env.DB, {
         at: new Date().toISOString(),
+        agent: SYSTEM_AGENT,
         actor: 'system',
         action: 'job.abandoned',
         subjectType: 'job',
@@ -485,6 +488,7 @@ export async function processItem(
       .run()
     await appendAudit(env.DB, {
       at: new Date().toISOString(),
+      agent: SYSTEM_AGENT,
       actor: 'system',
       action: isDeterministicRefusal(error) ? 'submission.rejected' : 'submission.failed',
       subjectType: 'submission',

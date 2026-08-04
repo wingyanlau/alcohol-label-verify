@@ -9,6 +9,7 @@
  * §9.5 (configuration).
  */
 
+import { DEPLOY_AGENT, SYSTEM_AGENT } from './batch/agent.js'
 import { appendAudit, readWholeChain, verifyChain } from './batch/audit.js'
 import { MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
 import { BatchTooLarge } from './batch/cap.js'
@@ -1039,6 +1040,7 @@ export default {
         await persistResult(env.DB, plan, 'COMPLETED', now)
         await appendAudit(env.DB, {
           at: now,
+          agent: SYSTEM_AGENT,
           actor: 'system',
           action: 'verdict.recorded',
           subjectType: 'verdict',
@@ -1118,8 +1120,14 @@ export default {
       const report = await reconcileArchive(env.DB, POLICY_SET.rules, {
         now: new Date().toISOString(),
         reconciliationId: crypto.randomUUID(),
+        // D27: no rule reaches force without a named human approval. A rule
+        // that names no approver inherits the set's.
+        setApprovedBy: POLICY_SET.approvedBy,
         // Falls back to the deployment when a rule names no approver — a draft
         // has none by definition, and saying so beats attributing it to nobody.
+        // A deployment applying what was reviewed. The reconciler resolves
+        // this to an agent itself: the approver named in the file where there
+        // is one, the deployment otherwise (§19.3).
         actor: 'deploy',
       })
       return json(report)

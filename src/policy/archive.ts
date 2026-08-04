@@ -7,6 +7,7 @@
  * without a database, and the part that touches one has no judgement in it.
  */
 
+import { type Agent, DEPLOY_AGENT, humanAgent } from '../batch/agent.js'
 import { appendAudit } from '../batch/audit.js'
 import { sha256Hex } from '../batch/digest.js'
 import type { PolicyRule } from '../domain/policy.js'
@@ -132,7 +133,22 @@ export interface ReconcileReport {
 export async function reconcileArchive(
   db: D1Database,
   rules: readonly PolicyRule[],
-  opts: { readonly now: string; readonly reconciliationId: string; readonly actor?: string },
+  opts: {
+    readonly now: string
+    readonly reconciliationId: string
+    /**
+     * Who approved the SET, for a rule that names no approver of its own.
+     *
+     * D27 is that no rule reaches force without named human approval, and the
+     * agent invariant (§19.2) turned that from a sentence into something that
+     * fails: enacting a rule attributed to the deployment was refused, because
+     * a system agent may not decide. Falling back to the set's approver is the
+     * honest resolution — the set IS approved by a named person, and a rule
+     * inside it inherits that unless it names its own.
+     */
+    readonly setApprovedBy?: string
+    readonly actor?: string
+  },
 ): Promise<ReconcileReport> {
   const actions = planReconciliation(await sourceRules(rules), await currentRules(db))
   const events: string[] = []
@@ -146,7 +162,10 @@ export async function reconcileArchive(
         at: opts.now,
         // Not 'system': a policy change has a person behind it, and the file
         // carries who approved the rule.
-        actor: approverOf(action) ?? opts.actor ?? 'system',
+        // The person who signed the rule when the file names one; the
+        // deployment otherwise. A proposal has no approver by definition.
+        agent: agentFor(action, opts.setApprovedBy),
+        actor: approverOf(action) ?? opts.setApprovedBy ?? opts.actor ?? 'system',
         action: actionEvent(action),
         // 'config' — declared in 0001_init.sql and, until now, never written.
         subjectType: 'config',
@@ -172,6 +191,23 @@ export async function reconcileArchive(
     summary: describeReconciliation(actions),
     events,
   }
+}
+
+/**
+ * The agent an action is attributed to.
+ *
+ * Enacting is a decision and only a person may make one (§19.2). A rule names
+ * its own approver, or inherits the set's; a retirement or a proposal is the
+ * deployment applying what was reviewed, which is the system and is not a
+ * decision.
+ */
+function agentFor(action: ReconcileAction, setApprovedBy: string | undefined): Agent {
+  if (actionEvent(action) !== 'policy.rule.enacted') return DEPLOY_AGENT
+  const by = approverOf(action) ?? setApprovedBy
+  // Refused rather than attributed to nobody. An enactment this system cannot
+  // name a person for is one D27 says should not be happening.
+  if (by === undefined || by.trim() === '') return DEPLOY_AGENT
+  return humanAgent(by)
 }
 
 /** Who signed the rule this action is about, when the file names anyone. */

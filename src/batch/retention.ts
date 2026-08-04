@@ -59,6 +59,7 @@
  * touching this file.
  */
 
+import { SYSTEM_AGENT } from './agent.js'
 import { appendAudit } from './audit.js'
 import { labelImageKey } from './keys.js'
 
@@ -277,6 +278,8 @@ export async function sweepRetention(
   // identifiers only — the same rule as every other event (D20).
   await appendAudit(db, {
     at: now.toISOString(),
+    // A scheduled sweep is the system executing, not anyone deciding.
+    agent: SYSTEM_AGENT,
     actor: 'system',
     action: 'content.purged',
     subjectType: 'job',

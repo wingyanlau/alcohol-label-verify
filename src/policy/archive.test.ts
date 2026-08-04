@@ -28,6 +28,8 @@ const MIGRATIONS = [
   '0005_policy_layer',
   '0006_job_kind',
   '0007_policy_archive',
+  '0008_verdict_bitemporal',
+  '0009_agent',
 ]
 
 /** Just enough of the D1 surface for `archive.ts`, over a real SQLite engine. */
@@ -98,6 +100,7 @@ let db: D1Database & { raw: DatabaseSync }
 const opts = (over: Partial<{ now: string; reconciliationId: string }> = {}) => ({
   now: '2026-08-04T10:00:00.000Z',
   reconciliationId: 'rec-1',
+  setApprovedBy: 'IT Systems Administrator',
   ...over,
 })
 

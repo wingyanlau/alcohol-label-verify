@@ -21,6 +21,7 @@ import type { Env, WorkMessage } from '../env.js'
 import { checkIntake, IntakeRejected } from '../normalise/normaliser.js'
 import { PROMPT_VERSION, promptDigest } from '../providers/prompt.js'
 import { createProvider } from '../providers/registry.js'
+import { SYSTEM_AGENT } from './agent.js'
 import { appendAudit } from './audit.js'
 import { checkBatchSize } from './cap.js'
 import { sha256Hex } from './digest.js'
@@ -209,6 +210,7 @@ export async function startBatch(env: Env): Promise<BatchStarted> {
 
   await appendAudit(db, {
     at: now,
+    agent: SYSTEM_AGENT,
     actor: 'system',
     action: 'model.fingerprinted',
     subjectType: 'job',
@@ -231,6 +233,7 @@ export async function startBatch(env: Env): Promise<BatchStarted> {
 
   await appendAudit(db, {
     at: now,
+    agent: SYSTEM_AGENT,
     actor: 'system',
     action: 'job.opened',
     subjectType: 'job',

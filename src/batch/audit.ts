@@ -1,3 +1,4 @@
+import { type Agent, checkAgentMay } from './agent.js'
 /**
  * The append-only transaction history (D32, §11.2.1).
  *
@@ -16,7 +17,21 @@
 /** An event as recorded. The chain digests exactly these fields. */
 export interface AuditRow {
   readonly at: string
-  /** `system` for pipeline steps; an agent reference for human actions. */
+  /**
+   * Who or what acted (D46).
+   *
+   * **Required.** Every act names its agent, or the invariant the concept
+   * exists for — no model may decide — holds only while nobody writes the code
+   * that breaks it. The compiler is what keeps it true.
+   */
+  readonly agent: Agent
+  /**
+   * The agent's display name, and the field the DIGEST covers.
+   *
+   * Derived from `agent`, and kept as its own field because it is what the
+   * chain attests to. `actor_kind` and `actor_id` are an index over this, are
+   * outside the digest, and are rebuildable from it — see 0009.
+   */
   readonly actor: string
   readonly action: string
   readonly subjectType: 'job' | 'submission' | 'extraction' | 'verdict' | 'config'
@@ -88,6 +103,11 @@ export async function verifyChain(rows: readonly ChainedRow[]): Promise<number |
  * writer inserts nothing, re-reads and tries again.
  */
 export async function appendAudit(db: D1Database, row: AuditRow, attempts = 5): Promise<boolean> {
+  // The principle, enforced where the act is recorded rather than left to a
+  // reviewer noticing later (§19.2). A model agent reaching this with a
+  // deciding action is a defect in the caller, and it should not become a row.
+  checkAgentMay(row.agent, row.action)
+
   for (let attempt = 0; attempt < attempts; attempt++) {
     const tail = await db
       .prepare('SELECT COALESCE(MAX(seq), 0) AS seq FROM audit_event')
@@ -109,8 +129,9 @@ export async function appendAudit(db: D1Database, row: AuditRow, attempts = 5): 
     const result = await db
       .prepare(
         `INSERT INTO audit_event
-           (at, actor, action, subject_type, subject_id, detail, prev_digest, digest)
-         SELECT ?, ?, ?, ?, ?, ?, ?, ?
+           (at, actor, action, subject_type, subject_id, detail, prev_digest, digest,
+            actor_kind, actor_id)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
           WHERE (SELECT COALESCE(MAX(seq), 0) FROM audit_event) = ?`,
       )
       .bind(
@@ -122,6 +143,8 @@ export async function appendAudit(db: D1Database, row: AuditRow, attempts = 5): 
         row.detail,
         prev,
         digest,
+        row.agent.kind,
+        row.agent.id,
         tailSeq,
       )
       .run()
@@ -145,7 +168,8 @@ export async function appendAudit(db: D1Database, row: AuditRow, attempts = 5): 
 export async function readChain(db: D1Database, limit = 1000, afterSeq = 0): Promise<ChainedRow[]> {
   const { results } = await db
     .prepare(
-      `SELECT seq, at, actor, action, subject_type, subject_id, detail, prev_digest, digest
+      `SELECT seq, at, actor, action, subject_type, subject_id, detail, prev_digest, digest,
+              actor_kind, actor_id
          FROM audit_event WHERE seq > ? ORDER BY seq ASC LIMIT ?`,
     )
     .bind(afterSeq, limit)
@@ -159,11 +183,21 @@ export async function readChain(db: D1Database, limit = 1000, afterSeq = 0): Pro
       detail: string | null
       prev_digest: string
       digest: string
+      actor_kind: string | null
+      actor_id: string | null
     }>()
 
   return results.map((r) => ({
     row: {
       at: r.at,
+      // Rebuilt from the index. `actor` is what the digest covers; the kind is
+      // a classification of it, so an entry whose columns were never backfilled
+      // still verifies — it simply says less about who acted.
+      agent: {
+        kind: (r.actor_kind ?? 'system') as Agent['kind'],
+        id: r.actor_id ?? r.actor,
+        display: r.actor,
+      },
       actor: r.actor,
       action: r.action,
       subjectType: r.subject_type as AuditRow['subjectType'],
