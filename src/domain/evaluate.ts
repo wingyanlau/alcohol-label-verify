@@ -89,6 +89,41 @@ const ABV_FORMS = [
   new RegExp(String.raw`${ALC}\s*(?:by|/)\s*${VOL}\s*${N}\s*${PCT}`, 'i'),
 ]
 
+/**
+ * The permitted forms for WINE (27 CFR 4.36(b)).
+ *
+ * Its own list rather than a reuse of the spirits one, because the two differ
+ * in a direction that matters:
+ *
+ *   - 4.36(b)(2) permits a RANGE — "___% to ___% alcohol by volume". Judged by
+ *     5.65's forms a lawful range reads as a violation, which is a false
+ *     finding against a compliant label.
+ *   - TTB's wine guidance states that **"ABV" is not allowed**: only "alc."
+ *     and "vol." may abbreviate, with or without periods. The spirits pattern
+ *     happens not to match "ABV" either, so reusing it would have enforced
+ *     this prohibition by accident rather than by rule — and an accident is
+ *     not something a verdict can cite.
+ *
+ * The numeral may precede or follow the word, which the guidance states
+ * directly and which both orderings below carry.
+ */
+const WINE_ABV_FORMS = [
+  // "ALCOHOL 13.5% BY VOLUME" / "Alc. 13.5% By Vol."
+  new RegExp(String.raw`${ALC}\s*${N}\s*${PCT}\s*(?:by|/)\s*${VOL}`, 'i'),
+  // "13.5% Alc. by Vol." / "12.5% alcohol by volume"
+  new RegExp(String.raw`${N}\s*${PCT}\s*${ALC}\s*(?:by|/)\s*${VOL}`, 'i'),
+  // "___% to ___% alcohol by volume" — 4.36(b)(2), the form spirits lacks
+  new RegExp(String.raw`${N}\s*${PCT}\s*to\s*${N}\s*${PCT}\s*${ALC}\s*(?:by|/)\s*${VOL}`, 'i'),
+  // "ALC. 12% TO 14% BY VOL." — the same range with the word leading
+  new RegExp(String.raw`${ALC}\s*${N}\s*${PCT}\s*to\s*${N}\s*${PCT}\s*(?:by|/)\s*${VOL}`, 'i'),
+]
+
+/** Which list of permitted forms a rule's `format` names. */
+const FORMATS: Readonly<Record<string, readonly RegExp[]>> = {
+  'abv-statement': ABV_FORMS,
+  'wine-abv-statement': WINE_ABV_FORMS,
+}
+
 function checkFieldPresent(rule: PolicyRule, ctx: EvaluationContext): PolicyFinding {
   const field = String(rule.check.field)
   // Unreadable is not absent. Reporting a breach here would blame an applicant
@@ -122,10 +157,11 @@ function checkFormat(rule: PolicyRule, ctx: EvaluationContext): PolicyFinding {
     // reviewer stops reading them.
     return finding(rule, 'NOT_APPLICABLE', `${field} is not stated; presence is checked separately`)
   }
-  if (rule.check.format !== 'abv-statement') {
+  const forms = FORMATS[String(rule.check.format)]
+  if (forms === undefined) {
     return finding(rule, 'UNDETERMINED', `unknown format "${String(rule.check.format)}"`)
   }
-  const ok = ABV_FORMS.some((re) => re.test(value))
+  const ok = forms.some((re) => re.test(value))
   return ok
     ? finding(rule, 'SATISFIED', `"${value}" is a permitted form of the statement`)
     : finding(

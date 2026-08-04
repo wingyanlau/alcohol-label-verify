@@ -230,6 +230,91 @@ describe('statutory-text — the health warning', () => {
 })
 
 /**
+ * Wine states its alcohol content differently from spirits (27 CFR 4.36(b)).
+ *
+ * Two differences make this its own format rather than a reuse of the spirits
+ * one, and both cut in the dangerous direction if conflated:
+ *
+ *   - wine may state a RANGE, "___% to ___% alcohol by volume" (4.36(b)(2)).
+ *     Judged by the spirits format a lawful range reads as a violation.
+ *   - only "alc." and "vol." may abbreviate. TTB says plainly that **"ABV" is
+ *     not allowed**, and the spirits format never had to care because it does
+ *     not match "ABV" either — so the prohibition would have looked satisfied
+ *     by accident rather than by rule.
+ *
+ * Cases are TTB's own worked examples from its wine alcohol content guidance,
+ * plus the range forms from the regulation.
+ */
+describe('wine-abv-statement — the permitted forms for wine', () => {
+  const wine = (value: string) =>
+    evaluateRule(
+      rule({ kind: 'format-matches', field: 'alcoholContent', format: 'wine-abv-statement' }),
+      ctx({ observed: { ...ctx().observed, alcoholContent: value } }),
+    )
+
+  it.each([
+    'ALCOHOL 13.5% BY VOLUME',
+    '13.5% Alc. by Vol.',
+    'Alc. 13.5% By Vol.',
+    '12.5% alcohol by volume',
+    'ALC 13 % BY VOL',
+  ])('accepts the specific percentage form: %s', (value) => {
+    expect(wine(value).state).toBe('SATISFIED')
+  })
+
+  it.each([
+    '12% to 14% alcohol by volume',
+    'ALC. 12% TO 14% BY VOL.',
+    '12.5% to 13.5% Alcohol by Volume',
+  ])('accepts the range form 4.36(b)(2) permits: %s', (value) => {
+    expect(wine(value).state).toBe('SATISFIED')
+  })
+
+  it('refuses "ABV", which TTB names as not allowed', () => {
+    // The one abbreviation the guidance calls out explicitly.
+    const f = wine('13.5% ABV')
+    expect(f.state).toBe('VIOLATED')
+    expect(f.evidence).toContain('13.5% ABV')
+  })
+
+  it('refuses proof, which is not a wine statement at all', () => {
+    expect(wine('27 proof').state).toBe('VIOLATED')
+  })
+
+  it('refuses a bare number with no unit of measure', () => {
+    expect(wine('13.5').state).toBe('VIOLATED')
+  })
+
+  it('is out of scope when nothing is stated — presence is a separate rule', () => {
+    expect(wine('   ').state).toBe('NOT_APPLICABLE')
+  })
+
+  /*
+   * A gap in the SPIRITS format, pinned rather than fixed here.
+   *
+   * The 5.65 patterns are unanchored, so "12% to 14% alcohol by volume"
+   * matches on the substring "14% alcohol by volume" and passes. A range is
+   * not a permitted spirits form — 5.65(b) lists none — so this is an
+   * over-permissive match, and over-permissive is the dangerous direction.
+   *
+   * It is left alone deliberately. DS-ALCOHOL-CONTENT-FORMAT is active and
+   * approved, and tightening it changes what an enacted rule does to labels
+   * already judged by it; that is a rule change requiring a version bump and a
+   * named approval (D27, §18.5a), not a passing edit while adding wine.
+   *
+   * If someone tightens it, this test fails and should be deleted along with
+   * the note — which is the point of writing it down.
+   */
+  it('documents that the spirits format accepts a range it should not', () => {
+    const spirits = evaluateRule(
+      rule({ kind: 'format-matches', field: 'alcoholContent', format: 'abv-statement' }),
+      ctx({ observed: { ...ctx().observed, alcoholContent: '12% to 14% alcohol by volume' } }),
+    )
+    expect(spirits.state).toBe('SATISFIED')
+  })
+})
+
+/**
  * The decline paths.
  *
  * Every branch below returns something other than SATISFIED when the check

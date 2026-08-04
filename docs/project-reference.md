@@ -523,3 +523,70 @@ rather than asserted as fact.
 | [Avoiding Common Errors](https://www.ttb.gov/public-information/news/avoiding-common-errors) | §8.6 |
 | [TTB F 5100.31](https://www.ttb.gov/system/files/images/pdfs/forms/f510031.pdf) | §8.7, §8.8, §8.10 — retrieved and read directly |
 | [List of Allowable Changes](https://www.ttb.gov/regulated-commodities/labeling/allowable-revisions) | §8.9 |
+
+### 8.13 Commodity labelling references
+
+*Supplied 2026-08-04 and retrieved the same day. Every one is registered in
+`config/policy-set.json` under `sourceDocuments` with a digest of the bytes
+actually fetched, so a rule citing one can be traced to the document as it read
+on that date — and a later re-fetch that disagrees is visible rather than
+silent.*
+
+**A note on what these are.** TTB's guidance pages explain the regulations; they
+are not the regulations. Rules are derived from the eCFR text (retrieved through
+the versioner API, digested section by section) and the guidance is recorded
+alongside as the reading that prompted it. Where the two are consistent this
+distinction costs nothing; where they ever diverge, the CFR governs.
+
+| Source | Commodity | Bears on |
+|---|---|---|
+| [Wine Labeling: Alcohol Content](https://www.ttb.gov/regulated-commodities/beverage-alcohol/wine/wine-labeling-alcohol-content) | Wine | §8.13.1, `WINE-ALCOHOL-CONTENT-FORMAT` (draft) |
+| [Distilled Spirits Labeling](https://www.ttb.gov/regulated-commodities/beverage-alcohol/distilled-spirits/labeling) | Spirits | Index for the spirits guidance below |
+| [Distilled Spirits: Brand Name](https://www.ttb.gov/regulated-commodities/beverage-alcohol/distilled-spirits/ds-labeling-home/ds-brand-name) | Spirits | `DS-BRAND-NAME-PRESENT` (already active) |
+| [Distilled Spirits: Alcohol Content](https://www.ttb.gov/regulated-commodities/beverage-alcohol/distilled-spirits/ds-labeling-home/ds-alcohol-content) | Spirits | `DS-ALCOHOL-CONTENT-FORMAT`, `DS-PROOF-CONSISTENT` (already active) |
+| [Beverage Alcohol Manual, vol. 2 ch. 4](https://www.ttb.gov/system/files/images/pdfs/spirits_bam/chapter4.pdf) | Spirits | Class and type taxonomy, `DS-MINIMUM-BOTTLING-STRENGTH` (draft) |
+| [Malt Beverage Labeling](https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling) | Malt | Index for the malt guidance below |
+| [Malt Beverage Mandatory Label Information](https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-mandatory-label-information) | Malt | 27 CFR 7.63 — the five mandatory items |
+| [Malt Beverage Brand Name](https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-brand-name) | Malt | `MALT-BRAND-NAME-PRESENT` (draft) |
+| [Malt Beverage Class and Type](https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-class-and-type) | Malt | `MALT-CLASS-TYPE-PRESENT` (draft) |
+| [Malt Beverage Net Contents](https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-net-contents) | Malt | `MALT-NET-CONTENTS-PRESENT` (draft) |
+| [Malt Beverage Alcohol Content](https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-alcohol-content) | Malt | `MALT-ALCOHOL-CONTENT-FORMAT` (draft) |
+| [Malt Beverage Health Warning](https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-health-warning) | Malt | `HEALTH-WARNING-TEXT` — already active and already selects for malt |
+| [Malt Beverage Name and Address (domestic)](https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-name-and-address-domestic) | Malt | §8.13.2 — not modelled |
+| [Malt Beverage Name and Address (imports)](https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-name-and-address-imports) | Malt | §8.13.2 — not modelled |
+| [Malt Beverage Color Additive Disclosures](https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-color-additive-disclosures) | Malt | §8.13.2 — not modelled |
+| [Malt Beverage Sulfite and Aspartame Declarations](https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-sulfite-aspartame-declarations) | Malt | §8.13.2 — not modelled |
+| [Malt Beverage Labeling Checklist](https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-labeling-checklist) | Malt | The agency's own checklist — the closest thing to a specification for a malt rule set |
+| [Anatomy of a Malt Beverage Label](https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/anatomy-of-a-malt-beverage-label-tool) | Malt | Placement and legibility, which this system cannot judge from artwork |
+| [CBP — Marking of Country of Origin on U.S. Imports](https://www.cbp.gov/trade/rulings/informed-compliance-publications/marking-country-origin-us-imports) | Imports | §8.13.2 — a different agency's requirement, noted below |
+
+#### 8.13.1 Wine alcohol content — what is checkable **[V]**
+
+| Provision | Requirement | Modelled? |
+|---|---|---|
+| 4.36(a) | Mandatory over 14% ABV. For 7–14%, optional **if** "table wine" or "light wine" is the class/type designation | **No** — see §8.13.2 |
+| 4.36(b)(1) | Specific percentage: `ALCOHOL 13.5% BY VOLUME`, `13.5% Alc. by Vol.` | **Yes** — `WINE-ALCOHOL-CONTENT-FORMAT` (draft) |
+| 4.36(b)(2) | Range: `12% to 14% alcohol by volume` | **Yes** — same rule |
+| TTB guidance | Only `alc.` and `vol.` may abbreviate; **`ABV` is not allowed** | **Yes** — same rule |
+| 4.36(b) tolerance | ±1 point over 14%, ±1.5 points at or below | **No** — see §8.13.2 |
+
+**Wine needed its own format; malt beverages did not.** 27 CFR 7.65(b)(3) lists
+exactly the same three orderings as 5.65 for spirits, so the malt rule reuses
+`abv-statement`. Wine permits a range that spirits does not, and judging a
+lawful wine range by the spirits patterns would report a compliant label as
+non-compliant.
+
+#### 8.13.2 Deliberately not modelled, and why
+
+*Recorded rather than omitted. A missing rule is evidence of nothing; a stated
+one is evidence the requirement was considered and declined.*
+
+| Requirement | Why not |
+|---|---|
+| Wine alcohol statement **presence** (4.36(a)) | Conditional on the actual ABV and on whether "table wine"/"light wine" is the designation. A label that states no alcohol content gives no ABV to test the condition against, so a `field-present` rule would report a compliant table wine as in breach. The closed check vocabulary cannot express the condition, and adding a kind is a code change and a review (§18.2) — not a config edit |
+| Malt alcohol statement **presence** (7.63(a)(3)) | Mandatory only for malt beverages containing alcohol from added nonbeverage flavours. Nothing on a label or an application record says whether that is so |
+| Alcohol content **tolerance** (4.36, 5.65, 7.65) | Compares laboratory contents against a printed claim. This system has no laboratory value — see §8.5, which resolves the same point for spirits |
+| Name and address (7.66–7.68) | Not among `FIELDS`; the application record does not carry it, so there is nothing to compare against |
+| Colour additive, sulfite and aspartame declarations (7.63(b)) | Conditional on composition, which no label reading can establish |
+| Country-of-origin marking (CBP) | A **different agency's** requirement, enforced at import rather than through a COLA. Recorded because an importer's label must satisfy both, and a system that checked only TTB's rules could report a label clean that CBP would refuse |
+| Type size, placement, legibility (7.52–7.54, 4.38) | Measurable only from the artwork at a known physical scale. This is the advisory checklist's territory (FR-6a), not a deterministic check |

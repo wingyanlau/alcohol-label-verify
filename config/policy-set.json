@@ -1,9 +1,11 @@
 {
   "$comment": "The policy archive: federal label requirements as versioned data. Extracted from the eCFR versioner API, digests included so a later re-extraction can detect that a regulation moved. Rules are superseded, never deleted (D27); nothing is enforced without a named approval. Design: design.md §18.",
-  "policySetVersion": 1,
-  "supersedes": null,
+  "policySetVersion": 2,
+  "supersedes": 1,
+  "contentDigest": "c934ed02345c2925",
+  "$versioning": "contentDigest is sha256 over the canonical JSON of regulations, sourceDocuments and rules, first 16 hex. policySetVersion is a number a person maintains; this is the thing that notices when they forget. The regulations already carry a textDigest so a moved regulation is visible — the set itself had no such tripwire, and an edited set still calling itself version 1 would replay as comparable against rules it was never judged by. policy-set.test.ts pins the pair.",
   "approvedBy": "IT Systems Administrator (role unfilled — prototype)",
-  "approvedAt": "2026-08-03",
+  "approvedAt": "2026-08-04",
   "source": {
     "authority": "eCFR versioner API",
     "endpoint": "https://www.ecfr.gov/api/versioner/v1/full/{issueDate}/title-27.xml?part={part}",
@@ -110,6 +112,61 @@
       "heading": "Standards of Identity for Distilled Spirits (5.141-5.156)",
       "amendmentCitation": null,
       "textDigest": "per class — see config/class-type-taxonomy.json",
+      "extractedFromIssueDate": "2026-07-31"
+    },
+    {
+      "id": "27-CFR-4.36",
+      "title": 27,
+      "part": 4,
+      "section": "4.36",
+      "heading": "Alcoholic content.",
+      "amendmentCitation": "T.D. 6521, 25 FR 13835, Dec. 29, 1960",
+      "textDigest": "7001188f75f8374c",
+      "textLength": 2706,
+      "extractedFromIssueDate": "2026-07-31"
+    },
+    {
+      "id": "27-CFR-7.63",
+      "title": 27,
+      "part": 7,
+      "section": "7.63",
+      "heading": "Mandatory label information.",
+      "amendmentCitation": null,
+      "textDigest": "c9f80aa48a322422",
+      "textLength": 2394,
+      "extractedFromIssueDate": "2026-07-31"
+    },
+    {
+      "id": "27-CFR-7.64",
+      "title": 27,
+      "part": 7,
+      "section": "7.64",
+      "heading": "Brand name.",
+      "amendmentCitation": null,
+      "textDigest": "fda1540e8d5278d2",
+      "textLength": 827,
+      "extractedFromIssueDate": "2026-07-31"
+    },
+    {
+      "id": "27-CFR-7.65",
+      "title": 27,
+      "part": 7,
+      "section": "7.65",
+      "heading": "Alcohol content.",
+      "amendmentCitation": null,
+      "textDigest": "04c78f893f068509",
+      "textLength": 4162,
+      "extractedFromIssueDate": "2026-07-31"
+    },
+    {
+      "id": "27-CFR-7.70",
+      "title": 27,
+      "part": 7,
+      "section": "7.70",
+      "heading": "Net contents.",
+      "amendmentCitation": null,
+      "textDigest": "f09305c96c6b74ab",
+      "textLength": 1009,
       "extractedFromIssueDate": "2026-07-31"
     }
   ],
@@ -349,6 +406,151 @@
       },
       "$note": "Still a DRAFT and still unapproved — the contract requires a person, and nobody has signed it. The blocking dependency is gone: designations now resolve to classes via config/class-type-taxonomy.json.",
       "$openQuestion": "Class-level only, and two classes have NO class-level floor at all — cordials and liqueurs (5.150) and distilled spirits specialty products (5.156) — where every stated minimum belongs to a TYPE. A designation resolving to those classes is UNDETERMINED, not satisfied: 'Rock and Rye' has a 24% floor and no class floor to fall back on, so treating a null as 'no limit' would pass any strength."
+    },
+    {
+      "id": "WINE-ALCOHOL-CONTENT-FORMAT",
+      "ruleVersion": 1,
+      "regulation": "27-CFR-4.36",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "supersedes": null,
+      "requirement": "Alcohol content is stated as a percentage of alcohol by volume, either as a specific percentage or as a range. Only \"alc.\" and \"vol.\" may abbreviate alcohol and volume, with or without periods; \"ABV\" is not permitted. The numeral may precede or follow the word.",
+      "appliesWhen": {
+        "productType": ["Wine"]
+      },
+      "check": {
+        "kind": "format-matches",
+        "field": "alcoholContent",
+        "format": "wine-abv-statement"
+      },
+      "severity": "blocking",
+      "status": "draft",
+      "automation": "advisory",
+      "provenance": {
+        "sourceDocument": "DOC-TTB-WINE-ALC",
+        "quote": "Alcoholic content shall be stated in terms of percentage of alcohol by volume, and not otherwise, as provided in either paragraph (b)(1) or (2) of this section: (1) \"Alcohol __ % by volume,\" or similar appropriate phrase; Provided, that if the word \"alcohol\" and/or \"volume\" are abbreviated, they shall be shown as \"alc.\" (alc) and/or \"vol.\" (vol), respectively. ... (2) \"Alcohol __ % to __ % by volume,\" or similar appropriate phrase",
+        "extractedBy": "model",
+        "model": "claude-opus-5",
+        "extractedAt": "2026-08-04"
+      },
+      "$examples": [
+        "ALCOHOL 13.5% BY VOLUME",
+        "13.5% Alc. by Vol.",
+        "12% to 14% alcohol by volume",
+        "ALC. 12% TO 14% BY VOL."
+      ],
+      "$draftNote": "DRAFT: proposed by a model from 27 CFR 4.36(b) and TTB wine guidance. A model may propose a rule; only a person may enact one (design §18.5a). It is carried here so it can be reviewed against its quote and citation, and it is NOT applied — rulesFor() selects active rules only. To enact it: set status to \"active\" and record an approval."
+    },
+    {
+      "id": "MALT-BRAND-NAME-PRESENT",
+      "ruleVersion": 1,
+      "regulation": "27-CFR-7.64",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "supersedes": null,
+      "requirement": "A brand name appears on the label.",
+      "appliesWhen": {
+        "productType": ["Malt beverages"]
+      },
+      "check": {
+        "kind": "field-present",
+        "field": "brandName"
+      },
+      "severity": "blocking",
+      "status": "draft",
+      "automation": "advisory",
+      "provenance": {
+        "sourceDocument": "DOC-TTB-MALT-BRAND-NAME",
+        "quote": "The malt beverage label must include a brand name. If the malt beverage is not sold under a brand name, then the name of the bottler or importer, as applicable, appearing in the name and address statement is treated as the brand name.",
+        "extractedBy": "model",
+        "model": "claude-opus-5",
+        "extractedAt": "2026-08-04"
+      },
+      "$draftNote": "DRAFT: proposed by a model from the cited regulation. A model may propose a rule; only a person may enact one (design §18.5a). Not applied — rulesFor() selects active rules only. To enact: set status \"active\" and record an approval."
+    },
+    {
+      "id": "MALT-CLASS-TYPE-PRESENT",
+      "ruleVersion": 1,
+      "regulation": "27-CFR-7.63",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "supersedes": null,
+      "requirement": "A class, type, or other designation appears on the label.",
+      "appliesWhen": {
+        "productType": ["Malt beverages"]
+      },
+      "check": {
+        "kind": "field-present",
+        "field": "classType"
+      },
+      "severity": "blocking",
+      "status": "draft",
+      "automation": "advisory",
+      "provenance": {
+        "sourceDocument": "DOC-TTB-MALT-CLASS-TYPE",
+        "quote": "Malt beverage containers must bear a label or labels (as defined in § 7.61(a)) containing the following information: ... (2) Class, type, or other designation, in accordance with subpart I of this part",
+        "extractedBy": "model",
+        "model": "claude-opus-5",
+        "extractedAt": "2026-08-04"
+      },
+      "$draftNote": "DRAFT: proposed by a model from the cited regulation. A model may propose a rule; only a person may enact one (design §18.5a). Not applied — rulesFor() selects active rules only. To enact: set status \"active\" and record an approval."
+    },
+    {
+      "id": "MALT-NET-CONTENTS-PRESENT",
+      "ruleVersion": 1,
+      "regulation": "27-CFR-7.70",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "supersedes": null,
+      "requirement": "Net contents appear on the label. Absence is inconclusive: the regulation permits net contents to be blown, embossed or moulded into the container, which no image of a label can show.",
+      "appliesWhen": {
+        "productType": ["Malt beverages"]
+      },
+      "check": {
+        "kind": "field-present",
+        "field": "netContents",
+        "whenAbsent": "undetermined"
+      },
+      "severity": "blocking",
+      "status": "draft",
+      "automation": "advisory",
+      "provenance": {
+        "sourceDocument": "DOC-TTB-MALT-NET-CONTENTS",
+        "quote": "(5) Net contents (which may be blown, embossed, or molded into the container as part of the process of manufacturing the container), in accordance with § 7.70.",
+        "extractedBy": "model",
+        "model": "claude-opus-5",
+        "extractedAt": "2026-08-04"
+      },
+      "$draftNote": "DRAFT: proposed by a model from 27 CFR 7.63(a)(5) and 7.70. whenAbsent is \"undetermined\" for the same reason as the distilled spirits rule — the statement may be moulded into the glass, so an absence from the artwork is not a breach. A model may propose a rule; only a person may enact one (§18.5a)."
+    },
+    {
+      "id": "MALT-ALCOHOL-CONTENT-FORMAT",
+      "ruleVersion": 1,
+      "regulation": "27-CFR-7.65",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "supersedes": null,
+      "requirement": "When alcohol content is stated, it reads \"Alcohol __ percent by volume\", \"__ percent alcohol by volume\", or \"Alcohol by volume: __ percent\"; alcohol may be \"alc\", percent may be \"%\", \"by\" may be \"/\", and volume may be \"vol\".",
+      "appliesWhen": {
+        "productType": ["Malt beverages"]
+      },
+      "check": {
+        "kind": "format-matches",
+        "field": "alcoholContent",
+        "format": "abv-statement"
+      },
+      "severity": "blocking",
+      "status": "draft",
+      "automation": "advisory",
+      "provenance": {
+        "sourceDocument": "DOC-TTB-MALT-ALC-CONTENT",
+        "quote": "The alcohol content statement must be expressed in one of the following formats: (A) \"Alcohol percent by volume\"; (B) \"percent alcohol by volume\"; or (C) \"Alcohol by volume: percent.\" ... Alcohol may be abbreviated as \"alc\"; percent may be represented by the percent symbol \"%\"; alcohol and volume may be separated by a slash \"/\" in lieu of the word \"by\"; and volume may be abbreviated as \"vol\".",
+        "extractedBy": "model",
+        "model": "claude-opus-5",
+        "extractedAt": "2026-08-04"
+      },
+      "$examples": ["4.2% alc/vol", "Alc. 4.0 percent by volume"],
+      "$draftNote": "DRAFT: proposed by a model from 27 CFR 7.65(b)(3)-(4). The permitted forms are identical to 27 CFR 5.65 for distilled spirits, so this reuses the abv-statement format rather than introducing a second copy of the same patterns. Only a person may enact it (§18.5a)."
     }
   ],
   "sourceDocuments": [
@@ -365,6 +567,132 @@
       "url": "https://www.ecfr.gov/api/versioner/v1/full/2026-07-31/title-27.xml?part=5",
       "digest": "per section — see config/class-type-taxonomy.json textDigest",
       "retrievedAt": "2026-07-31"
+    },
+    {
+      "id": "DOC-TTB-WINE-ALC",
+      "title": "TTB — Wine Labeling: Alcohol Content (guidance)",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/wine/wine-labeling-alcohol-content",
+      "digest": "4cea13632cbc313f",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-TTB-DS-LABELING",
+      "title": "TTB — Distilled Spirits Labeling (guidance index)",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/distilled-spirits/labeling",
+      "digest": "9c57497980d5ca96",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-TTB-DS-BRAND-NAME",
+      "title": "TTB — Distilled Spirits: Brand Name (guidance)",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/distilled-spirits/ds-labeling-home/ds-brand-name",
+      "digest": "a30af29250045d31",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-TTB-DS-ALC-CONTENT",
+      "title": "TTB — Distilled Spirits: Alcohol Content (guidance)",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/distilled-spirits/ds-labeling-home/ds-alcohol-content",
+      "digest": "4b57c6ca67690de8",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-TTB-MALT-LABELING",
+      "title": "TTB — Malt Beverage Labeling (guidance index)",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling",
+      "digest": "1677dae19af4477f",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-TTB-MALT-MANDATORY",
+      "title": "TTB — Malt Beverage Mandatory Label Information",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-mandatory-label-information",
+      "digest": "de074b9bea032bd1",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-TTB-MALT-BRAND-NAME",
+      "title": "TTB — Malt Beverage Brand Name",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-brand-name",
+      "digest": "190e2bb9baa152a7",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-TTB-MALT-NET-CONTENTS",
+      "title": "TTB — Malt Beverage Net Contents",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-net-contents",
+      "digest": "f4ad0eabfff072ea",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-TTB-MALT-CLASS-TYPE",
+      "title": "TTB — Malt Beverage Class and Type",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-class-and-type",
+      "digest": "76100dc63671d5f2",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-TTB-MALT-ADDR-DOMESTIC",
+      "title": "TTB — Malt Beverage Name and Address (domestic)",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-name-and-address-domestic",
+      "digest": "96ae422e8b5ddd27",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-TTB-MALT-ADDR-IMPORTS",
+      "title": "TTB — Malt Beverage Name and Address (imports)",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-name-and-address-imports",
+      "digest": "17f77693bda0b5e7",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-TTB-MALT-COLOR",
+      "title": "TTB — Malt Beverage Color Additive Disclosures",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-color-additive-disclosures",
+      "digest": "18953b0ff1f4f9f4",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-TTB-MALT-SULFITE",
+      "title": "TTB — Malt Beverage Sulfite and Aspartame Declarations",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-sulfite-aspartame-declarations",
+      "digest": "6e77c343e838a95b",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-TTB-MALT-ALC-CONTENT",
+      "title": "TTB — Malt Beverage Alcohol Content",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-alcohol-content",
+      "digest": "6096dccdb605d4b7",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-TTB-MALT-HEALTH-WARNING",
+      "title": "TTB — Malt Beverage Health Warning",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-health-warning",
+      "digest": "32539a8d491100c3",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-TTB-MALT-CHECKLIST",
+      "title": "TTB — Malt Beverage Labeling Checklist",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-labeling-checklist",
+      "digest": "405253c88b4a139d",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-TTB-MALT-ANATOMY",
+      "title": "TTB — Anatomy of a Malt Beverage Label (tool)",
+      "url": "https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/anatomy-of-a-malt-beverage-label-tool",
+      "digest": "af96af9ad77f2e2b",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-CBP-COUNTRY-OF-ORIGIN",
+      "title": "U.S. CBP — Marking of Country of Origin on U.S. Imports",
+      "url": "https://www.cbp.gov/trade/rulings/informed-compliance-publications/marking-country-origin-us-imports",
+      "digest": "ebc292bd41bf80fa",
+      "retrievedAt": "2026-08-04"
     }
   ]
 }

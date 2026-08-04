@@ -109,6 +109,67 @@ describe('the product types offered on the form', () => {
   })
 })
 
+/**
+ * The governing principle, turned on the policy itself (§18.5a).
+ *
+ * "A model may propose a rule; only a person may enact one." The blast radius
+ * is why this is stricter than for labels: a model misreading one label
+ * produces one wrong verdict a reviewer catches; a model misreading a
+ * REGULATION produces a wrong rule applied confidently to every submission
+ * thereafter, with each verdict correctly citing it.
+ *
+ * `validatePolicySet` refuses such a set at load. These assert the archive as
+ * it actually stands, so a rule quietly promoted to active — by a hand, a
+ * merge, or a future agent — fails here rather than at a deployment.
+ */
+describe('a model may propose a rule; only a person may enact one', () => {
+  const proposed = POLICY_SET.rules.filter((r) => r.provenance?.extractedBy === 'model')
+
+  it('has rules that a model proposed, so this is not vacuous', () => {
+    expect(proposed.length).toBeGreaterThan(0)
+  })
+
+  it('leaves every one of them unenacted unless a person signed it', () => {
+    for (const rule of proposed) {
+      if (rule.status === 'active') {
+        expect(rule.approval?.by, `${rule.id} is active`).toBeTruthy()
+      }
+    }
+  })
+
+  it('gives every one of them the verbatim words it was drawn from', () => {
+    // Without the quote, reviewing one rule means re-reading the whole
+    // regulation — which means nobody reviews it, and the approval becomes a
+    // formality.
+    for (const rule of proposed) {
+      expect(rule.provenance?.quote?.length ?? 0, rule.id).toBeGreaterThan(40)
+      expect(rule.provenance?.sourceDocument, rule.id).toBeTruthy()
+    }
+  })
+
+  it('registers the document each one cites, with a digest', () => {
+    // A rule whose source cannot be produced is a rule nobody can check, and a
+    // document without a digest can be edited afterwards with nothing showing.
+    const registered = new Map((POLICY_SET.sourceDocuments ?? []).map((d) => [d.id, d]))
+    for (const rule of proposed) {
+      const doc = registered.get(rule.provenance?.sourceDocument ?? '')
+      expect(doc, `${rule.id} cites an unregistered document`).toBeDefined()
+      expect(doc?.digest?.length ?? 0, rule.id).toBeGreaterThan(8)
+    }
+  })
+
+  it('applies none of them to a submission while they are drafts', () => {
+    // The property that makes carrying an unapproved proposal safe at all.
+    const draftIds = new Set(POLICY_SET.rules.filter((r) => r.status !== 'active').map((r) => r.id))
+    expect(draftIds.size).toBeGreaterThan(0)
+    for (const productType of GOVERNED_PRODUCT_TYPES) {
+      for (const id of assess(spirits({ productType })).binding.selectedRuleIds) {
+        expect(draftIds.has(id), `${id} selected for ${productType}`).toBe(false)
+      }
+    }
+  })
+})
+
 describe('selection — which rules govern this submission (D25)', () => {
   it('selects the rules for the product type the application states', () => {
     const ids = assess(spirits()).binding.selectedRuleIds
