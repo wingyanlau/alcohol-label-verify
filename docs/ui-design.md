@@ -168,10 +168,23 @@ establishes order without imposing steps.
 
 | Field | Input | Required | Hint |
 |---|---|---|---|
+| Product type | Select, defaulting to *Not stated* | No | `Decides which rules apply. Without it, none can be checked.` |
 | Brand name | Single-line text | **Yes** | — |
 | Class / type | Single-line text | No | `e.g. Kentucky Straight Bourbon Whiskey` |
 | Alcohol content | Text with a `%` suffix adornment | No | — |
 | Net contents | Single-line text | No | `e.g. 750 mL` |
+
+**Product type comes first, and it is not a field compared against the label.**
+It is item 5 on TTB F 5100.31 and the input rule selection runs on (D25) — no
+label states "Distilled spirits", so comparing it would flag every compliant
+one. Its options are generated from the policy set rather than typed into the
+markup: a hand-kept list drifts in the silent direction, where a newly governed
+type is missing from the form, nobody selects it, and its rules never fire.
+
+**A select, not a text field, and it may be left unstated.** Free text would
+let a typo select nothing while looking answered. Leaving it unstated is
+honest, and the result then says plainly that no rule could be applied — it
+does not quietly report a pass.
 
 **Labels sit above inputs, never inside them.** Placeholder-as-label disappears on
 focus. It is a documented accessibility failure and precisely the thing that
@@ -292,7 +305,7 @@ A `Check another label` action resets to §4.1 with everything cleared.
 
 | | |
 |---|---|
-| Tab order | Brand name → class/type → alcohol → net contents → file button → primary action |
+| Tab order | Product type → brand name → class/type → alcohol → net contents → file button → primary action |
 | The drop zone is not a tab stop | The button inside it is |
 | Focus ring | Visible, never removed, ≥ 2px, ≥ 3:1 against its background |
 | `Enter` in any text field | Submits — matches the expectation of a four-field form |
@@ -322,7 +335,7 @@ afterthought.*
 | Mode switch | Single review · Batch |
 | Panel 1 heading | 1. The application says |
 | Panel 2 heading | 2. The label |
-| Field labels | Brand name · Class / type · Alcohol content · Net contents |
+| Field labels | Product type · Brand name · Class / type · Alcohol content · Net contents |
 | Required marker | (required) — on brand name only |
 | Class hint | e.g. Kentucky Straight Bourbon Whiskey |
 | Net contents hint | e.g. 750 mL |
@@ -362,7 +375,27 @@ distinguished by colour alone (P2, NF-A05).
 │      1 field could not be read from this image. A clearer photo is      │
 │      needed before this label can be reviewed.                          │
 └────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  ?   Nothing blocking found — some rules need your judgement           │
+│      Nothing blocking found — some rules need your judgement before    │
+│      your approval.                                                    │
+└────────────────────────────────────────────────────────────────────────┘
 ```
+
+**A fourth was added with the policy layer (D40).** `CLEAR_CONFIRM_POLICY` is
+not the same request as `CLEAR_CONFIRM_FLAGGED`, and they are deliberately not
+merged: one asks the agent to confirm a *reading* a better scan would settle,
+the other to make a *compliance judgement* the artwork cannot supply at all. It
+ranks above the flagged state and below anything reporting a defect, and it
+sits above the "Matched" divider in the worklist with its own count chip —
+nothing blocking was found, but the submission is not finished with.
+
+**The second line is the recommendation, and it never says "Approved".** The
+word appears only as something handed back — *"ready for your approval"*, *"do
+not approve until…"*. This is the one place a user reads the governing
+principle, and it is one word from being violated; `aggregate.test.ts` asserts
+it on every outcome.
 
 **The third matters most.** `INCOMPLETE` outranks everything (D5), and the
 interface must never let it read as a pass. It gets its own treatment, its own
@@ -510,6 +543,52 @@ failures are more specific.
 
 ---
 
+## 7a. Results — Rules Applied
+
+The policy layer's output (design §18.4), below the warning statement. One row
+per rule that governed this submission, in the order the agent needs them:
+breaches first, then rules that could not be judged, then those met, then those
+that did not apply. A list ordered by rule id buries three problems under nine
+passes.
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│  Rules applied                                                         │
+├───────────────────────────────────────────────────────────────────────┤
+│  ✗  Not met                                                            │
+│     Net contents must be an authorised standard of fill                │
+│     800 mL is not an authorised standard of fill                       │
+│     27 CFR 5.203 · DS-STANDARD-OF-FILL                                 │
+├───────────────────────────────────────────────────────────────────────┤
+│  ?  Could not be judged from the artwork                               │
+│     Net contents must appear on the label                              │
+│     netContents could not be read from the artwork                     │
+│     27 CFR 5.63 · DS-NET-CONTENTS-PRESENT                              │
+├───────────────────────────────────────────────────────────────────────┤
+│  ✓  Met                                                                │
+│     Alcohol content must be stated in a permitted form                 │
+│     "45% alc/vol" is a permitted form                                  │
+│     27 CFR 5.65 · DS-ALCOHOL-CONTENT-FORMAT                            │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+**Every row cites its regulation.** A finding an agent cannot trace to a
+section is one they can only defer to, and deferring to it is precisely what
+FR-10 exists to avoid. The citation and rule id are monospaced for the same
+reason as the reference code: they are read across to another document,
+character by character.
+
+**Every row states what it decided on.** The evidence line is the observation,
+not a restatement of the verdict — *"800 mL is not an authorised standard of
+fill"*, never *"failed"*.
+
+**"No rules were applied to this submission" is a real state, and it is shown.**
+It happens when the application states no product type, because product type is
+what selection runs on. It reads as an open question rather than a pass — the
+outcome is `CLEAR_CONFIRM_POLICY`, not `CLEAR`.
+
+---
+
 ## 8. Correcting a Value
 
 UC-3. The agent notices a typo in the application data rather than a genuine
@@ -632,6 +711,8 @@ The interface's vocabulary is a design artefact (P7).
 |---|---|
 | Extraction, inference, model, AI, confidence score | Reading the label, could not read |
 | CLEAR / DISCREPANCIES / INCOMPLETE | Everything matches / problems found / could not finish |
+| CLEAR_CONFIRM_POLICY, VIOLATED, UNDETERMINED | Needs your judgement / not met / could not be judged from the artwork |
+| Approved | *"ready for your approval"* — the system recommends, the agent decides |
 | Invalid input | Names the field and what is needed |
 | Failed | Says what did not happen and what to do |
 | Low confidence | *"Please double-check this one"* |

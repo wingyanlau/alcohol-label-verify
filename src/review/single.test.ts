@@ -15,6 +15,9 @@ const application = {
   classType: 'Kentucky Straight Bourbon Whiskey',
   alcoholContent: '45% Alc./Vol.',
   netContents: '750 mL',
+  // Item 5 on the form, and the input rule selection runs on (D25). Without
+  // it no rule is selected and the screen has nothing to show.
+  productType: 'Distilled spirits',
 }
 
 const reading = JSON.stringify({
@@ -151,5 +154,46 @@ describe('the review itself', () => {
     const result = await run()
     expect(result.reference).toBe('ABCD-1234')
     expect(result.warning.advisory.length).toBeGreaterThan(0)
+  })
+})
+
+describe('the rules the screen shows (§18.4)', () => {
+  it('shows one entry per rule applied, each citing its regulation', async () => {
+    const result = await run()
+    expect(result.findings.length).toBeGreaterThan(0)
+    expect(result.findings.length).toBe(result.policy.selectedRuleIds.length)
+    for (const f of result.findings) {
+      // A finding an agent cannot trace to a section is one they can only take
+      // on trust, which is what FR-10 exists to avoid.
+      expect(f.citation, f.ruleId).toMatch(/^27 CFR \d/)
+      expect(f.requirement.length, f.ruleId).toBeGreaterThan(0)
+      expect(f.evidence.length, f.ruleId).toBeGreaterThan(0)
+    }
+  })
+
+  it('binds which rules were applied and when they were in force (D26)', async () => {
+    const result = await run()
+    expect(result.policy.policySetVersion).toBeGreaterThan(0)
+    expect(result.policy.selectedRuleIds).toContain('DS-STANDARD-OF-FILL')
+    expect(result.policy.submittedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('recommends without approving', async () => {
+    // The governing principle, at the one point a user reads it. This screen
+    // is where "Approved" would be most tempting and most wrong.
+    const result = await run()
+    expect(result.recommendation).toMatch(/do not approve/i)
+    expect(result.recommendation).not.toMatch(/^\s*approved\b/i)
+  })
+
+  it('reports the alcohol statement rule as met even though the value mismatches', async () => {
+    // The two layers answer different questions and must not be confused. The
+    // label says 40% where the application says 45% — a discrepancy — but
+    // "40% Alc./Vol." is a perfectly legal way to state alcohol content, so
+    // the format rule is satisfied. A screen showing both as failures would be
+    // reporting one problem twice and misnaming it.
+    const result = await run()
+    const format = result.findings.find((f) => f.ruleId === 'DS-ALCOHOL-CONTENT-FORMAT')
+    expect(format?.state).toBe('SATISFIED')
   })
 })

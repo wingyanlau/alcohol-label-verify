@@ -840,11 +840,16 @@ export default {
         const form = await request.formData()
         const file = form.get('label')
         const image = file instanceof File ? await file.arrayBuffer() : null
+        // Not stated is null, not the empty string. The two would be different
+        // values meaning the same thing, and only one of them reads as absent
+        // where rule selection asks (D25).
+        const productType = String(form.get('productType') ?? '').trim()
         const application = {
           brandName: String(form.get('brandName') ?? ''),
           classType: String(form.get('classType') ?? ''),
           alcoholContent: String(form.get('alcoholContent') ?? ''),
           netContents: String(form.get('netContents') ?? ''),
+          productType: productType === '' ? null : productType,
         }
 
         // Re-enforced server-side, always. Client validation exists for

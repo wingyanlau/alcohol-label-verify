@@ -89,6 +89,25 @@ export const OUTCOME_HEADLINE: Record<Outcome, string> = {
   INCOMPLETE: 'Could not finish the check',
 }
 
+/**
+ * What the system suggests the agent do (§18.4).
+ *
+ * It recommends; it does not approve. Every line here hands the decision back —
+ * *ready for your approval*, never *approved*. The distinction is the governing
+ * principle in the one place a user actually reads, and it is the sentence most
+ * likely to be softened later by someone making the screen feel decisive.
+ * `RECOMMENDATION_KEEPS_THE_DECISION` asserts it.
+ */
+export const OUTCOME_RECOMMENDATION: Record<Outcome, string> = {
+  CLEAR: 'Nothing blocking found — ready for your approval',
+  CLEAR_CONFIRM_FLAGGED:
+    'Nothing blocking found — confirm the flagged readings, then it is ready for your approval',
+  CLEAR_CONFIRM_POLICY:
+    'Nothing blocking found — some rules need your judgement before your approval',
+  DISCREPANCIES_FOUND: 'Do not approve until the problems below are resolved',
+  INCOMPLETE: 'Not enough could be read to make a recommendation',
+}
+
 /** Count of findings an agent must act on. */
 export function problemCount({ fields, warning, findings = [] }: AggregateInput): number {
   const fieldProblems = fields.filter(

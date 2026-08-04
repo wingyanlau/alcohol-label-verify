@@ -36,6 +36,22 @@ import { FIELDS } from './types.js'
  */
 export const POLICY_SET: PolicySet = validatePolicySet(rawPolicySet)
 
+/**
+ * The product types the archive actually governs, for a form to offer.
+ *
+ * Derived from the rules rather than listed beside them. A hand-kept list drifts
+ * the moment a rule for a new type is added, and it drifts in the silent
+ * direction: the type is missing from the form, nobody selects it, and its rules
+ * never fire.
+ */
+export const GOVERNED_PRODUCT_TYPES: readonly string[] = [
+  ...new Set(
+    POLICY_SET.rules
+      .filter((rule) => rule.status === 'active')
+      .flatMap((rule) => rule.appliesWhen.productType ?? []),
+  ),
+].sort()
+
 /** What the verdict must carry for its findings to be defensible later (D26). */
 export interface PolicyBinding {
   readonly policySetVersion: number
@@ -80,6 +96,24 @@ const selectionUndetermined = (evidence: string): PolicyFinding => ({
   severity: 'blocking',
   evidence,
 })
+
+/**
+ * The regulation a rule came from, as an agent would cite it.
+ *
+ * A finding an agent cannot trace to a section is one they have to take on
+ * trust, and FR-10 exists precisely so they do not have to. Returns null when
+ * the rule is not in the set — `POLICY-SELECTION` is the standing case, since
+ * it reports that no rule was reached.
+ */
+export function citationFor(ruleId: string, set: PolicySet = POLICY_SET): string | null {
+  const rule = set.rules.find((r) => r.id === ruleId)
+  if (rule === undefined) return null
+  const regulation = set.regulations.find((r) => r.id === rule.regulation)
+  // Title 27 is not read from the entry because the contract does not carry it:
+  // a section like "5.63" is only meaningful under title 27 in the first place,
+  // and this system knows no other title.
+  return regulation === undefined ? null : `27 CFR ${regulation.section}`
+}
 
 /**
  * What the checks are allowed to look at.

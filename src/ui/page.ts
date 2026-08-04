@@ -15,6 +15,20 @@
  * pixel of this page.
  */
 
+import { GOVERNED_PRODUCT_TYPES } from '../domain/findings.js'
+
+/**
+ * The product type options, taken from the policy set rather than typed here.
+ *
+ * Product type is the input rule selection runs on (D25), so a form offering a
+ * type the archive does not govern — or omitting one it does — decides which
+ * regulations get applied. That is too much for a hard-coded list to be
+ * quietly responsible for.
+ */
+const PRODUCT_TYPE_OPTIONS = GOVERNED_PRODUCT_TYPES.map(
+  (type) => `<option value="${type}">${type}</option>`,
+).join('\n            ')
+
 export const PAGE_HTML = `<!doctype html>
 <html lang="en">
 <head>
@@ -104,6 +118,19 @@ export const PAGE_HTML = `<!doctype html>
              user-select: all; }
   .warning-seg { padding: 8px 0; }
   .warning-seg .dev { color: var(--muted); font-size: 15px; }
+  /* The recommendation sits under the headline in the outcome banner. Normal
+     weight against the headline's bold: it is advice, and it should not
+     compete with the finding it follows. */
+  .outcome .recommend { font-size: 16px; margin-top: 4px; }
+  .finding { border-top: 1px solid var(--line); padding: 12px 0; }
+  .finding .fstatus { font-weight: 600; }
+  .finding .freq { margin-top: 2px; }
+  .finding .dev { color: var(--muted); font-size: 15px; margin-top: 2px; }
+  /* Citation and rule id. Monospaced for the same reason as the reference
+     code: it is meant to be read across to a regulation, character by
+     character. */
+  .finding .rule { color: var(--muted); font-size: 14px; margin-top: 4px;
+                   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .advisory { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 14px; }
   .advisory label { display: flex; gap: 10px; align-items: flex-start; padding: 5px 0; }
   .banner { background: #fdf6e3; border: 1px solid #ecdca6; border-radius: 6px; padding: 10px 14px; font-size: 15px; color: var(--warn); margin-bottom: 16px; }
@@ -167,6 +194,17 @@ export const PAGE_HTML = `<!doctype html>
           <label for="brandName">Brand name <span class="req">(required)</span></label>
           <input id="brandName" name="brandName" type="text" autocomplete="off">
           <p class="inline-err hidden" id="brandNameErr"></p>
+        </div>
+        <div class="fieldrow">
+          <!-- First, because it decides which rules the rest is judged by
+               (D25). Item 5 on TTB F 5100.31, and not a field compared against
+               the label: no label states "Distilled spirits". -->
+          <label for="productType">Product type</label>
+          <select id="productType" name="productType">
+            <option value="">Not stated</option>
+            ${PRODUCT_TYPE_OPTIONS}
+          </select>
+          <p class="hint">Decides which rules apply. Without it, none can be checked.</p>
         </div>
         <div class="fieldrow">
           <label for="classType">Class / type</label>
@@ -552,6 +590,46 @@ export const PAGE_HTML = `<!doctype html>
     return wrap
   }
 
+  // A rule the label was judged against, and what the judgement rested on.
+  // Every entry names its citation, so an agent can go and read the regulation
+  // rather than take this system's word for it (FR-10).
+  function findingStatus(f) {
+    if (f.state === 'VIOLATED' && f.severity === 'blocking') return { icon: '✗', cls: 'bad', words: 'Not met' }
+    if (f.state === 'VIOLATED') return { icon: '?', cls: 'warn', words: 'Not met — your judgement' }
+    if (f.state === 'UNDETERMINED') return { icon: '?', cls: 'warn', words: 'Could not be judged from the artwork' }
+    if (f.state === 'NOT_APPLICABLE') return { icon: '—', cls: 'muted', words: 'Does not apply' }
+    return { icon: '✓', cls: 'ok', words: 'Met' }
+  }
+
+  function renderFindings(findings) {
+    var box = el('div')
+    box.appendChild(el('h2', null, 'Rules applied'))
+    if (!findings || !findings.length) {
+      box.appendChild(el('p', 'note', 'No rules were applied to this submission.'))
+      return box
+    }
+    // Satisfied rules last: an agent opens this to find what needs them, and a
+    // list ordered by rule id buries three problems under nine passes.
+    var order = { VIOLATED: 0, UNDETERMINED: 1, NOT_APPLICABLE: 3, SATISFIED: 2 }
+    findings.slice().sort(function (a, b) {
+      return (order[a.state] === undefined ? 9 : order[a.state]) - (order[b.state] === undefined ? 9 : order[b.state])
+    }).forEach(function (f) {
+      var s = findingStatus(f)
+      var row = el('div', 'finding')
+      var line = el('div', 'fstatus ' + s.cls)
+      line.appendChild(el('span', null, s.icon + '  '))
+      line.appendChild(document.createTextNode(s.words))
+      row.appendChild(line)
+      row.appendChild(el('div', 'freq', f.requirement))
+      row.appendChild(el('div', 'dev', f.evidence))
+      var cite = el('div', 'rule')
+      cite.textContent = f.citation ? f.citation + ' · ' + f.ruleId : f.ruleId
+      row.appendChild(cite)
+      box.appendChild(row)
+    })
+    return box
+  }
+
   function renderWarning(w) {
     var box = el('div')
     box.appendChild(el('h2', null, 'Government warning'))
@@ -692,6 +770,7 @@ export const PAGE_HTML = `<!doctype html>
     var form = new FormData()
     form.append('label', attached)
     form.append('brandName', brand)
+    form.append('productType', byId('productType').value)
     form.append('classType', byId('classType').value.trim())
     form.append('alcoholContent', byId('alcoholContent').value.trim())
     form.append('netContents', byId('netContents').value.trim())
@@ -749,6 +828,9 @@ export const PAGE_HTML = `<!doctype html>
       banner.appendChild(el('div', 'status-icon ' + oc, oc === 'ok' ? '✓' : oc === 'bad' ? '✗' : '!'))
       var bw = el('div')
       bw.appendChild(el('div', 'big', d.headline || ''))
+      // The recommendation, immediately under the headline. It never says
+      // "approved" — the decision is the agent's, and the sentence says so.
+      if (d.recommendation) bw.appendChild(el('div', 'recommend', d.recommendation))
       banner.appendChild(bw)
       sheet.appendChild(banner)
     }
@@ -758,6 +840,7 @@ export const PAGE_HTML = `<!doctype html>
     left.appendChild(el('h2', null, 'Fields'))
     d.fields.forEach(function (f) { left.appendChild(renderField(f)) })
     left.appendChild(renderWarning(d.warning))
+    left.appendChild(renderFindings(d.findings))
     layout.appendChild(left)
 
     var right = el('div', 'imgpanel')

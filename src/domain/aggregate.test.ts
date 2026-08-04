@@ -15,6 +15,7 @@ import {
   aggregate,
   judgementCount,
   OUTCOME_HEADLINE,
+  OUTCOME_RECOMMENDATION,
   problemCount,
   summarise,
   unreadableFields,
@@ -234,6 +235,36 @@ describe('policy findings in the outcome', () => {
         }),
       ).toBe('INCOMPLETE')
     }
+  })
+
+  /**
+   * RECOMMENDATION_KEEPS_THE_DECISION — a guard test (§18.4).
+   *
+   * "The model reads. The rules compare. The human decides." This is the only
+   * place that principle is visible to a user, and it is one word away from
+   * being violated: a recommendation reading "Approved" makes this system the
+   * approver, in a domain where approval is a legal act reserved to a person.
+   *
+   * The failure would be silent and would look like an improvement.
+   */
+  it('never states an approval, on any outcome', () => {
+    for (const [outcome, text] of Object.entries(OUTCOME_RECOMMENDATION)) {
+      // Not "Approved", not "This label is approved". The word may appear only
+      // as something handed to the agent — "your approval", "do not approve".
+      expect(text, outcome).not.toMatch(/^\s*approved\b/i)
+      expect(text, outcome).not.toMatch(/\b(is|has been|was)\s+approved\b/i)
+      expect(text.trim().length, outcome).toBeGreaterThan(0)
+    }
+  })
+
+  it('hands the decision to the agent whenever nothing blocks', () => {
+    for (const outcome of ['CLEAR', 'CLEAR_CONFIRM_FLAGGED', 'CLEAR_CONFIRM_POLICY'] as const) {
+      expect(OUTCOME_RECOMMENDATION[outcome], outcome).toMatch(/your approval/i)
+    }
+  })
+
+  it('tells the agent not to approve when something does block', () => {
+    expect(OUTCOME_RECOMMENDATION.DISCREPANCIES_FOUND).toMatch(/do not approve/i)
   })
 
   it('gives the new outcome a headline that does not read as an approval', () => {

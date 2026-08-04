@@ -25,8 +25,9 @@
  * reading to anchor to.
  */
 
-import { OUTCOME_HEADLINE } from '../domain/aggregate.js'
+import { OUTCOME_HEADLINE, OUTCOME_RECOMMENDATION } from '../domain/aggregate.js'
 import type { ExtractionProvider } from '../domain/extraction.js'
+import { citationFor } from '../domain/findings.js'
 import { configuredLegibilityFloor } from '../domain/legibility.js'
 import { referenceIsUnverified, warningReference } from '../domain/reference.js'
 import type { ApplicationData, FieldName } from '../domain/types.js'
@@ -87,6 +88,8 @@ export interface ReviewResult {
   readonly state: 'COMPLETED'
   readonly outcome: string
   readonly headline: string
+  /** What the system suggests. Never an approval (§18.4). */
+  readonly recommendation: string
   readonly cause: null
   readonly sourceName: string
   readonly fields: ReadonlyArray<{
@@ -98,6 +101,27 @@ export interface ReviewResult {
     rule: string
     explanation: string | null
   }>
+  /**
+   * What the policy set says, one entry per rule applied (§18.4).
+   *
+   * Every entry carries its citation and the evidence it decided on, because a
+   * finding an agent cannot check is one they can only defer to — and deferring
+   * to it is the thing this system is built not to ask of them (FR-10).
+   */
+  readonly findings: ReadonlyArray<{
+    ruleId: string
+    requirement: string
+    state: string
+    severity: string
+    evidence: string
+    citation: string | null
+  }>
+  /** Which rules were applied, and what they were selected on (D26). */
+  readonly policy: {
+    readonly policySetVersion: number
+    readonly selectedRuleIds: readonly string[]
+    readonly submittedOn: string
+  }
   readonly warning: {
     readonly evaluated: boolean
     readonly ok: boolean
@@ -165,6 +189,7 @@ export async function reviewOne(
     state: 'COMPLETED',
     outcome: result.outcome,
     headline: OUTCOME_HEADLINE[result.outcome],
+    recommendation: OUTCOME_RECOMMENDATION[result.outcome],
     cause: null,
     sourceName: opts.sourceName,
     fields: FIELDS.map((name: FieldName) => {
@@ -179,6 +204,19 @@ export async function reviewOne(
         explanation: f?.explanation ?? null,
       }
     }),
+    findings: result.findings.map((f) => ({
+      ruleId: f.ruleId,
+      requirement: f.requirement,
+      state: f.state,
+      severity: f.severity,
+      evidence: f.evidence,
+      citation: citationFor(f.ruleId),
+    })),
+    policy: {
+      policySetVersion: result.policy.policySetVersion,
+      selectedRuleIds: result.policy.selectedRuleIds,
+      submittedOn: result.policy.submittedOn,
+    },
     warning: {
       evaluated: true,
       ok: result.warning.ok,
