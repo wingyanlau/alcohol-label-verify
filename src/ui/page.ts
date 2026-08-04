@@ -567,8 +567,23 @@ export const PAGE_HTML = `<!doctype html>
     detail.classList.remove('hidden')
     document.addEventListener('keydown', onDetailKey)
     detail.addEventListener('click', function (e) { if (e.target === detail) closeDetail() })
-    var btn = sheet.querySelector('button')
-    if (btn) btn.focus()
+
+    // Focus lands on the OUTCOME, not on Close (ui-design §4, NF-A03).
+    //
+    // Focusing the first button put a screen-reader user on "Close" and made
+    // them hunt backwards for the finding — the one thing they opened the
+    // sheet for. The banner is given tabindex="-1" so it can take focus
+    // without entering the tab order, and role="status" so the outcome is
+    // announced rather than silently rendered.
+    var banner = sheet.querySelector('.outcome')
+    if (banner) {
+      banner.setAttribute('tabindex', '-1')
+      banner.setAttribute('role', 'status')
+      banner.focus()
+    } else {
+      var btn = sheet.querySelector('button')
+      if (btn) btn.focus()
+    }
   }
 
   function openDetail(itemId, sourceName) {
