@@ -31,6 +31,8 @@ const application: ApplicationData = {
   classType: 'Kentucky Straight Bourbon Whiskey',
   alcoholContent: '45% Alc./Vol.',
   netContents: '750 mL',
+  // Stated on the application, and the input rule selection runs on (D25).
+  productType: 'Distilled spirits',
 }
 
 const labelReading = (over: Partial<Record<string, unknown>> = {}) => ({
@@ -95,12 +97,43 @@ const images = {
 }
 
 describe('the pipeline produces a verdict', () => {
-  it('a compliant submission is CLEAR with no false discrepancy', async () => {
+  it('a compliant submission raises no discrepancy', async () => {
     const { provider } = stubProvider({ label: labelReading(), record: recordReading })
     const r = await verifySubmission(images, { provider, now: clock() })
-    expect(r.outcome).toBe('CLEAR')
     expect(r.problemCount).toBe(0)
+    expect(r.fields.every((f) => f.state === 'MATCH')).toBe(true)
+    expect(r.warning.ok).toBe(true)
+  })
+
+  it('a compliant submission with its product type declared is CLEAR', async () => {
+    const { provider } = stubProvider({ label: labelReading(), record: recordReading })
+    const r = await verifySubmission(
+      { label: images.label, record: { applicationData: application } },
+      { provider, now: clock() },
+    )
+    expect(r.outcome).toBe('CLEAR')
     expect(r.summary).toBe('Everything matches')
+    expect(r.findings.some((f) => f.state === 'VIOLATED')).toBe(false)
+  })
+
+  /*
+   * A limitation, asserted rather than described.
+   *
+   * Every rule in the set is conditioned on product type, and product type is
+   * item 5 on the form — not one of `FIELDS`, so a record read from an image
+   * does not carry it. That path therefore applies no regulation at all, and
+   * the honest report is that nothing was checked, not that nothing was wrong.
+   *
+   * The batch path is unaffected: it supplies application data structurally,
+   * product type included. If the extractor is ever taught to read item 5,
+   * this test is the one that should change.
+   */
+  it('says nothing was checked when the record was read from an image', async () => {
+    const { provider } = stubProvider({ label: labelReading(), record: recordReading })
+    const r = await verifySubmission(images, { provider, now: clock() })
+    expect(r.outcome).toBe('CLEAR_CONFIRM_POLICY')
+    expect(r.policy.selectedRuleIds).toEqual([])
+    expect(r.findings.map((f) => f.ruleId)).toEqual(['POLICY-SELECTION'])
   })
 
   it('a genuine mismatch is localised to the offending field', async () => {

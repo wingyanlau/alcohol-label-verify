@@ -21,6 +21,8 @@ const application: ApplicationData = {
   classType: 'Kentucky Straight Bourbon Whiskey',
   alcoholContent: '45% Alc./Vol.',
   netContents: '750 mL',
+  // Stated on the application, and the input rule selection runs on (D25).
+  productType: 'Distilled spirits',
 }
 
 const WARNING =

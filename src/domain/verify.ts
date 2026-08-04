@@ -18,9 +18,13 @@
  * ---------------------------------------------------------------------------
  */
 
-import { aggregate, problemCount, summarise } from './aggregate.js'
+import { aggregate, judgementCount, problemCount, summarise } from './aggregate.js'
 import { compareFields } from './compare.js'
+import type { PolicyFinding } from './evaluate.js'
 import type { ExtractionProvenance, ExtractionProvider } from './extraction.js'
+import type { PolicyBinding } from './findings.js'
+import { assessPolicy } from './findings.js'
+import type { PolicySet } from './policy.js'
 import type { WarningReference } from './reference.js'
 import type { ApplicationData, Extraction, FieldVerdict, Outcome, WarningVerdict } from './types.js'
 import { FIELDS } from './types.js'
@@ -67,8 +71,14 @@ export interface VerifyResult {
   readonly outcome: Outcome
   readonly summary: string
   readonly problemCount: number
+  /** Rules awaiting the agent's judgement — counted apart from problems (D40). */
+  readonly judgementCount: number
   readonly fields: readonly FieldVerdict[]
   readonly warning: WarningVerdict
+  /** What the policy set says about this submission (§18.4). */
+  readonly findings: readonly PolicyFinding[]
+  /** Which rules were applied, and what they were selected on (D26). */
+  readonly policy: PolicyBinding
   readonly application: ApplicationData
   readonly labelExtraction: Extraction
   readonly provenance: {
@@ -105,7 +115,32 @@ export interface VerifyOptions {
    * Live callers leave this unset and supply `label.warningLegibility`.
    */
   readonly warningLegible?: boolean
+  /**
+   * The date the application was filed, as `YYYY-MM-DD`.
+   *
+   * Not today's date, and the distinction is the whole reason the archive
+   * carries effective dates: standards of fill changed in January 2025, so a
+   * 2024 filing judged by today's list is judged by a rule that did not govern
+   * it — invisibly, because the verdict looks perfectly ordinary.
+   *
+   * Defaults to the supplied clock when a caller has no filing date to give,
+   * which is right for a submission handed in now and wrong for a backlog. The
+   * date used is bound into the verdict either way, so the assumption is
+   * visible rather than implied.
+   */
+  readonly submittedOn?: string
+  /** Defaults to the loaded archive; injectable so tests can pin a set. */
+  readonly policySet?: PolicySet
 }
+
+/**
+ * The calendar date of an instant the caller supplied.
+ *
+ * Takes the milliseconds as an argument rather than reading them: M1's rule is
+ * that no file in `src/domain` reads a clock, and this does not — it formats
+ * one that was handed in.
+ */
+const isoDate = (ms: number): string => new Date(ms).toISOString().slice(0, 10)
 
 /** Turn a record-region extraction into application data. */
 function toApplicationData(extraction: Extraction): ApplicationData {
@@ -165,15 +200,27 @@ export async function verifySubmission(
     opts.warningRef,
     warningLegible,
   )
-  const outcome = aggregate({ fields, warning })
+  // Selection reads the record; evaluation reads the label. See findings.ts.
+  const assessment = assessPolicy({
+    application,
+    extraction: labelResult.extraction,
+    warning,
+    submittedOn: opts.submittedOn ?? isoDate(started),
+    policySet: opts.policySet,
+  })
+  const findings = assessment.findings
+  const outcome = aggregate({ fields, warning, findings })
   const compareMs = now() - compareStarted
 
   return {
     outcome,
-    summary: summarise({ fields, warning }),
-    problemCount: problemCount({ fields, warning }),
+    summary: summarise({ fields, warning, findings }),
+    problemCount: problemCount({ fields, warning, findings }),
+    judgementCount: judgementCount({ fields, warning, findings }),
     fields,
     warning,
+    findings,
+    policy: assessment.binding,
     application,
     labelExtraction: labelResult.extraction,
     provenance: {
