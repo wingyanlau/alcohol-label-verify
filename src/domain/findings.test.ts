@@ -12,7 +12,8 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { assessPolicy, POLICY_SET } from './findings.js'
+import { assessPolicy, citationFor, GOVERNED_PRODUCT_TYPES, POLICY_SET } from './findings.js'
+import type { PolicySet } from './policy.js'
 import type { ApplicationData, Extraction, ObservedField, WarningVerdict } from './types.js'
 
 const observed = (raw: string | null, unreadable = false): ObservedField => ({
@@ -66,6 +67,45 @@ describe('the policy set this deployment enforces', () => {
     // If this fails, nothing below is meaningful.
     expect(POLICY_SET.policySetVersion).toBeGreaterThan(0)
     expect(POLICY_SET.rules.length).toBeGreaterThan(0)
+  })
+})
+
+describe('citing the regulation a rule came from (FR-10)', () => {
+  it('names the section for a rule in the set', () => {
+    expect(citationFor('DS-STANDARD-OF-FILL')).toMatch(/^27 CFR \d/)
+  })
+
+  it('returns nothing for a rule the set does not carry', () => {
+    // POLICY-SELECTION is the standing case: it reports that no rule was
+    // reached, so there is no regulation to cite. A fabricated citation would
+    // be worse than none — an agent would go and read the wrong section.
+    expect(citationFor('POLICY-SELECTION')).toBeNull()
+    expect(citationFor('NOT-A-RULE')).toBeNull()
+  })
+
+  it('returns nothing when the rule cites a regulation the set does not register', () => {
+    // A set can only reach this state by being inconsistent with itself, and
+    // the honest answer is that the citation is unknown rather than invented.
+    const broken: PolicySet = {
+      ...POLICY_SET,
+      regulations: [],
+    }
+    expect(citationFor('DS-STANDARD-OF-FILL', broken)).toBeNull()
+  })
+})
+
+describe('the product types offered on the form', () => {
+  it('are the ones the archive actually governs', () => {
+    expect(GOVERNED_PRODUCT_TYPES).toContain('Distilled spirits')
+    expect(GOVERNED_PRODUCT_TYPES).toContain('Wine')
+  })
+
+  it('every one of them selects at least one rule', () => {
+    // The list exists so the form cannot offer a type that checks nothing.
+    for (const productType of GOVERNED_PRODUCT_TYPES) {
+      const r = assess(spirits({ productType }))
+      expect(r.binding.selectedRuleIds.length, productType).toBeGreaterThan(0)
+    }
   })
 })
 
