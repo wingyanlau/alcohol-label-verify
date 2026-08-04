@@ -2039,6 +2039,8 @@ plainly in the README, which is the correct handling of a known limitation.
 | D43 | The **runtime** archive lives in D1, append-only, and a policy change is a transaction that emits into the verdict hash chain under `subject_type = 'config'` (§18.8.3, §18.8.4). *Amended by D45: the JSON file is retained as the reviewed source that seeds it* | Keeping `config/policy-set.json` as the runtime archive | A file edit cannot be audited, so the policy had no history an auditor could read — only the git log of a JSON file, which is neither the audit trail nor tamper-evident. `config` was a subject type declared in 0001 that nothing ever wrote. Cost: review-by-pull-request is lost, which is the main thing to dislike (§18.8.8) | Hard — a migration, a loader rewrite, and an approval path |
 | D44 | Each finding carries a **snapshot of the rule as applied** — citation, quote, check parameters, approver — and the verdict binds `valid_on` and `as_of` (§18.8.5) | Binding the dates alone and resolving from the archive on demand | Today the citation is resolved against *today's* archive at read time, so a dropped rule yields nothing and a moved regulation yields the wrong section; the parameters actually applied are not stored at all. Evidence that depends on a live lookup is not evidence, and the lookup fails precisely when it matters — years later, or when the archive itself is disputed | Easy — additive columns |
 | D45 | `config/policy-set.json` stays the **reviewed source** and seeds the D1 rows; the rows are derived, append-only, and never hand-authored (§18.8.3) | Rows as the only archive (D43 as first written); or the file as the only archive | The two answer different questions — the file *what do we intend the rules to be*, the rows *what did we actually apply and between when*. Rows alone lose review by pull request, which is the one place a wrong rule is caught before it is enforced against every submission; a file alone has no auditable history. Seeding becomes the transaction that emits the policy events, and it is idempotent, so the deploy records the change rather than being the change | Easy — it is the reconciler that carries the cost, and it is derived |
+| D46 | **Who or what acted is one concept — an agent — with a kind (`human` / `model` / `system`) and a fully qualified identity** (§19) | Leaving `actor`, `extractedBy`, `model_id` and `decided_by` as four unrelated fields | They are four representations of one idea that cannot be joined, so the record can say a model read a label and a person approved it and still not answer *what has this agent done*. The reason to build it is not headcount: it turns the governing principle — the model reads, the human decides — from prose enforced in one place into an invariant assertable over the whole record, continuously and against production data. `system` is a third kind rather than a tidy-up: `job.opened` is the system executing, not anyone deciding, and folding it into either other kind attributes work to a party that did not do it | Moderate — `audit_event` is append-only, so a rebuild in the shape of 0005 |
+| D47 | **The workforce metric is deliberately deferred** (§19.6). Agreement *by agent kind* is safe to build; per-person measurement is not | Building attribution and volume metrics alongside the agent concept | Three reasons that survive the schema change. Throughput is not effectiveness — the measure that means anything is agreement, which the record already holds. The costs of disagreement are asymmetric (a false pass admits a non-compliant label; a false flag costs five minutes), and a metric averaging them would recommend moving precisely the wrong work to the model, with a confident-looking number. And measuring named employees is a labour-relations question before a technical one — `ui-design.md` §2.3 records a likely formal notification obligation, and building it first presents the agency a fait accompli instead of a decision | Easy to revisit — the data would exist; only the measure is withheld |
 
 ---
 
@@ -2884,6 +2886,115 @@ is evidence, and evidence that depends on a live lookup is not evidence.
 | A rule's past leaves the file | Superseding edits the file in place, so the previous wording survives only in git and in the rows. That is the intended division — the file is current intent, the rows are history — but it means the file alone can no longer answer "what did this rule used to say" |
 | Bigger records | Accepted. See §18.8.5 |
 | Two dates to get right | `validOn` from the filing, `asOf` from the clock at judgement. Both must be supplied by the caller, as `submittedOn` already is (M1 keeps clocks out of the core) |
+
+---
+
+## 19. The Agent — One Concept for Who or What Acted
+
+*Every record here says who did something. Four of them say it differently.*
+
+### 19.1 The concept is already present, four times over
+
+| Where | How it says it |
+|---|---|
+| `audit_event.actor` | a free string: `system`, `deploy`, a person's name |
+| `RuleProvenance.extractedBy` | `'human' \| 'model'` — the two kinds, already named |
+| `extraction.model_id`, `prompt_version` | the reading agent, fully qualified (D29) |
+| `decision.decided_by`, `policy_rule.approved_by` | the person |
+
+Four representations of one idea, none of which can be joined to another. The
+record can say a model read a label and a person approved it, and cannot answer
+*"what has this agent done"* about either.
+
+### 19.2 What this is actually for
+
+Not headcount. **It makes the governing principle checkable.**
+
+> The model reads. The rules compare. The human decides.
+
+Today that is enforced in exactly one place — `validatePolicySet` refuses a
+model-extracted rule that is active without an approval — and *described*
+everywhere else. Prose does not fail a build. With a kind on every recorded
+act it becomes a query over the whole record:
+
+> No act with `actor.kind = 'model'` may carry `action = 'decision.recorded'`,
+> and no rule enacted by an actor of that kind may be `active`.
+
+That is the project's central claim turned into something that can be asserted
+continuously, against production data, rather than restated in a document. It
+is the reason to build this even if no metric is ever produced.
+
+### 19.3 Three kinds, and the third is not decoration
+
+| Kind | Examples | May decide? |
+|---|---|---|
+| `human` | an agent recording a decision; a policy owner enacting a rule | **Yes.** Only this kind |
+| `model` | the reader that extracted a label; a model that proposed a rule | Never |
+| `system` | `job.opened`, `content.purged`, a reconciliation | Never, and not a workforce actor at all |
+
+`system` exists because `job.opened` and `content.purged` are the system
+executing, not anyone deciding. Folding them into either other kind would
+attribute work to a party that did not perform it, and inflate any count taken
+later.
+
+### 19.4 A model is not a stable agent
+
+A person's identity holds still. A model's does not: the version moves, the
+prompt version moves, the sampling moves, and any of the three changes what it
+produces. So a model agent is identified by the **fully qualified tuple** —
+model id, prompt version, sampling — which is what `extraction` already records
+and what D29 forbids shortening to a floating alias.
+
+Identifying it as "gemini" would compare two different readers under one name
+and call the difference a trend.
+
+### 19.5 The human identity is declared, not authenticated
+
+This deployment has no accounts. `decided_by` is a name typed into a box, and
+an agent record must say so rather than presenting it as identity — the field
+that reaches a reader is already named `decidedByAsEntered` for that reason.
+
+An authenticated identity is a prerequisite for *any* attribution being
+evidence rather than assertion. It is not in prototype scope, and no metric
+built on the current attribution should be described as measuring anybody.
+
+### 19.6 Deliberately deferred: the workforce metric (D47)
+
+The obvious next step — how much each agent did, and what work might move
+between human and model — is **not built**, and the reasons are worth stating
+because each of them survives the schema change that would enable it.
+
+**Throughput is not effectiveness.** "This agent processed 400 labels" invites
+exactly the wrong conclusion. The measure that means something is agreement
+between what the rules found and what the person decided (§18.5), which the
+record already holds.
+
+**The costs of disagreement are asymmetric, and averaging them inverts the
+answer.** A false pass lets a non-compliant label through; a false flag costs
+an agent five minutes. D5 exists because those are not equal. A metric that
+treats them as equal would recommend moving precisely the wrong work to the
+model, and would do it with a confident-looking number.
+
+**Measuring named employees is a labour-relations question before it is a
+technical one.** `ui-design.md` §2.3 records labour relations as a stakeholder
+with, often, a formal notification obligation for automation affecting
+bargaining-unit employees. A per-agent productivity measure is squarely that.
+It is not blocked on engineering, and building it first would present the
+agency with a fait accompli rather than a decision.
+
+**What is safe to build meanwhile** is agreement *by agent kind* — how often
+the model's finding and a person's decision coincide — which needs no
+individual attribution and is the number §18.5 says any graduation would have
+to be earned against.
+
+### 19.7 What it touches
+
+| | |
+|---|---|
+| `audit_event` | `actor` gains a kind and a qualified id. The chain is append-only, so this is a new column and a rebuild, not an edit (the same shape as 0005) |
+| `extraction` | already carries a model agent's identity; needs only to resolve to the same concept |
+| `decision`, `policy_rule` | already name a human; gain the kind explicitly rather than by inference |
+| The invariant in §19.2 | a test against the real record, not a unit test against a fixture |
 
 ---
 
