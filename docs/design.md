@@ -2034,6 +2034,10 @@ plainly in the README, which is the correct handling of a known limitation.
 | D38 | An error message states what was **observed**, never what was inferred; evidence travels on the error object, not in its text | A single readable message | "Provider returned an empty response" described a failed type check, not an empty response, and sent debugging after the model for three rounds while the model was reading perfectly. Content cannot go in the message either, because it becomes a failure cause in the durable record (D20) | Easy |
 | D39 | Inference is reached through a broker — a platform capability, not an application concern (batch §14.1) | Counting requests in the adapters | Usage, cost, caching and spend caps belong to a layer every platform provides: Cloudflare AI Gateway, GCP Vertex AI, AWS Bedrock, LiteLLM on premise. Written into the application they would be per-vendor, invisible to the audit record, and removable by a deploy. The seam is a base URL, because all of them preserve the vendor's own schema | Easy |
 | D40 | Advisory and `UNDETERMINED` policy findings get their own outcome, `CLEAR_CONFIRM_POLICY`, ranked above `CLEAR_CONFIRM_FLAGGED` (§18.4) | Reusing `CLEAR_CONFIRM_FLAGGED` with a payload saying which kind of confirmation is wanted | Two different requests to the agent — *confirm this reading* and *make this judgement* — need two names, or `OUTCOME_HEADLINE` stops being a total function of the outcome and every consumer branches on a payload to learn what it is being asked. A fifth state costs one map entry, once; an overloaded fourth costs a branch at every call site, forever. It ranks higher because a judgement the artwork cannot supply is a larger ask than a reading a better scan would settle | Easy — additive, and no existing outcome changes meaning |
+| D41 | A rule's identity is **when it is in force**, not a release number. `policySetVersion` is demoted to a deployment label and is no longer bound to a verdict (§18.8.1) | Keeping the version integer as the identity | It was a second fact describing one thing, maintained by hand, with nothing checking it against the file. On the first amendment after it was built it stayed at 1 while four regulations, fourteen documents and five rules were added — under which every existing verdict would have replayed as *comparable* against rules it was never judged by. Effective dates were already present and are the truth | Moderate — verdicts must bind dates instead, and replay must reconstruct |
+| D42 | The archive is **bitemporal**: `effectiveFrom`/`effectiveTo` for valid time, `recordedAt`/`retiredAt` for transaction time (§18.8.2) | A single effective-date timeline | One timeline cannot distinguish *the law changed* from *we were wrong about the law*, and both are asked in an audit. Dating a correction from today asserts the wrong rule legitimately governed earlier filings; backdating it asserts verdicts used a rule they never saw. Neither is true, and only two axes can say so | **One-way** — it is a claim about what the record means |
+| D43 | The archive lives in **D1, append-only**, and a policy change is a transaction that emits into the verdict hash chain under `subject_type = 'config'` (§18.8.3, §18.8.4) | Keeping `config/policy-set.json` as the archive | A file edit cannot be audited, so the policy had no history an auditor could read — only the git log of a JSON file, which is neither the audit trail nor tamper-evident. `config` was a subject type declared in 0001 that nothing ever wrote. Cost: review-by-pull-request is lost, which is the main thing to dislike (§18.8.8) | Hard — a migration, a loader rewrite, and an approval path |
+| D44 | Each finding carries a **snapshot of the rule as applied** — citation, quote, check parameters, approver — and the verdict binds `valid_on` and `as_of` (§18.8.5) | Binding the dates alone and resolving from the archive on demand | Today the citation is resolved against *today's* archive at read time, so a dropped rule yields nothing and a moved regulation yields the wrong section; the parameters actually applied are not stored at all. Evidence that depends on a live lookup is not evidence, and the lookup fails precisely when it matters — years later, or when the archive itself is disputed | Easy — additive columns |
 
 ---
 
@@ -2665,6 +2669,166 @@ sequence above did not anticipate, recorded because each cost something:
 | The graduation thresholds | Cannot be chosen before there is real agreement data to choose them from |
 | Who approves a rule, and who approves its graduation | The same unfilled role as model approval — see `project-reference.md` |
 | Whether `assisted` earns its place as a distinct state | It may collapse into `advisory` with a number attached |
+
+---
+
+## 18.8 The Policy Archive as a Bitemporal Record
+
+*Supersedes the version-integer identity described in §18.1 and §18.3. Written
+after that identity failed on the first change made to it.*
+
+### 18.8.1 Why the version integer goes
+
+`policySetVersion` was a number a person maintained, and nothing checked it
+against the file it described. On the first amendment after the mechanism was
+built — four regulations, fourteen source documents and five rules — it stayed
+at `1`. Under that number every verdict already recorded would have replayed as
+**comparable** against a rule set it was never judged by, and agreement would
+have meant nothing.
+
+A digest now catches that (§18.8.6), but the deeper problem is that the integer
+was never the truth. **A rule's identity is when it is in force.** The archive
+already carried that — `effectiveFrom`/`effectiveTo` bound the submission dates
+a rule governs — and the version was a second, weaker restatement of it that
+could fall out of step. Two facts describing one thing is one fact too many.
+
+Under effective dating the applicable set is a **function** of the submission
+date, not a lookup of a release label:
+
+> The rules governing a submission are those in force on the date it was filed,
+> and they remain those rules forever.
+
+A rule with `effectiveTo: null` applies until something supersedes it — which is
+what "until the rule is updated, we apply that rule" means, expressed as data.
+
+### 18.8.2 One timeline is not enough
+
+Effective dating alone cannot distinguish two events that look identical in the
+data and are opposite in an audit:
+
+| Event | What is true | Correct treatment |
+|---|---|---|
+| **The law changed.** Standards of fill changed on 2025-01-10 | The old rule genuinely governed earlier filings | Close the old rule's `effectiveTo`; open a successor. A 2024 filing is still judged by the old list |
+| **Our reading was wrong.** A permitted-fill list was mis-transcribed and is corrected today | The law never changed. The corrected rule was *always* what the regulation said | Neither dating the fix from today (which asserts the wrong rule legitimately governed 2024) nor backdating it (which asserts verdicts used a list they never saw) is true |
+
+Both questions get asked. *What did the law require?* and *what did this system
+actually apply?* are different questions, and a single date can answer only one.
+
+So the archive carries **two timelines**:
+
+| Axis | Fields | Answers |
+|---|---|---|
+| **Valid time** | `effectiveFrom` / `effectiveTo` | What did the regulation require for a filing on date D? |
+| **Transaction time** | `recordedAt` / `retiredAt` | What did this deployment hold to be true when it judged a submission at time T? |
+
+A correction is then expressible exactly: the mis-transcribed rule is *retired*
+in transaction time while its valid-time window is left alone, and the correction
+is recorded with the same valid-time window it should always have had. The
+record then says, truthfully, "this is what the law required, this is what we
+applied, and they differed between these dates" — which is the finding an auditor
+is entitled to.
+
+**Selection becomes a pure function of two dates:**
+
+```
+rulesFor(inputs, validOn, asOf) -> rules
+```
+
+`validOn` is the filing date. `asOf` is when the judgement was made. Both are
+bound to the verdict, and together they reproduce the exact rule set forever
+without the archive needing to be frozen.
+
+### 18.8.3 The archive moves into the record
+
+A JSON file loaded at module start makes a policy change a *file edit* — which
+is why nothing about it is auditable. The archive becomes tables:
+
+```
+policy_rule
+  rule_id, rule_body (the check, as applied)
+  effective_from, effective_to      -- valid time
+  recorded_at,    retired_at        -- transaction time
+  status, severity, automation
+  regulation_id, source_document_id, quote
+  approved_by, approved_at
+```
+
+**Append-only, with one exception.** Rows are never edited. The only permitted
+`UPDATE` closes a window — setting `effective_to` or `retired_at` on a row being
+superseded — and it happens in the same batch as the successor's `INSERT`, so
+the archive is never momentarily self-contradictory. This is D27 ("supersede,
+never delete") enforced by the schema rather than by discipline.
+
+### 18.8.4 A policy change is a transaction, not a deploy
+
+| Step | What happens | Recorded as |
+|---|---|---|
+| **Propose** | A rule is drafted, from a regulation or a document. It has provenance and a quote, and no approval | `policy.rule.proposed` |
+| **Enact** | A named person approves it. `recorded_at` opens; the rule begins applying | `policy.rule.enacted` |
+| **Supersede** | A successor is inserted and the predecessor's window is closed, atomically | `policy.rule.superseded` |
+| **Retire** | A rule is withdrawn without replacement | `policy.rule.retired` |
+
+Each emits into **the same hash chain as the verdicts**, under `subject_type =
+'config'` — a subject type declared in `0001_init.sql` that nothing has ever
+written. That is the point of the change: policy history becomes as
+tamper-evident as verdict history, and *"why was this approved"* and *"why did
+the rule say that"* resolve from one chain rather than from a chain plus the git
+log of a JSON file.
+
+**§18.5a is unchanged and still governs.** A model may propose; only a person may
+enact. In this model that stops being a validation rule about a file and becomes
+a state transition that requires an approver to perform.
+
+### 18.8.5 The verdict carries its own defence
+
+Today a finding stores the rule id and the requirement sentence. The citation is
+resolved against *today's* archive at read time, so a rule since dropped yields
+nothing and a rule whose regulation moved yields the wrong section — and the
+check parameters, the list actually applied, are not stored at all. Two rules
+with identical prose and different permitted values are indistinguishable in the
+record.
+
+So each finding carries a **snapshot of the rule as applied**:
+
+```
+policy_finding += regulation_id, citation, quote, check_params, approved_by
+verdict        += valid_on, as_of
+```
+
+The verdict becomes self-describing: an auditor can defend it without the
+archive being reachable, which matters precisely when it is not — years later,
+after a migration, or in a dispute where the archive itself is the thing in
+question. The cost is duplication and larger rows, accepted deliberately: this
+is evidence, and evidence that depends on a live lookup is not evidence.
+
+### 18.8.6 What becomes of the version and the digest
+
+| Thing | Before | After |
+|---|---|---|
+| `policySetVersion` | The identity a verdict bound | A deployment label only. Not bound to a verdict, not consulted by selection |
+| `contentDigest` | — | Retained as a tripwire on the deployed bundle: it catches an edit that skipped the workflow. It is not the identity |
+| Regulation `textDigest` | Tripwire on a moved regulation | Unchanged, and now snapshotted onto the finding |
+
+### 18.8.7 What this buys, stated plainly
+
+- **Replay stops degrading.** Today any policy change makes every prior verdict
+  `not-comparable` forever, because the rules that produced it no longer exist.
+  With `asOf` the engine reconstructs the set that was in force and re-derives
+  honestly.
+- **A correction is distinguishable from an amendment**, which is the
+  distinction an auditor will actually press on.
+- **The policy has a history**, in the chain, with an approver against every
+  change.
+- **A finding can be defended from the verdict alone.**
+
+### 18.8.8 Costs and risks, not deferred
+
+| | |
+|---|---|
+| Review by pull request is lost | The JSON file was reviewable in a diff. Rows are not. Mitigation: the enact step requires a named approver, and proposals carry their quote — but this genuinely trades one review surface for another, and is the main thing to dislike about the change |
+| Seeding | The current file becomes a seed migration. Its rules must enter with honest `recorded_at` values — the dates they actually began applying, not the migration date |
+| Bigger records | Accepted. See §18.8.5 |
+| Two dates to get right | `validOn` from the filing, `asOf` from the clock at judgement. Both must be supplied by the caller, as `submittedOn` already is (M1 keeps clocks out of the core) |
 
 ---
 
