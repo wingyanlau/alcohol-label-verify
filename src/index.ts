@@ -1150,6 +1150,59 @@ export default {
     //
     // Returns the location rather than the result, so there is exactly one
     // renderer for a review and this route cannot drift away from it.
+    // Everything needed to defend one verdict, in one answer (ui-design §2.3,
+    // "Auditor / compliance reviewer").
+    //
+    // That row named its own blocker as "requires persistence, which N3
+    // forbids". Persistence arrived with M4 and the policy layer with M11/M12,
+    // so the reason no longer holds and the surface is buildable.
+    //
+    // Assembled here rather than left to a caller stitching four endpoints
+    // together: an auditor asking "why was this approved" should not have to
+    // know the shape of this system to get an answer, and a question answered
+    // by four round trips is one where the answers can disagree.
+    const audit = pathname.match(/^\/audit\/submission\/([^/]+)$/)
+    if (audit && request.method === 'GET') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+
+      // Accepts either the quotable code an agent read off the screen (D21) or
+      // the submission id. The code is what somebody actually has.
+      const given = decodeURIComponent(audit[1] ?? '')
+      const code = normaliseReferenceCode(given)
+      let submissionId = given
+      if (isReferenceCode(code)) {
+        const found = await env.DB.prepare(`SELECT id FROM submission WHERE reference_code = ?1`)
+          .bind(code)
+          .first<{ id: string }>()
+        if (found === null) return json({ error: 'not_found', reference: code }, 404)
+        submissionId = found.id
+      }
+
+      const detail = await loadSubmissionDetail(env.DB, submissionId, '')
+      if (detail === null) return json({ error: 'not_found', submissionId }, 404)
+
+      // The replay is run, not offered. An audit view that showed a button
+      // nobody pressed would report a verdict as defensible without ever
+      // having checked that it reproduces.
+      let replay: unknown = { status: 'unavailable', reason: 'no verdict to replay' }
+      if (detail.verdictId !== null) {
+        try {
+          const stored = await loadStoredVerdict(env.DB, submissionId)
+          replay = await replayVerdict(stored, await rulesForReplay(env.DB, stored))
+        } catch (error) {
+          // A replay that cannot run is a finding about the record, not a
+          // failure of this request — the rest of the trace is still true and
+          // still worth reading.
+          replay = {
+            status: 'unavailable',
+            reason: error instanceof ReplayUnavailableError ? error.message : 'replay failed',
+          }
+        }
+      }
+
+      return json({ ...detail, replay })
+    }
+
     const lookup = pathname.match(/^\/reference\/([^/]+)$/)
     if (lookup && request.method === 'GET') {
       if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)

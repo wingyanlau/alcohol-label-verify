@@ -47,6 +47,17 @@ export interface DetailFinding {
   readonly severity: string
   readonly evidence: string
   readonly citation: string | null
+  /**
+   * The rest of the rule as applied (D44), for an auditor rather than an agent.
+   *
+   * Null on a finding written before the snapshot columns existed. Null is the
+   * honest answer there: the record does not hold it, and resolving it from
+   * today's archive would present a rule this verdict may never have seen.
+   */
+  readonly regulationId: string | null
+  readonly quote: string | null
+  readonly checkParams: string | null
+  readonly approvedBy: string | null
 }
 
 export interface SubmissionDetail {
@@ -128,6 +139,11 @@ interface FindingRecord {
   state: string
   severity: string
   evidence: string
+  regulation_id: string | null
+  citation: string | null
+  quote: string | null
+  check_params: string | null
+  approved_by: string | null
 }
 interface DecisionRecordRow {
   decision: string
@@ -273,26 +289,33 @@ export async function loadSubmissionDetail(
   const findingRows = (
     await db
       .prepare(
-        `SELECT rule_id, requirement, state, severity, evidence
+        `SELECT rule_id, requirement, state, severity, evidence,
+                regulation_id, citation, quote, check_params, approved_by
            FROM policy_finding WHERE verdict_id = ?`,
       )
       .bind(verdict.id)
       .all<FindingRecord>()
   ).results
 
-  // The requirement text comes from the row, not from today's policy set. A
-  // rule superseded since this verdict was reached would otherwise be shown
-  // with wording it never had when it was applied.
+  // Everything here comes from the row, not from today's policy set. A rule
+  // superseded since this verdict was reached would otherwise be shown with
+  // wording, a citation and parameters it never had when it was applied.
+  //
+  // The citation used to be resolved live, which quietly undid the point of
+  // storing it: the snapshot was written by D44 and then ignored on the way
+  // out. It falls back to a live lookup only for a finding written before the
+  // snapshot columns existed, where there is nothing stored to prefer.
   const findings: DetailFinding[] = findingRows.map((r) => ({
     ruleId: r.rule_id,
     requirement: r.requirement,
     state: r.state,
     severity: r.severity,
     evidence: r.evidence,
-    // The citation is a property of the rule rather than of this verdict, so it
-    // is resolved now. A rule the current set no longer carries yields null
-    // rather than a guess.
-    citation: citationFor(r.rule_id),
+    citation: r.citation ?? citationFor(r.rule_id),
+    regulationId: r.regulation_id,
+    quote: r.quote,
+    checkParams: r.check_params,
+    approvedBy: r.approved_by,
   }))
 
   const decisionRow = await db
