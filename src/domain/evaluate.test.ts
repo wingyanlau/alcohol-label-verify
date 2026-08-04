@@ -228,3 +228,117 @@ describe('statutory-text — the health warning', () => {
     expect(evaluateRule(r, ctx({ warningOk: null })).state).toBe('UNDETERMINED')
   })
 })
+
+/**
+ * The decline paths.
+ *
+ * Every branch below returns something other than SATISFIED when the check
+ * cannot be performed. They were the least-covered part of the module, which
+ * is the wrong way round: a check that wrongly reports compliance does its
+ * damage silently, and these are precisely the paths where that could happen.
+ */
+describe('a check that cannot be performed', () => {
+  const withField = (field: string, value: string | null) =>
+    ctx({ observed: { ...ctx().observed, [field]: value } })
+
+  it('declines a format it does not implement', () => {
+    // The contract refuses an unknown check KIND at load; an unknown format
+    // PARAMETER slips past it, because validation does not read inside a check.
+    const r = rule({ kind: 'format-matches', field: 'brandName', format: 'sonnet' })
+    const f = evaluateRule(r, ctx())
+    expect(f.state).toBe('UNDETERMINED')
+    expect(f.evidence).toContain('sonnet')
+  })
+
+  it('declines a relation it does not implement', () => {
+    const r = rule({ kind: 'numeric-consistency', field: 'alcoholContent', relation: 'golden' })
+    expect(evaluateRule(r, ctx()).state).toBe('UNDETERMINED')
+  })
+
+  it('treats an absent field as out of scope for value-in-set', () => {
+    // Presence is a separate rule. Reporting an unauthorised fill for a label
+    // that states no fill would be a second finding for one problem.
+    const r = rule({ kind: 'value-in-set', field: 'netContents', unit: 'mL', permitted: [750] })
+    for (const empty of [null, '   ']) {
+      expect(evaluateRule(r, withField('netContents', empty)).state).toBe('NOT_APPLICABLE')
+    }
+  })
+
+  it('violates when a policy set lists no permitted values at all', () => {
+    // An empty list is a set nothing belongs to. Silently passing would make a
+    // misconfigured rule look like a satisfied one.
+    const r = rule({ kind: 'value-in-set', field: 'netContents', unit: 'mL' })
+    expect(evaluateRule(r, withField('netContents', '750 mL')).state).toBe('VIOLATED')
+  })
+
+  it('treats an absent alcohol content as out of scope for consistency', () => {
+    const r = rule({
+      kind: 'numeric-consistency',
+      field: 'alcoholContent',
+      relation: 'proof-is-twice-abv',
+    })
+    expect(evaluateRule(r, withField('alcoholContent', null)).state).toBe('NOT_APPLICABLE')
+  })
+
+  it('declines when proof is stated but no percentage can be read', () => {
+    // "90 proof" alone: the rule compares proof against ABV, and there is no
+    // ABV. Deriving one FROM the proof would compare the number with itself
+    // and could never fail.
+    const r = rule({
+      kind: 'numeric-consistency',
+      field: 'alcoholContent',
+      relation: 'proof-is-twice-abv',
+    })
+    const f = evaluateRule(r, withField('alcoholContent', '90 proof'))
+    expect(f.state).toBe('UNDETERMINED')
+    expect(f.evidence).toMatch(/alcohol by volume/i)
+  })
+
+  it('accepts a percentage written in words alongside proof', () => {
+    const r = rule({
+      kind: 'numeric-consistency',
+      field: 'alcoholContent',
+      relation: 'proof-is-twice-abv',
+    })
+    expect(
+      evaluateRule(r, withField('alcoholContent', '45 percent alc/vol (90 proof)')).state,
+    ).toBe('SATISFIED')
+  })
+
+  it('declines a bound when no designation is stated', () => {
+    const r = rule({ kind: 'numeric-bound', field: 'alcoholContent', determinedBy: 'classType' })
+    for (const empty of [null, '  ']) {
+      expect(evaluateRule(r, withField('classType', empty)).state).toBe('UNDETERMINED')
+    }
+  })
+
+  it('treats an absent alcohol content as out of scope for a bound', () => {
+    // The class resolves and has a floor, but there is no figure to test. That
+    // is the presence rule's finding, not this one's.
+    const r = rule({ kind: 'numeric-bound', field: 'alcoholContent', determinedBy: 'classType' })
+    expect(evaluateRule(r, withField('alcoholContent', null)).state).toBe('NOT_APPLICABLE')
+  })
+
+  it('declines a bound when the stated strength cannot be read', () => {
+    const r = rule({ kind: 'numeric-bound', field: 'alcoholContent', determinedBy: 'classType' })
+    const f = evaluateRule(r, withField('alcoholContent', 'cask strength'))
+    expect(f.state).toBe('UNDETERMINED')
+    expect(f.evidence).toContain('cask strength')
+  })
+
+  it('defaults determinedBy to the class field when the rule omits it', () => {
+    const r = rule({ kind: 'numeric-bound', field: 'alcoholContent' })
+    expect(evaluateRule(r, ctx()).state).toBe('SATISFIED')
+  })
+
+  // Unreachable through the contract, which refuses an unknown kind at load.
+  // Handled anyway: a rule arriving here unrecognised means the validator and
+  // this switch have drifted, and the honest report is that nothing was
+  // checked — not that everything was fine.
+  it('reports an unimplemented kind rather than passing it', () => {
+    const r = rule({ kind: 'ask-a-lawyer' })
+    const f = evaluateRule(r, ctx())
+    expect(f.state).toBe('UNDETERMINED')
+    expect(f.evidence).toContain('ask-a-lawyer')
+  })
+})

@@ -152,6 +152,23 @@ function checkValueInSet(rule: PolicyRule, ctx: EvaluationContext): PolicyFindin
     : finding(rule, 'VIOLATED', `${parsed.milliliters} mL is not an authorised standard of fill`)
 }
 
+/**
+ * The alcohol by volume the label *states*, never one derived from the proof.
+ *
+ * `parseAbv` will happily read "90 proof" as 45% — correct for reading a
+ * strength, wrong here. This check exists to compare two independently stated
+ * figures, and a derived one would compare the number with itself: 45 × 2 = 90
+ * holds for every label ever printed, so the check could never fail.
+ */
+function statedAbv(value: string): number | null {
+  const percent = /(\d+(?:\.\d+)?)\s*%/.exec(value) ?? /(\d+(?:\.\d+)?)\s*percent/i.exec(value)
+  if (percent?.[1] !== undefined) {
+    return Number(percent[1])
+  }
+  const parsed = parseAbv(value)
+  return parsed === null || parsed.source === 'proof' ? null : parsed.value
+}
+
 function checkNumericConsistency(rule: PolicyRule, ctx: EvaluationContext): PolicyFinding {
   const field = String(rule.check.field)
   const value = ctx.observed[field] ?? null
@@ -166,10 +183,7 @@ function checkNumericConsistency(rule: PolicyRule, ctx: EvaluationContext): Poli
     // Stating proof is optional (5.65(b)(1)(i)). Its absence is not a finding.
     return finding(rule, 'NOT_APPLICABLE', 'no proof is stated alongside the alcohol content')
   }
-  // The percentage, not a proof-derived figure — otherwise the check compares
-  // a number with itself and can never fail.
-  const percent = /(\d+(?:\.\d+)?)\s*%/.exec(value) ?? /(\d+(?:\.\d+)?)\s*percent/i.exec(value)
-  const abv = percent?.[1] !== undefined ? Number(percent[1]) : (parseAbv(value)?.value ?? null)
+  const abv = statedAbv(value)
   if (abv === null) {
     return finding(rule, 'UNDETERMINED', `no alcohol by volume could be read from "${value}"`)
   }
