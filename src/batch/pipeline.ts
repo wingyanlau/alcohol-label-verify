@@ -38,6 +38,7 @@ import { appendAudit } from './audit.js'
 import { MAX_ATTEMPTS } from './backoff.js'
 import { sha256Hex } from './digest.js'
 import { labelImageKey } from './keys.js'
+import { emit } from './log.js'
 import { buildPersistPlan, persistResult } from './persist.js'
 import { applicationDataFrom } from './record.js'
 import { withRateLimitRetry } from './retry.js'
@@ -236,6 +237,10 @@ export async function processItem(
     //
     // An upload has no build-time render and falls through to the browser, so
     // the real normalisation path stays exercised rather than bypassed.
+    // Timed because it is the stage with the widest spread — a pre-rendered
+    // corpus item costs nothing, an upload costs a browser launch — and §16.4
+    // cannot be filled from a total that hides which stage was slow.
+    const normaliseStarted = Date.now()
     const prerendered = await loadPrerendered(env, message)
     const normalised =
       prerendered ??
@@ -250,6 +255,8 @@ export async function processItem(
         // place that knows both dependencies exist.
         { classify: (e) => (/\b429\b|rate limit/i.test(String(e)) ? 'rate-limited' : 'transient') },
       ))
+
+    const normaliseMs = Date.now() - normaliseStarted
 
     // The record is taken as data when the corpus declares it, which halves
     // the inference per submission and removes the extraction that was
@@ -358,6 +365,32 @@ export async function processItem(
       ].join(';'),
     })
 
+    // The stage timings and the versioned identity set, as dimensions (M7,
+    // D28). Identifiers, classifications, versions and numbers — nothing that
+    // could carry a value read off a label, because the emitter has no field
+    // for one.
+    emit({
+      event: 'item.completed',
+      jobId,
+      submissionId,
+      verdictId: plan.verdict.id,
+      outcome: result.outcome,
+      problemCount: result.problemCount,
+      provider: result.provenance.label.provider,
+      modelId: result.provenance.label.modelId,
+      promptVersion: result.provenance.label.promptVersion,
+      rulesetVersion: plan.verdict.rulesetVersion,
+      referenceDataVersion: result.warning.referenceDataVersion,
+      normaliseMs,
+      extractMs: result.timings.extractMs,
+      compareMs: result.timings.compareMs,
+      // Normalisation happens before verifySubmission is called, so its own
+      // total does not include it. Reported as the whole item, which is the
+      // number §16.4 asks for.
+      totalMs: normaliseMs + result.timings.totalMs,
+      dpi,
+    })
+
     await stub.recordResult(submissionId, result.outcome, result.summary)
     return { retry: false }
   } catch (error) {
@@ -434,6 +467,15 @@ export async function processItem(
       detail: `job=${jobId};fault=${fault};attempt=${attempt}`,
     })
 
+    emit({
+      event: 'item.failed',
+      jobId,
+      submissionId,
+      // The classification, never the message: a cause can quote a provider,
+      // and a provider can quote the label back at us (D20, D38).
+      fault: fault ?? 'unclassified',
+      attempt,
+    })
     await stub.recordFailure(submissionId, cause)
     return { retry: false }
   }

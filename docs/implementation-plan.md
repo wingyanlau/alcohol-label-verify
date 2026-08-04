@@ -342,12 +342,17 @@ data someone other than a developer can own, version and approve.
 
 **Exit criteria**
 
-- [ ] Structured logs carry identifiers, classifications, versions and timings
-- [ ] **No log line contains artwork, application values, or extracted values**
-- [ ] Per-stage timings emitted: normalise, extract, compare, total
-- [ ] The versioned identity set appears as log dimensions (D28)
-- [ ] Errors classified by the §9.2 taxonomy
-- [ ] A grep for known corpus values across captured logs returns nothing
+- [x] Structured logs carry identifiers, classifications, versions and timings
+- [x] **No log line contains artwork, application values, or extracted values** —
+      enforced by the emitter's closed field set, not by discipline. There is
+      nowhere to put content; adding somewhere is an edit a reviewer sees
+- [x] Per-stage timings emitted: normalise, extract, compare, total. Normalise
+      was not measured at all before — the stage with the widest spread
+- [x] The versioned identity set appears as log dimensions (D28)
+- [x] Errors classified by the §9.2 taxonomy — the classification, never the
+      message, which can quote a provider quoting the label back at us
+- [x] A grep for known corpus values across captured logs returns nothing —
+      asserted over a realistic event sequence, not a single line
 
 ---
 
