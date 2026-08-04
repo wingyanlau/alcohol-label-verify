@@ -35,11 +35,13 @@ import { loadStoredVerdict, ReplayUnavailableError, replayVerdict } from './batc
 import { retentionPolicyText, retentionWindowDays, sweepRetention } from './batch/retention.js'
 import { approvalFor, isApproved } from './domain/approval.js'
 import { ExtractionContractError } from './domain/extraction.js'
+import { POLICY_SET } from './domain/findings.js'
 import { configuredLegibilityFloor } from './domain/legibility.js'
 import { referenceIsUnverified, warningReference } from './domain/reference.js'
 import type { Env, WorkMessage } from './env.js'
 import { checkImageIntake } from './normalise/image.js'
 import { IntakeRejected } from './normalise/normaliser.js'
+import { archiveHealth, reconcileArchive } from './policy/archive.js'
 import { gatewayFrom } from './providers/gateway.js'
 import { PROMPT_VERSION, promptDigest } from './providers/prompt.js'
 import { createProvider, knownProviderNames, specFor } from './providers/registry.js'
@@ -1072,6 +1074,48 @@ export default {
       }
       const result = await sweepRetention(env.DB, env.STAGING, new Date(), windowDays)
       return json({ ...result, windowDays })
+    }
+
+    // Bring the archive rows into agreement with the reviewed file (D45).
+    //
+    // Called by the deploy, after migrations, in the same place and for the
+    // same reason as `migrate:` — the schema and the policy both have to be
+    // current before the revision serves a request.
+    //
+    // Unauthenticated, like every other operational endpoint here, and that is
+    // less alarming than it sounds: reconciliation applies the file that is
+    // already deployed, and it is idempotent. Calling it achieves exactly what
+    // deploying achieved. It cannot introduce a rule, because it has no input
+    // — the only way to change the rules is to change the reviewed file and
+    // ship it.
+    if (pathname === '/policy/reconcile' && request.method === 'POST') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+      const report = await reconcileArchive(env.DB, POLICY_SET.rules, {
+        now: new Date().toISOString(),
+        reconciliationId: crypto.randomUUID(),
+        // Falls back to the deployment when a rule names no approver — a draft
+        // has none by definition, and saying so beats attributing it to nobody.
+        actor: 'deploy',
+      })
+      return json(report)
+    }
+
+    // What the archive holds, and whether it still matches what was reviewed.
+    if (pathname === '/health/policy' && request.method === 'GET') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+      const health = await archiveHealth(env.DB, POLICY_SET.rules)
+      return json(
+        {
+          ...health,
+          policySetVersion: POLICY_SET.policySetVersion,
+          activeInFile: POLICY_SET.rules.filter((r) => r.status === 'active').length,
+          draftsInFile: POLICY_SET.rules.filter((r) => r.status !== 'active').length,
+        },
+        // Drift is a deployment problem, not a request failure: the rules being
+        // enforced are not the ones anybody reviewed, and the deploy gate
+        // should fail on it the way it fails on a drifted retention policy.
+        health.inSync ? 200 : 503,
+      )
     }
 
     // Find a review from the code an agent quoted (D21).

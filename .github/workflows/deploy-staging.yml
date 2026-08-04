@@ -240,6 +240,36 @@ jobs:
       # dependency a config check cannot prove: the binding can be present and
       # the model still unreachable. Whether the model can *read* a 4.5pt
       # warning is a corpus measurement (B-Q4), not this.
+      # The policy archive is brought current in the same place, and for the
+      # same reason, as the schema: both have to be right before the revision
+      # serves a request. Reconciliation is idempotent, so a deploy that
+      # changed no rule reports "already agrees" and writes nothing.
+      - name: Reconcile the policy archive
+        run: |
+          set -euo pipefail
+          url="https://alcohol-label-verify-staging.wing-lawrence.workers.dev"
+          body=$(curl -sS --max-time 60 -X POST "$url/policy/reconcile")
+          echo "$body" | jq '{actions, summary, events}'
+
+          # A reconciliation that could not run leaves the deployment enforcing
+          # rules nobody reviewed, which is exactly the state the next step
+          # refuses. Fail here so the cause is named rather than inferred.
+          echo "$body" | jq -e 'has("actions")' >/dev/null \
+            || { echo "::error::reconciliation did not report a result"; exit 1; }
+
+      # Drift between the reviewed file and the rows is a deployment problem,
+      # not a request failure — the rules being enforced would not be the ones
+      # anybody approved. /health/policy answers 503 when they disagree, so a
+      # bare -f is the whole assertion.
+      - name: Verify the archive matches what was reviewed
+        run: |
+          set -euo pipefail
+          url="https://alcohol-label-verify-staging.wing-lawrence.workers.dev"
+          body=$(curl -sS --max-time 60 "$url/health/policy") || true
+          echo "$body" | jq '{rows, pending, inSync, activeInFile, draftsInFile}'
+          echo "$body" | jq -e '.inSync == true' >/dev/null \
+            || { echo "::error::policy archive does not match the reviewed file"; exit 1; }
+
       - name: Verify inference reachable
         run: |
           set -euo pipefail

@@ -74,6 +74,40 @@ export async function ruleSetAsAt(
   return results.map((row) => JSON.parse(row.body) as PolicyRule)
 }
 
+/**
+ * Whether the rows still agree with the reviewed file.
+ *
+ * The cost of keeping both representations (D45, §18.8.8). Rows are derived and
+ * never hand-authored, but nothing physically stops them drifting — a
+ * reconciliation that half-ran, a deploy that skipped it, a hand-edited row.
+ *
+ * Reported as a startup condition rather than discovered later, on the same
+ * reasoning as the retention policy (D32): a deployment enforcing rules that
+ * are not the ones anybody reviewed is a false statement about what it does,
+ * and nothing else in the system would reveal it.
+ *
+ * `pending` is simply what a reconciliation would still do. Zero means the file
+ * and the rows say the same thing.
+ */
+export async function archiveHealth(
+  db: D1Database,
+  rules: readonly PolicyRule[],
+): Promise<{
+  rows: number
+  pending: number
+  inSync: boolean
+  summary: string
+}> {
+  const current = await currentRules(db)
+  const actions = planReconciliation(await sourceRules(rules), current)
+  return {
+    rows: current.length,
+    pending: actions.length,
+    inSync: actions.length === 0,
+    summary: describeReconciliation(actions),
+  }
+}
+
 /** What a reconciliation did, for the deploy to report and CI to assert on. */
 export interface ReconcileReport {
   readonly reconciliationId: string
