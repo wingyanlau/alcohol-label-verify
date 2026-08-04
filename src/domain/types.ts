@@ -116,8 +116,20 @@ export interface WarningVerdict {
   readonly referenceDataVersion: number
 }
 
-/** Overall outcome, derived by rule from field verdicts (§8.4.2). Never from a model. */
-export type Outcome = 'CLEAR' | 'CLEAR_CONFIRM_FLAGGED' | 'DISCREPANCIES_FOUND' | 'INCOMPLETE'
+/**
+ * Overall outcome, derived by rule from field verdicts (§8.4.2). Never from a model.
+ *
+ * The two `CONFIRM` states are distinct on purpose (D40). `_FLAGGED` asks the
+ * agent to confirm a **reading**; `_POLICY` asks them to make a **compliance
+ * judgement** the artwork cannot settle. Merging them would put two different
+ * requests under one headline.
+ */
+export type Outcome =
+  | 'CLEAR'
+  | 'CLEAR_CONFIRM_FLAGGED'
+  | 'CLEAR_CONFIRM_POLICY'
+  | 'DISCREPANCIES_FOUND'
+  | 'INCOMPLETE'
 
 /**
  * Values as supplied on the application. Absent fields are `null`, never

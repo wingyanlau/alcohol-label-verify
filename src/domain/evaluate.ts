@@ -26,7 +26,7 @@
 
 import { resolveDesignation } from './designation.js'
 import { parseAbv, parseProof, parseQuantity } from './parse.js'
-import type { PolicyRule } from './policy.js'
+import type { PolicyRule, Severity } from './policy.js'
 
 export type FindingState = 'SATISFIED' | 'VIOLATED' | 'NOT_APPLICABLE' | 'UNDETERMINED'
 
@@ -34,6 +34,15 @@ export interface PolicyFinding {
   readonly ruleId: string
   readonly requirement: string
   readonly state: FindingState
+  /**
+   * Carried from the rule, not looked up later.
+   *
+   * Aggregation ranks a blocking violation differently from an advisory one
+   * (D40), and it should not have to re-join a finding to the rule set to learn
+   * which it is — a join that would be against *today's* set, while the finding
+   * was produced under the one bound to the verdict.
+   */
+  readonly severity: Severity
   /** What was observed and why it decided the way it did. Never a bare verdict. */
   readonly evidence: string
 }
@@ -52,6 +61,7 @@ const finding = (rule: PolicyRule, state: FindingState, evidence: string): Polic
   ruleId: rule.id,
   requirement: rule.requirement,
   state,
+  severity: rule.severity,
   evidence,
 })
 

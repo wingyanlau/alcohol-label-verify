@@ -2033,6 +2033,7 @@ plainly in the README, which is the correct handling of a known limitation.
 | D37 | Failures are classified by **what response helps** — `rate-limited`, `quota-exhausted`, `transient`, `permanent` — not by severity | HTTP status or a retry count | The useful question is whether waiting helps. A rate limit clears; a spent daily allowance does not clear before tomorrow, and treating them alike either abandons a batch that needed ninety seconds or spends the whole queue rediscovering the same dead end. Both happened before the distinction existed | Easy |
 | D38 | An error message states what was **observed**, never what was inferred; evidence travels on the error object, not in its text | A single readable message | "Provider returned an empty response" described a failed type check, not an empty response, and sent debugging after the model for three rounds while the model was reading perfectly. Content cannot go in the message either, because it becomes a failure cause in the durable record (D20) | Easy |
 | D39 | Inference is reached through a broker — a platform capability, not an application concern (batch §14.1) | Counting requests in the adapters | Usage, cost, caching and spend caps belong to a layer every platform provides: Cloudflare AI Gateway, GCP Vertex AI, AWS Bedrock, LiteLLM on premise. Written into the application they would be per-vendor, invisible to the audit record, and removable by a deploy. The seam is a base URL, because all of them preserve the vendor's own schema | Easy |
+| D40 | Advisory and `UNDETERMINED` policy findings get their own outcome, `CLEAR_CONFIRM_POLICY`, ranked above `CLEAR_CONFIRM_FLAGGED` (§18.4) | Reusing `CLEAR_CONFIRM_FLAGGED` with a payload saying which kind of confirmation is wanted | Two different requests to the agent — *confirm this reading* and *make this judgement* — need two names, or `OUTCOME_HEADLINE` stops being a total function of the outcome and every consumer branches on a payload to learn what it is being asked. A fifth state costs one map entry, once; an overloaded fourth costs a branch at every call site, forever. It ranks higher because a judgement the artwork cannot supply is a larger ask than a reading a better scan would settle | Easy — additive, and no existing outcome changes meaning |
 
 ---
 
@@ -2476,16 +2477,35 @@ organised against. Those become the advisory checklist that already exists
 The recommendation stays on the correct side of the governing principle —
 *"Nothing blocking found — ready for your approval"*, never *"Approved"*.
 
-`CLEAR_CONFIRM_FLAGGED` is the natural state for "no blocking violations, but
-advisory items need confirmation" — with one caveat that has to be decided
-rather than assumed. **It is not a free slot:** `aggregate.ts` already returns
-it when a field is `LOW_CONFIDENCE`, and it already has its own headline
-strings. Reusing it would merge two different requests to the agent — *"the
-reader was unsure about this value"* and *"this rule cannot be judged from the
-artwork"* — under one banner. They call for different actions, so either the
-state carries which kind of confirmation is wanted, or advisory findings get
-their own outcome. Deciding that by discovering the collision at implementation
-time is how a vocabulary quietly loses meaning.
+`CLEAR_CONFIRM_FLAGGED` looks like the natural state for "no blocking
+violations, but advisory items need confirmation". **It is not a free slot:**
+`aggregate.ts` already returns it when a field is `LOW_CONFIDENCE`, and it
+already has its own headline strings. Reusing it would merge two different
+requests to the agent — *"the reader was unsure about this value"* and *"this
+rule cannot be judged from the artwork"* — under one banner. They call for
+different actions.
+
+**Resolved (D40): advisory findings get their own outcome,
+`CLEAR_CONFIRM_POLICY`.** The alternative — one state carrying which kind of
+confirmation is wanted — keeps the vocabulary small but moves the distinction
+into a payload, so `OUTCOME_HEADLINE` stops being a total function of the
+outcome and every consumer must branch on the contents to know what it is being
+asked. The cost of a fifth state is one entry in each of those maps, paid once.
+The cost of an overloaded fourth is paid at every call site, forever.
+
+The two are ordered rather than merged, and `CLEAR_CONFIRM_POLICY` ranks above
+`CLEAR_CONFIRM_FLAGGED`. A low-confidence field asks the agent to confirm a
+*reading*, and a better scan would settle it. An `UNDETERMINED` rule asks them
+to make a *compliance judgement* the artwork cannot supply at all — type size,
+boldness, separateness — and it would still be open however well the label was
+read. The larger ask is the one to name in the headline, so a submission
+carrying both reports the policy question. Both are still listed; only the
+headline has to choose.
+
+The ordering above these two is unchanged and remains D5's: anything
+`UNREADABLE` still outranks everything, because a value the system could not see
+is not a judgement it may defer to the agent — it is a check that did not
+happen.
 
 ---
 

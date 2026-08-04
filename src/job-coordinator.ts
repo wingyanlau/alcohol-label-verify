@@ -29,12 +29,20 @@
  */
 
 import { DurableObject } from 'cloudflare:workers'
+import type { Outcome } from './domain/types.js'
 import type { Env } from './env.js'
 
 export type ItemState = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'REJECTED'
 
-/** Outcome vocabulary is the domain's; the coordinator only stores it. */
-export type Outcome = 'CLEAR' | 'CLEAR_CONFIRM_FLAGGED' | 'DISCREPANCIES_FOUND' | 'INCOMPLETE'
+/**
+ * Outcome vocabulary is the domain's; the coordinator only stores it.
+ *
+ * Re-exported rather than restated. It was restated, and the copy silently fell
+ * a state behind when the domain gained `CLEAR_CONFIRM_POLICY` (D40) — a
+ * coordinator that cannot store an outcome the domain can produce. A type-only
+ * re-export costs no runtime import and makes the drift impossible.
+ */
+export type { Outcome }
 
 export interface ItemRef {
   readonly itemId: string

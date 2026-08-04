@@ -280,14 +280,18 @@ export const PAGE_HTML = `<!doctype html>
     if (row.state === 'FAILED' || row.state === 'REJECTED') {
       return { icon: 'x', cls: 'warn', words: 'Could not process', rank: 1 }
     }
-    if (row.state === 'QUEUED') return { icon: '…', cls: 'muted', words: 'Waiting', rank: 5 }
-    if (row.state === 'RUNNING') return { icon: '•', cls: 'muted', words: 'Checking…', rank: 4 }
+    if (row.state === 'QUEUED') return { icon: '…', cls: 'muted', words: 'Waiting', rank: 6 }
+    if (row.state === 'RUNNING') return { icon: '•', cls: 'muted', words: 'Checking…', rank: 5 }
     switch (row.outcome) {
       case 'DISCREPANCIES_FOUND': return { icon: '✗', cls: 'bad', words: 'Problems found', rank: 0 }
       case 'INCOMPLETE': return { icon: '!', cls: 'warn', words: 'Could not finish the check', rank: 2 }
-      case 'CLEAR_CONFIRM_FLAGGED': return { icon: '✓', cls: 'ok', words: 'Matches — confirm flagged', rank: 3 }
-      case 'CLEAR': return { icon: '✓', cls: 'ok', words: 'Everything matches', rank: 3 }
-      default: return { icon: '•', cls: 'muted', words: 'Checking…', rank: 4 }
+      // Above the divider: a rule this system may not decide is work, not a
+      // clean pass (D40). Ranked below INCOMPLETE, which is a check that did
+      // not happen at all.
+      case 'CLEAR_CONFIRM_POLICY': return { icon: '?', cls: 'warn', words: 'Needs your judgement', rank: 3 }
+      case 'CLEAR_CONFIRM_FLAGGED': return { icon: '✓', cls: 'ok', words: 'Matches — confirm flagged', rank: 4 }
+      case 'CLEAR': return { icon: '✓', cls: 'ok', words: 'Everything matches', rank: 4 }
+      default: return { icon: '•', cls: 'muted', words: 'Checking…', rank: 5 }
     }
   }
 
@@ -324,11 +328,15 @@ export const PAGE_HTML = `<!doctype html>
   }
 
   function renderCounts() {
-    var problems = 0, unread = 0, matched = 0, failed = 0
+    var problems = 0, unread = 0, judgement = 0, matched = 0, failed = 0
     rows.forEach(function (r) {
       if (r.state === 'FAILED' || r.state === 'REJECTED') { failed++; return }
       if (r.outcome === 'DISCREPANCIES_FOUND') problems++
       else if (r.outcome === 'INCOMPLETE') unread++
+      // Its own count, not folded into "matched". Nothing blocking was found,
+      // but a rule is still open, and a chip saying "matched" would close it on
+      // the agent's behalf.
+      else if (r.outcome === 'CLEAR_CONFIRM_POLICY') judgement++
       else if (r.outcome === 'CLEAR' || r.outcome === 'CLEAR_CONFIRM_FLAGGED') matched++
     })
     counts.textContent = ''
@@ -341,6 +349,7 @@ export const PAGE_HTML = `<!doctype html>
     }
     counts.appendChild(chip('bad', '✗', problems, 'with problems'))
     counts.appendChild(chip('warn', '!', unread, 'could not be read'))
+    if (judgement) counts.appendChild(chip('warn', '?', judgement, 'need your judgement'))
     if (failed) counts.appendChild(chip('warn', '✗', failed, 'could not be processed'))
     counts.appendChild(chip('ok', '✓', matched, 'matched'))
   }
@@ -357,7 +366,7 @@ export const PAGE_HTML = `<!doctype html>
     items.forEach(function (r) {
       var p = present(r)
       // A single divider separates things needing attention from clean passes.
-      if (!dividerShown && p.rank >= 3) {
+      if (!dividerShown && p.rank >= 4) {
         var d = el('li', 'divider', 'Matched')
         d.style.cursor = 'default'; d.removeAttribute('tabindex')
         worklist.appendChild(d); dividerShown = true
@@ -521,7 +530,7 @@ export const PAGE_HTML = `<!doctype html>
 
   function outcomeClass(outcome) {
     if (outcome === 'DISCREPANCIES_FOUND') return 'bad'
-    if (outcome === 'INCOMPLETE') return 'warn'
+    if (outcome === 'INCOMPLETE' || outcome === 'CLEAR_CONFIRM_POLICY') return 'warn'
     return 'ok'
   }
 

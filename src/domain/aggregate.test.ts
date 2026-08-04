@@ -11,7 +11,16 @@ import { rule } from './evidence.js'
  */
 
 import { describe, expect, it } from 'vitest'
-import { aggregate, problemCount, summarise, unreadableFields } from './aggregate.js'
+import {
+  aggregate,
+  judgementCount,
+  OUTCOME_HEADLINE,
+  problemCount,
+  summarise,
+  unreadableFields,
+} from './aggregate.js'
+import type { FindingState, PolicyFinding } from './evaluate.js'
+import type { Severity } from './policy.js'
 import type { FieldName, FieldVerdict, FieldVerdictState, WarningVerdict } from './types.js'
 
 const field = (state: FieldVerdictState, name: FieldName = 'brandName'): FieldVerdict => ({
@@ -20,6 +29,18 @@ const field = (state: FieldVerdictState, name: FieldName = 'brandName'): FieldVe
   expected: 'Old Tom',
   observed: 'Old Tom',
   rule: rule('test fixture'),
+})
+
+const finding = (
+  state: FindingState,
+  severity: Severity = 'blocking',
+  ruleId = 'DS-TEST',
+): PolicyFinding => ({
+  ruleId,
+  requirement: 'a test requirement',
+  state,
+  severity,
+  evidence: 'a test observation',
 })
 
 const warning = (ok: boolean, legible = true): WarningVerdict => ({
@@ -136,6 +157,123 @@ describe('UT-G — aggregation ordering', () => {
   })
 })
 
+/**
+ * The policy findings, and where they rank (D40, §18.4).
+ *
+ * Two kinds of confirmation are deliberately not merged. `CLEAR_CONFIRM_FLAGGED`
+ * asks the agent to confirm a *reading* — a better scan would settle it.
+ * `CLEAR_CONFIRM_POLICY` asks them to make a *compliance judgement* the artwork
+ * cannot supply at all. The second is the larger ask, so it takes the headline.
+ */
+describe('policy findings in the outcome', () => {
+  const clean = { fields: [field('MATCH')], warning: warning(true) }
+
+  it('a blocking violation is a discrepancy', () => {
+    expect(aggregate({ ...clean, findings: [finding('VIOLATED')] })).toBe('DISCREPANCIES_FOUND')
+  })
+
+  it('an advisory violation asks for judgement rather than reporting a problem', () => {
+    // Advisory is a severity the policy set assigns. The rule was applied and
+    // failed, but the set says that is the agent's call, not a blocker.
+    expect(aggregate({ ...clean, findings: [finding('VIOLATED', 'advisory')] })).toBe(
+      'CLEAR_CONFIRM_POLICY',
+    )
+  })
+
+  it('an undetermined check asks for judgement, whatever its severity', () => {
+    for (const severity of ['blocking', 'advisory'] as const) {
+      expect(aggregate({ ...clean, findings: [finding('UNDETERMINED', severity)] })).toBe(
+        'CLEAR_CONFIRM_POLICY',
+      )
+    }
+  })
+
+  it('never lets an undetermined blocking check report a clear result', () => {
+    // The whole point of the fourth state. A check that could not be performed
+    // must not read as one that passed.
+    const outcome = aggregate({ ...clean, findings: [finding('UNDETERMINED')] })
+    expect(outcome).not.toBe('CLEAR')
+  })
+
+  it('satisfied and not-applicable findings leave a clear result clear', () => {
+    expect(
+      aggregate({
+        ...clean,
+        findings: [finding('SATISFIED'), finding('NOT_APPLICABLE', 'advisory')],
+      }),
+    ).toBe('CLEAR')
+  })
+
+  it('treats a submission governed by no rules exactly as one with none supplied', () => {
+    expect(aggregate({ ...clean, findings: [] })).toBe(aggregate(clean))
+  })
+
+  it('ranks a judgement above a low-confidence reading', () => {
+    expect(
+      aggregate({
+        fields: [field('LOW_CONFIDENCE')],
+        warning: warning(true),
+        findings: [finding('UNDETERMINED')],
+      }),
+    ).toBe('CLEAR_CONFIRM_POLICY')
+  })
+
+  it('ranks a blocking violation above a judgement', () => {
+    expect(aggregate({ ...clean, findings: [finding('UNDETERMINED'), finding('VIOLATED')] })).toBe(
+      'DISCREPANCIES_FOUND',
+    )
+  })
+
+  it('ranks an unreadable field above every policy finding (D5 still governs)', () => {
+    for (const state of ['VIOLATED', 'UNDETERMINED'] as const) {
+      expect(
+        aggregate({
+          fields: [field('UNREADABLE')],
+          warning: warning(true),
+          findings: [finding(state)],
+        }),
+      ).toBe('INCOMPLETE')
+    }
+  })
+
+  it('gives the new outcome a headline that does not read as an approval', () => {
+    const headline = OUTCOME_HEADLINE.CLEAR_CONFIRM_POLICY
+    expect(headline).toBeTruthy()
+    expect(headline).not.toMatch(/\bapproved\b/i)
+  })
+
+  it('counts blocking violations as problems, and judgements separately', () => {
+    const findings = [
+      finding('VIOLATED'),
+      finding('VIOLATED', 'advisory'),
+      finding('UNDETERMINED'),
+      finding('SATISFIED'),
+    ]
+    const input = { ...clean, findings }
+    expect(problemCount(input)).toBe(1)
+    expect(judgementCount(input)).toBe(2)
+  })
+
+  it('names the rule when a violation is the only thing wrong', () => {
+    // Every field matched and the warning is correct, so the older branches
+    // find nothing to report. Without this the worklist row read "Warning
+    // statement is not correct" for a submission whose warning was fine.
+    expect(
+      summarise({ ...clean, findings: [finding('VIOLATED', 'blocking', 'DS-STANDARD-OF-FILL')] }),
+    ).toBe('Fails DS-STANDARD-OF-FILL')
+  })
+
+  it('summarises a judgement by how many rules need one', () => {
+    expect(
+      summarise({ ...clean, findings: [finding('UNDETERMINED'), finding('VIOLATED', 'advisory')] }),
+    ).toMatch(/2 rules/i)
+  })
+
+  it('uses the singular for one', () => {
+    expect(summarise({ ...clean, findings: [finding('UNDETERMINED')] })).toMatch(/1 rule\b/i)
+  })
+})
+
 describe('the safety property, stated directly (D5)', () => {
   const everyOtherState: FieldVerdictState[] = [
     'MATCH',
@@ -151,10 +289,14 @@ describe('the safety property, stated directly (D5)', () => {
       const outcome = aggregate({
         fields: [field('UNREADABLE'), field(other)],
         warning: warning(true),
+        // Present, and deliberately the states that would otherwise carry the
+        // outcome. None of them may outrank a field nobody could read.
+        findings: [finding('SATISFIED'), finding('UNDETERMINED'), finding('VIOLATED', 'advisory')],
       })
       expect(outcome).toBe('INCOMPLETE')
       expect(outcome).not.toBe('CLEAR')
       expect(outcome).not.toBe('CLEAR_CONFIRM_FLAGGED')
+      expect(outcome).not.toBe('CLEAR_CONFIRM_POLICY')
     },
   )
 })
