@@ -14,7 +14,7 @@
  */
 
 import { OUTCOME_HEADLINE, OUTCOME_RECOMMENDATION } from '../domain/aggregate.js'
-import { citationFor } from '../domain/findings.js'
+import { approverFor, citationFor } from '../domain/findings.js'
 import { referenceIsUnverified, warningReference } from '../domain/reference.js'
 import type { FieldName, Outcome } from '../domain/types.js'
 import { FIELD_LABELS, FIELDS } from '../domain/types.js'
@@ -58,6 +58,14 @@ export interface DetailFinding {
   readonly quote: string | null
   readonly checkParams: string | null
   readonly approvedBy: string | null
+  /**
+   * The regulation text this finding rests on, and the issue it was read from.
+   *
+   * What makes a finding traceable when its rule carries no verbatim quote —
+   * which is every enacted rule today. A digest cannot be paraphrased.
+   */
+  readonly regulationDigest: string | null
+  readonly regulationIssued: string | null
 }
 
 export interface SubmissionDetail {
@@ -144,6 +152,8 @@ interface FindingRecord {
   quote: string | null
   check_params: string | null
   approved_by: string | null
+  regulation_digest: string | null
+  regulation_issued: string | null
 }
 interface DecisionRecordRow {
   decision: string
@@ -290,7 +300,8 @@ export async function loadSubmissionDetail(
     await db
       .prepare(
         `SELECT rule_id, requirement, state, severity, evidence,
-                regulation_id, citation, quote, check_params, approved_by
+                regulation_id, citation, quote, check_params, approved_by,
+                regulation_digest, regulation_issued
            FROM policy_finding WHERE verdict_id = ?`,
       )
       .bind(verdict.id)
@@ -315,7 +326,12 @@ export async function loadSubmissionDetail(
     regulationId: r.regulation_id,
     quote: r.quote,
     checkParams: r.check_params,
-    approvedBy: r.approved_by,
+    // Stored where the snapshot has it. A finding written before the approver
+    // was resolved falls back to today's archive — which is a live lookup, and
+    // says so by being the fallback rather than the answer.
+    approvedBy: r.approved_by ?? approverFor(r.rule_id),
+    regulationDigest: r.regulation_digest,
+    regulationIssued: r.regulation_issued,
   }))
 
   const decisionRow = await db

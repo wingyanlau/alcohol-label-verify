@@ -16,7 +16,7 @@
  */
 
 import type { ExtractionProvenance } from '../domain/extraction.js'
-import { citationFor } from '../domain/findings.js'
+import { approverFor, citationFor, regulationSourceFor } from '../domain/findings.js'
 import type { FieldVerdict, WarningVerdict } from '../domain/types.js'
 import type { VerifyResult } from '../domain/verify.js'
 import { AGGREGATION_VERSION, POLICY_VERSION, RULESET_VERSION } from './versions.js'
@@ -110,6 +110,15 @@ export interface PolicyFindingRow {
   readonly quote: string | null
   readonly checkParams: string | null
   readonly approvedBy: string | null
+  /**
+   * Which regulation text this finding rests on, and from which issue.
+   *
+   * Carried because `quote` is null for every enacted rule — they hold no
+   * provenance — and a digest identifies the source exactly where a fragment
+   * would only describe it.
+   */
+  readonly regulationDigest: string | null
+  readonly regulationIssued: string | null
 }
 
 export interface PersistPlan {
@@ -239,6 +248,7 @@ export function buildPersistPlan(
       // The rule this finding came from, as it was applied — not as the archive
       // holds it now.
       const applied = result.appliedRules.find((r) => r.id === f.ruleId)
+      const source = applied === undefined ? null : regulationSourceFor(applied.id)
       return {
         ruleId: f.ruleId,
         requirement: f.requirement,
@@ -249,7 +259,11 @@ export function buildPersistPlan(
         citation: applied === undefined ? null : citationFor(applied.id),
         quote: applied?.provenance?.quote ?? null,
         checkParams: applied === undefined ? null : JSON.stringify(applied.check),
-        approvedBy: applied?.approval?.by ?? null,
+        // The rule's own approver, or the set's — the enacted rules carry none
+        // of their own and are covered one level up (D27).
+        approvedBy: applied === undefined ? null : approverFor(applied.id),
+        regulationDigest: source?.digest ?? null,
+        regulationIssued: source?.issued ?? null,
       }
     }),
     extractions,
@@ -332,8 +346,9 @@ export async function persistResult(
         .prepare(
           `INSERT INTO policy_finding
              (verdict_id, rule_id, requirement, state, severity, evidence,
-              regulation_id, citation, quote, check_params, approved_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              regulation_id, citation, quote, check_params, approved_by,
+              regulation_digest, regulation_issued)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           plan.verdict.id,
@@ -347,6 +362,8 @@ export async function persistResult(
           f.quote,
           f.checkParams,
           f.approvedBy,
+          f.regulationDigest,
+          f.regulationIssued,
         ),
     )
   }

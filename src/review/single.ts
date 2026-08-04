@@ -27,7 +27,7 @@
 
 import { OUTCOME_HEADLINE, OUTCOME_RECOMMENDATION } from '../domain/aggregate.js'
 import type { ExtractionProvider } from '../domain/extraction.js'
-import { citationFor } from '../domain/findings.js'
+import { approverFor, citationFor } from '../domain/findings.js'
 import { configuredLegibilityFloor } from '../domain/legibility.js'
 import { referenceIsUnverified, warningReference } from '../domain/reference.js'
 import type { ApplicationData, FieldName } from '../domain/types.js'
@@ -116,6 +116,7 @@ export interface ReviewResult {
     severity: string
     evidence: string
     citation: string | null
+    approvedBy: string | null
   }>
   /** Which rules were applied, and what they were selected on (D26). */
   readonly policy: {
@@ -235,6 +236,9 @@ export async function reviewOne(
       severity: f.severity,
       evidence: f.evidence,
       citation: citationFor(f.ruleId),
+      // Who is answerable for the rule. The enacted rules name no approver of
+      // their own and inherit the set's (D27).
+      approvedBy: approverFor(f.ruleId),
     })),
     policy: {
       policySetVersion: result.policy.policySetVersion,

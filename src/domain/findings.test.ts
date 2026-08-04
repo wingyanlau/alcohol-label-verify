@@ -12,7 +12,14 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { assessPolicy, citationFor, GOVERNED_PRODUCT_TYPES, POLICY_SET } from './findings.js'
+import {
+  approverFor,
+  assessPolicy,
+  citationFor,
+  GOVERNED_PRODUCT_TYPES,
+  POLICY_SET,
+  regulationSourceFor,
+} from './findings.js'
 import type { PolicySet } from './policy.js'
 import type { ApplicationData, Extraction, ObservedField, WarningVerdict } from './types.js'
 
@@ -91,6 +98,65 @@ describe('citing the regulation a rule came from (FR-10)', () => {
       regulations: [],
     }
     expect(citationFor('DS-STANDARD-OF-FILL', broken)).toBeNull()
+  })
+})
+
+describe('who is answerable for a rule, and which text it rests on', () => {
+  /*
+   * Both came back null on every real finding, for opposite reasons.
+   *
+   * The approver was looked for in one place: a rule's own `approval`. None of
+   * the ENACTED rules carry one — they are covered by the set's, which is a
+   * named person, and D27 is that no rule reaches force without one. So the
+   * approval existed one level up and the snapshot simply did not look there.
+   *
+   * The quote is null because the enacted rules hold no provenance at all, and
+   * that cannot be fixed from code: writing provenance for a rule already in
+   * force is a claim about who read the regulation, and a governance act.
+   */
+  it('inherits the set approver for a rule that names none', () => {
+    const rule = POLICY_SET.rules.find((r) => r.status === 'active' && r.approval === undefined)
+    expect(rule, 'no enacted rule lacks its own approval — this test is stale').toBeDefined()
+    expect(approverFor(rule?.id ?? '')).toBe(POLICY_SET.approvedBy)
+  })
+
+  it('prefers a rule’s own approver when it has one', () => {
+    const own: PolicySet = {
+      ...POLICY_SET,
+      rules: POLICY_SET.rules.map((r) =>
+        r.id === 'DS-STANDARD-OF-FILL'
+          ? { ...r, approval: { by: 'A Person', at: '2026-01-01' } }
+          : r,
+      ),
+    }
+    expect(approverFor('DS-STANDARD-OF-FILL', own)).toBe('A Person')
+  })
+
+  it('names nobody for a rule the set does not carry', () => {
+    // POLICY-SELECTION reaches no rule, so there is nobody to be answerable.
+    expect(approverFor('POLICY-SELECTION')).toBeNull()
+  })
+
+  it('pins the regulation text a finding rests on', () => {
+    // What makes a finding traceable without a verbatim quote. A digest cannot
+    // be paraphrased the way a copied fragment can.
+    const source = regulationSourceFor('DS-STANDARD-OF-FILL')
+    expect(source?.digest).toMatch(/^[0-9a-f]{8,}$/)
+    expect(source?.issued).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('names no source for a rule that reached no regulation', () => {
+    expect(regulationSourceFor('POLICY-SELECTION')).toBeNull()
+  })
+
+  it('records that the enacted rules still carry no quote', () => {
+    // Asserted rather than described, so the day somebody adds provenance to
+    // an enacted rule this fails and they read why it was left alone.
+    const enacted = POLICY_SET.rules.filter((r) => r.status === 'active')
+    expect(enacted.length).toBeGreaterThan(0)
+    for (const rule of enacted) {
+      expect(rule.provenance?.quote, `${rule.id} now has a quote`).toBeUndefined()
+    }
   })
 })
 

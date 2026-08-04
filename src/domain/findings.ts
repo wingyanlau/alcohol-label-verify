@@ -154,6 +154,41 @@ export function citationFor(ruleId: string, set: PolicySet = POLICY_SET): string
 }
 
 /**
+ * The regulation a rule rests on, as the archive registered it.
+ *
+ * Returns the digest of the text that was read and the issue it was read from,
+ * which identifies the source exactly. That matters most for a rule carrying no
+ * verbatim quote: the words are not in the record, but *which text* is, and a
+ * digest cannot be paraphrased the way a copied fragment can.
+ */
+export function regulationSourceFor(
+  ruleId: string,
+  set: PolicySet = POLICY_SET,
+): { digest: string; issued: string } | null {
+  const rule = set.rules.find((r) => r.id === ruleId)
+  if (rule === undefined) return null
+  const regulation = set.regulations.find((r) => r.id === rule.regulation)
+  if (regulation === undefined) return null
+  return { digest: regulation.textDigest, issued: regulation.extractedFromIssueDate }
+}
+
+/**
+ * Who approved the rule this finding rests on.
+ *
+ * A rule may name its own approver; the enacted ones do not, and are covered by
+ * the SET's, which is a named person. Looking in only the first place is why
+ * every finding came back with no approver at all.
+ *
+ * D27 — no rule reaches force without a named human approval — is what makes
+ * inheriting correct rather than convenient: the approval exists, one level up.
+ */
+export function approverFor(ruleId: string, set: PolicySet = POLICY_SET): string | null {
+  const rule = set.rules.find((r) => r.id === ruleId)
+  if (rule === undefined) return null
+  return rule.approval?.by ?? set.approvedBy ?? null
+}
+
+/**
  * What the checks are allowed to look at.
  *
  * The label extraction only. `unreadable` is carried separately from a null
