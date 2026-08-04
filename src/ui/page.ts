@@ -171,8 +171,14 @@ export const PAGE_HTML = `<!doctype html>
   .picked img { width: 120px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
   .pickactions { display: flex; gap: 8px; margin-top: 8px; }
   .pickactions button { padding: 6px 12px; font-size: 15px; }
-  .primary-row { margin-top: 24px; text-align: center; }
+  .primary-row { margin-top: 24px; text-align: center;
+                 display: flex; gap: 12px; justify-content: center; align-items: center;
+                 flex-wrap: wrap; }
   .primary-row button { font-size: 19px; padding: 14px 28px; }
+  /* The clear button is the lesser of the two and is sized to say so. Matching
+     the primary would make "start again" look like an equal choice to "check
+     this label", which is not what an agent came here to do. */
+  .primary-row button.secondary { font-size: 17px; padding: 12px 20px; }
   @media (max-width: 820px) { .primary-row button { width: 100%; } }
 </style>
 </head>
@@ -262,6 +268,10 @@ export const PAGE_HTML = `<!doctype html>
          the problem, which tells them what to do. -->
     <div class="primary-row">
       <button id="checkBtn" type="button">Check this label</button>
+      <!-- Secondary, and always present rather than appearing after a result:
+           a control that materialises only once you are finished is one nobody
+           knows exists while they are typing into the wrong form. -->
+      <button id="clearBtn" type="button" class="secondary">Clear this form</button>
       <p id="working" class="note hidden" role="status" aria-live="polite"></p>
     </div>
     <div id="singleResult"></div>
@@ -887,6 +897,32 @@ export const PAGE_HTML = `<!doctype html>
     byId('drop').classList.remove('hidden')
   }
 
+  /**
+   * Empty the form so the next label can be checked.
+   *
+   * Nothing is lost by pressing this. Every review is persisted with its own
+   * reference code the moment it completes (M4), so clearing the screen
+   * discards a view of the record and not the record — which is why it asks no
+   * confirmation. An agent who needs the previous result back looks it up by
+   * reference.
+   *
+   * Product type is cleared to "not stated" along with the rest. Leaving it set
+   * would be the one field that silently carried over, and it is the field that
+   * decides which regulations the next label is judged by.
+   */
+  function clearSingleForm() {
+    ;['brandName', 'classType', 'alcoholContent', 'netContents', 'productType'].forEach(
+      function (id) { byId(id).value = '' },
+    )
+    detach()
+    clearFieldError('brandName'); clearFieldError('file')
+    byId('singleResult').textContent = ''
+    byId('working').classList.add('hidden')
+    // Back to the top of the form, so the next entry starts where the eye
+    // already is rather than wherever the last click left it.
+    byId('productType').focus()
+  }
+
   function singleInit() {
     byId('modeSingle').addEventListener('click', function () { showMode(true) })
     byId('modeBatch').addEventListener('click', function () { showMode(false) })
@@ -908,6 +944,7 @@ export const PAGE_HTML = `<!doctype html>
     })
 
     byId('checkBtn').addEventListener('click', runSingle)
+    byId('clearBtn').addEventListener('click', clearSingleForm)
   }
 
   function runSingle() {

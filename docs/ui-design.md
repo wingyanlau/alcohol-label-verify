@@ -239,6 +239,29 @@ no explanation for why clicking does nothing. Pressing it with an incomplete for
 runs validation and moves focus to the problem, which *tells the agent what to
 do*. That is both the accessible pattern and the kinder one.
 
+**Beside it: Clear this form** — secondary styling, and smaller. UC-1 is a
+repeated act: an agent checks one label, then the next. Without this the only
+ways to start again were to edit five fields by hand or reload the page.
+
+- It empties all five application fields, removes the attached artwork, clears
+  any field errors, and takes the previous verdict off the screen
+- **Product type is cleared with the rest.** It is the one field that would
+  otherwise carry over unnoticed, and it is the field that decides which
+  regulations the next label is judged against (D25)
+- Focus returns to the top of the form, so the next entry starts where the eye
+  already is
+- **It asks no confirmation, because nothing is lost.** Every review is
+  persisted with its own reference code the moment it completes (M4), so this
+  discards a view of the record and not the record. An agent who needs the
+  previous result looks it up by reference (§11)
+- It is present from the start rather than appearing once a result exists: a
+  control that materialises only when you are finished is one nobody knows
+  about while they are typing into the wrong form
+
+It is deliberately *not* the same size as the primary action. Matching it would
+present "start again" as an equal choice to "check this label", which is not
+what an agent came to the screen to do.
+
 ### 4.5 Validation
 
 **On submit only. Never on blur.**
@@ -305,7 +328,7 @@ A `Check another label` action resets to §4.1 with everything cleared.
 
 | | |
 |---|---|
-| Tab order | Product type → brand name → class/type → alcohol → net contents → file button → primary action |
+| Tab order | Product type → brand name → class/type → alcohol → net contents → file button → primary action → clear this form |
 | The drop zone is not a tab stop | The button inside it is |
 | Focus ring | Visible, never removed, ≥ 2px, ≥ 3:1 against its background |
 | `Enter` in any text field | Submits — matches the expectation of a four-field form |
@@ -336,6 +359,7 @@ afterthought.*
 | Panel 1 heading | 1. The application says |
 | Panel 2 heading | 2. The label |
 | Field labels | Product type · Brand name · Class / type · Alcohol content · Net contents |
+| Buttons | Check this label · Clear this form |
 | Required marker | (required) — on brand name only |
 | Class hint | e.g. Kentucky Straight Bourbon Whiskey |
 | Net contents hint | e.g. 750 mL |

@@ -276,6 +276,77 @@ describe('the worklist lists what the coordinator sent', () => {
   })
 })
 
+describe('clearing the single-review form', () => {
+  /*
+   * An agent checks one label, then the next. Without this the only ways to
+   * start again were to edit five fields by hand or reload the page, and the
+   * field most likely to be missed is product type — the one that decides
+   * which regulations the next label is judged against.
+   */
+  const filled = (byId: Record<string, El>) => {
+    for (const id of ['brandName', 'classType', 'alcoholContent', 'netContents', 'productType']) {
+      const field = byId[id]
+      if (field) field.value = 'something'
+    }
+    const result = byId.singleResult
+    if (result) result.textContent = 'a previous verdict'
+  }
+
+  it('empties every application field', async () => {
+    const { byId, settle } = boot()
+    await settle()
+    filled(byId)
+    byId.clearBtn?.click()
+    for (const id of ['brandName', 'classType', 'alcoholContent', 'netContents']) {
+      expect(byId[id]?.value, id).toBe('')
+    }
+  })
+
+  it('clears the product type rather than carrying it into the next label', async () => {
+    // The one field that would otherwise persist unnoticed, and the one that
+    // selects the rule set (D25).
+    const { byId, settle } = boot()
+    await settle()
+    filled(byId)
+    byId.clearBtn?.click()
+    expect(byId.productType?.value).toBe('')
+  })
+
+  it('removes the attached artwork', async () => {
+    const { byId, settle } = boot()
+    await settle()
+    filled(byId)
+    // Put the panel into the state an attached file leaves it in, so the
+    // assertion is about the flip rather than about where it already was.
+    byId.picked?.classList.remove('hidden')
+    byId.drop?.classList.add('hidden')
+    expect(byId.picked?.classList.contains('hidden')).toBe(false)
+
+    byId.clearBtn?.click()
+
+    // The thumbnail is gone and the picker is back.
+    expect(byId.picked?.classList.contains('hidden')).toBe(true)
+    expect(byId.drop?.classList.contains('hidden')).toBe(false)
+    expect(byId.file?.value).toBe('')
+  })
+
+  it('takes the previous verdict off the screen', async () => {
+    const { byId, settle } = boot()
+    await settle()
+    filled(byId)
+    byId.clearBtn?.click()
+    expect(byId.singleResult?.textContent).toBe('')
+  })
+
+  it('leaves the check button usable', async () => {
+    // Clearing is not a failure state; nothing should be disabled by it.
+    const { byId, settle } = boot()
+    await settle()
+    byId.clearBtn?.click()
+    expect(byId.checkBtn?.disabled).toBe(false)
+  })
+})
+
 describe('reset leaves the page usable (the reported wedge)', () => {
   /*
    * Reported from staging: the start button stuck disabled on "Checking…" with
