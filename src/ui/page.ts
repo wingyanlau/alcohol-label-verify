@@ -308,6 +308,9 @@ export const PAGE_HTML = `<!doctype html>
   var total = 0
   var rows = new Map()
   var lastFocused = null
+  // The live stream, held so a reconnect can replace it rather than stack on
+  // top of it — and so a replaced socket can tell it is no longer the one.
+  var ws = null
 
   function el(tag, cls, text) {
     var e = document.createElement(tag)
@@ -464,15 +467,63 @@ export const PAGE_HTML = `<!doctype html>
   }
 
   function connect() {
+    // Replace any existing socket rather than stacking another on top. The
+    // coordinator sends its snapshot on connect, so reconnecting is also how
+    // the page asks "what is true now" after an action that may have changed
+    // it — see reconcile().
+    if (ws) { var previous = ws; ws = null; try { previous.close() } catch (e) { /* already gone */ } }
     var proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-    var ws = new WebSocket(proto + '//' + location.host + '/batch/' + jobId + '/stream')
-    ws.addEventListener('message', function (e) {
+    var sock = new WebSocket(proto + '//' + location.host + '/batch/' + jobId + '/stream')
+    ws = sock
+    sock.addEventListener('message', function (e) {
       try { handleEvent(JSON.parse(e.data)) } catch (err) { /* ignore malformed frame */ }
     })
-    ws.addEventListener('close', function () {
-      // A closed lid must not lose a job (B7): reconnect and take a fresh snapshot.
-      setTimeout(connect, 1500)
+    sock.addEventListener('close', function () {
+      // A closed lid must not lose a job (B7): reconnect and take a fresh
+      // snapshot. Only the live socket may do so — one that has been replaced
+      // must not resurrect itself and deliver a snapshot for a job the page
+      // has already moved on from.
+      if (ws === sock) setTimeout(connect, 1500)
     })
+  }
+
+  /**
+   * Ask the service what is true, and make the page agree with it.
+   *
+   * The page used to infer this from startBtn.disabled — a button, which is
+   * also disabled while a start is merely in flight — and then wait for an
+   * abort broadcast to put things right. A settled job has nothing to
+   * broadcast, so the page waited forever: start disabled reading "Checking…",
+   * an empty worklist, and no way back except a reload.
+   *
+   * The service knows whether a job exists and whether it is running. Asking it
+   * is both shorter and correct whatever state the click happened to interrupt.
+   */
+  function reconcile() {
+    return fetch('/batch/current')
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (data) {
+        if (!data || !data.jobId) {
+          rows.clear()
+          renderCounts(); renderWorklist()
+          batchSection.classList.add('hidden')
+          resetBtn.classList.add('hidden')
+          setButton('idle')
+          return
+        }
+        jobId = data.jobId
+        batchSection.classList.remove('hidden')
+        setButton(data.running ? 'running' : 'rerun')
+        // Reconnect for a fresh snapshot: the rows in memory may be stale or,
+        // as after a reset, absent entirely while the job still has every one
+        // of its items.
+        connect()
+      })
+      .catch(function () {
+        // Never leave the page unable to act. If the service cannot be
+        // reached, the state an agent can retry from is the safe one.
+        setButton('idle')
+      })
   }
 
   startBtn.addEventListener('click', function () {
@@ -502,22 +553,22 @@ export const PAGE_HTML = `<!doctype html>
     resetBtn.textContent = wasRunning ? 'Stopping…' : 'Clearing…'
     fetch('/batch/reset', { method: 'POST' })
       .then(function (r) { if (!r.ok) throw new Error('reset failed'); return r.json() })
-      .then(function () {
+      .then(function (body) {
         resetBtn.disabled = false
-        // Clearing a settled job has nothing to broadcast — no item changes
-        // state — so the page tidies itself rather than waiting for an event
-        // that will never arrive.
-        if (!wasRunning) {
+        // Whether anything was actually stopped is the server's answer, not a
+        // guess from a button. A null jobId means the job had already settled
+        // — the case that used to wedge the page, because it then waited for
+        // an abort broadcast that a settled coordinator never sends.
+        if (body && body.jobId === null) {
+          // Nothing to reset. Go straight to a state the agent can act from.
           rows.clear()
+          renderCounts(); renderWorklist()
           batchSection.classList.add('hidden')
           resetBtn.classList.add('hidden')
           setButton('idle')
-          resetBtn.classList.add('hidden')
-        } else {
-          // A running job settles through the coordinator's abort broadcast,
-          // which carries a fresh snapshot, so the worklist updates itself.
-          resetBtn.textContent = 'Clear results'
+          return
         }
+        return reconcile()
       })
       .catch(function () {
         resetBtn.disabled = false
