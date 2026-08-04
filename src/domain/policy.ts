@@ -284,6 +284,17 @@ function validateProvenance(
   _regulations: ReadonlySet<string>,
   documents: ReadonlySet<string>,
 ): void {
+  // Checked before the early return: an approval that names nobody is wrong
+  // whether or not the rule was derived from a document. This sat inside the
+  // provenance branch and so was skipped for hand-written rules — the approval
+  // is the load-bearing part of D27, and it must not be conditional on how the
+  // rule was authored.
+  if (rule.approval !== undefined) {
+    if (!isRecord(rule.approval) || !nonEmpty(rule.approval.by)) {
+      throw new PolicyContractError(`rule "${rule.id}" has an approval that names nobody`)
+    }
+  }
+
   const p = rule.provenance
   // A rule someone simply wrote needs no ceremony.
   if (p === undefined) return
@@ -324,12 +335,6 @@ function validateProvenance(
           'approval. A model may propose a rule; only a person may enact one. ' +
           'Leave it as a draft, or record who approved it.',
       )
-    }
-  }
-
-  if (rule.approval !== undefined) {
-    if (!isRecord(rule.approval) || !nonEmpty(rule.approval.by)) {
-      throw new PolicyContractError(`rule "${rule.id}" has an approval that names nobody`)
     }
   }
 }

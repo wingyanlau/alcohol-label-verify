@@ -206,3 +206,94 @@ describe('rules extracted from a supplied document', () => {
     expect(() => validatePolicySet(SET())).not.toThrow()
   })
 })
+
+describe('malformed sets are refused, not repaired', () => {
+  // Each of these is a way a supplied set can be wrong. None is exotic: they
+  // are what a hand-edited file, a truncated export, or a half-finished
+  // extraction actually looks like.
+  it.each([
+    ['not an object', 'nonsense'],
+    ['no regulations array', SET({ regulations: 'none' })],
+    ['a regulation with no id', SET({ regulations: [{ section: '5.203' }] })],
+    ['no rules array', SET({ rules: {} })],
+    ['a rule that is not an object', SET({ rules: ['DS-STANDARD-OF-FILL'] })],
+    ['a rule with no check', SET({ rules: [{ ...RULE, check: undefined }] })],
+    ['an unknown severity', SET({ rules: [{ ...RULE, severity: 'catastrophic' }] })],
+    ['an unknown status', SET({ rules: [{ ...RULE, status: 'pending' }] })],
+    ['an unknown automation level', SET({ rules: [{ ...RULE, automation: 'full-self-driving' }] })],
+    ['a source document with no digest', SET({ sourceDocuments: [{ id: 'D', title: 'T' }] })],
+  ])('refuses %s', (_name, value) => {
+    expect(() => validatePolicySet(value)).toThrow(PolicyContractError)
+  })
+
+  it('refuses a malformed provenance block', () => {
+    expect(() =>
+      validatePolicySet(SET({ rules: [{ ...RULE, provenance: 'from the internet' }] })),
+    ).toThrow(PolicyContractError)
+  })
+
+  it('refuses an extraction that says neither human nor model read it', () => {
+    expect(() =>
+      validatePolicySet(
+        SET({
+          sourceDocuments: [{ id: 'D', title: 'T', digest: 'x', retrievedAt: '2026-01-01' }],
+          rules: [
+            {
+              ...RULE,
+              provenance: {
+                sourceDocument: 'D',
+                quote: 'words',
+                extractedBy: 'osmosis',
+                extractedAt: '2026-01-01',
+              },
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/human or a model/)
+  })
+
+  it('refuses an approval that names nobody', () => {
+    expect(() =>
+      validatePolicySet(SET({ rules: [{ ...RULE, approval: { by: '   ', at: '2026-01-01' } }] })),
+    ).toThrow(/names nobody/)
+  })
+})
+
+describe('the shipped example satisfies its own contract', () => {
+  // The worked example is only worth shipping if it passes the validation it
+  // was written to demonstrate. Without this, the contract and the example
+  // could drift apart and each would still look fine on its own.
+  it('loads config/policy-set.json', async () => {
+    const set = validatePolicySet(
+      JSON.parse(
+        await import('node:fs').then((fs) => fs.readFileSync('config/policy-set.json', 'utf8')),
+      ),
+    )
+    expect(set.rules.length).toBeGreaterThan(0)
+    // Every rule cites a regulation the set carries — checked by validation,
+    // asserted here so the example's own coverage is visible.
+    for (const rule of set.rules) {
+      expect(set.regulations.some((r) => r.id === rule.regulation)).toBe(true)
+    }
+  })
+
+  it('selects only distilled-spirits rules for a bourbon filed today', () => {
+    const set = validatePolicySet(
+      JSON.parse(require('node:fs').readFileSync('config/policy-set.json', 'utf8')),
+    )
+    const selected = rulesFor(set, { productType: 'Distilled spirits' }, '2026-08-03')
+    expect(selected.length).toBeGreaterThan(0)
+    expect(selected.some((r) => r.id === 'WINE-STANDARD-OF-FILL')).toBe(false)
+  })
+
+  // The dating actually bites on real data: standards of fill changed in
+  // January 2025, and the archive does not carry the list that preceded it.
+  it('withholds the standards-of-fill rule from a 2024 filing', () => {
+    const set = validatePolicySet(
+      JSON.parse(require('node:fs').readFileSync('config/policy-set.json', 'utf8')),
+    )
+    const then = rulesFor(set, { productType: 'Distilled spirits' }, '2024-06-01')
+    expect(then.some((r) => r.id === 'DS-STANDARD-OF-FILL')).toBe(false)
+  })
+})
