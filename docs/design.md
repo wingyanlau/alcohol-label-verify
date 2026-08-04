@@ -2621,6 +2621,26 @@ applied "the rules", with no output revealing which were dropped.
 | 4 | **Surface findings and the recommendation** in the results panel |
 | 5 | **`decision.recorded`** — though there is a case for pulling this first, since its value compounds with every review that happens before it exists |
 
+**Steps 3–5 are built** (migration `0005_policy_layer.sql`). Three things the
+sequence above did not anticipate, recorded because each cost something:
+
+- **The estimate of "one new input to `aggregate`" held; "one migration" did
+  not.** `verdict.outcome` carried a CHECK constraint listing the four
+  outcomes, so a fifth could not be stored — and SQLite cannot alter a CHECK.
+  The rebuild has to rename the parent aside and rebuild the children, because
+  dropping a parent orphans its rows and the deferred-foreign-key count is
+  never cleared by re-creating a table of the same name. It fails at `COMMIT`
+  rather than at the statement that caused it, which is not where anyone looks.
+- **The audit chain needed no change at all.** A decision is recorded as
+  `action = 'decision.recorded'` on `subject_type = 'submission'`, which the
+  existing vocabulary already permits. Adding a `decision` subject type would
+  have meant dropping the append-only triggers and copying every row of the one
+  table whose value is that it cannot be edited.
+- **`AGGREGATION_VERSION` moved to `aggregate@2`.** The vocabulary gained a
+  state and aggregation gained an input, so a verdict reached under `@1` may
+  not be reached again today; replay must report that as not-comparable rather
+  than silently re-deriving it (§17.3).
+
 ### 18.7 What this section does not settle
 
 | | |

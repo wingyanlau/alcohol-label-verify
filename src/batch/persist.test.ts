@@ -100,8 +100,75 @@ describe('buildPersistPlan', () => {
     expect(plan.verdict.outcome).toBe('DISCREPANCIES_FOUND')
     expect(plan.verdict.rulesetVersion).toBe('compare@1')
     expect(plan.verdict.policyVersion).toBe('policy@1')
-    expect(plan.verdict.aggregationVersion).toBe('aggregate@1')
+    // @2 since D40 — the vocabulary gained a state and aggregation gained an
+    // input, so a verdict reached under @1 may not be reached again today.
+    expect(plan.verdict.aggregationVersion).toBe('aggregate@2')
     expect(plan.verdict.referenceDataVersion).toBe(1)
+  })
+
+  describe('the rule-set binding (D26)', () => {
+    const governed = () =>
+      result({
+        findings: [
+          {
+            ruleId: 'DS-STANDARD-OF-FILL',
+            requirement: 'Net contents must be an authorised standard of fill',
+            state: 'VIOLATED',
+            severity: 'blocking',
+            evidence: '800 mL is not an authorised standard of fill',
+          },
+        ],
+        policy: {
+          policySetVersion: 3,
+          selectedRuleIds: ['DS-STANDARD-OF-FILL'],
+          selectionInputs: { productType: 'Distilled spirits' },
+          submittedOn: '2026-08-01',
+        },
+      })
+
+    it('records which rules were applied and what they were selected on', () => {
+      // The version alone proves the rules were applied correctly. The inputs
+      // prove the CORRECT rules were selected — the error that is otherwise
+      // silent, systematic, and invisible in the output.
+      const { verdict } = buildPersistPlan(governed(), ids, 300)
+      expect(verdict.policySetVersion).toBe(3)
+      expect(JSON.parse(verdict.selectedRuleIds ?? 'null')).toEqual(['DS-STANDARD-OF-FILL'])
+      expect(JSON.parse(verdict.selectionInputs ?? 'null')).toEqual({
+        productType: 'Distilled spirits',
+      })
+      expect(verdict.submittedOn).toBe('2026-08-01')
+    })
+
+    it('keeps the rule-set version apart from the region-map policy version', () => {
+      // Two unrelated things with confusingly similar names (§18.3). Sharing a
+      // column would make them move together and leave neither traceable.
+      const { verdict } = buildPersistPlan(governed(), ids, 300)
+      expect(verdict.policyVersion).toBe('policy@1')
+      expect(verdict.policySetVersion).toBe(3)
+    })
+
+    it('stores each finding with the evidence it decided on (FR-10)', () => {
+      const { findings } = buildPersistPlan(governed(), ids, 300)
+      expect(findings).toHaveLength(1)
+      expect(findings[0]?.state).toBe('VIOLATED')
+      expect(findings[0]?.severity).toBe('blocking')
+      expect(findings[0]?.evidence).toContain('800 mL')
+      // The wording as it stood when applied. Looking it up later would read
+      // today's set, and a superseded rule would be reported with wording it
+      // never had when this verdict was reached.
+      expect(findings[0]?.requirement).toMatch(/authorised standard of fill/)
+    })
+
+    it('records no binding at all when no rule was applied', () => {
+      // Not version 0, and not the loaded set's version. A verdict naming a
+      // policy set is claiming rules were applied to it.
+      const { verdict, findings } = buildPersistPlan(result(), ids, 300)
+      expect(verdict.policySetVersion).toBeNull()
+      expect(verdict.selectedRuleIds).toBeNull()
+      expect(verdict.selectionInputs).toBeNull()
+      expect(verdict.submittedOn).toBeNull()
+      expect(findings).toEqual([])
+    })
   })
 
   it('keeps both the expected and observed values as evidence (FR-10)', () => {

@@ -13,7 +13,8 @@
  * worker; nothing here re-derives it.
  */
 
-import { OUTCOME_HEADLINE } from '../domain/aggregate.js'
+import { OUTCOME_HEADLINE, OUTCOME_RECOMMENDATION } from '../domain/aggregate.js'
+import { citationFor } from '../domain/findings.js'
 import { referenceIsUnverified, warningReference } from '../domain/reference.js'
 import type { FieldName, Outcome } from '../domain/types.js'
 import { FIELD_LABELS, FIELDS } from '../domain/types.js'
@@ -38,13 +39,42 @@ export interface DetailWarningSegment {
   readonly deviation: string | null
 }
 
+export interface DetailFinding {
+  readonly ruleId: string
+  readonly requirement: string
+  readonly state: string
+  readonly severity: string
+  readonly evidence: string
+  readonly citation: string | null
+}
+
 export interface SubmissionDetail {
   readonly submissionId: string
   readonly sourceName: string
   readonly state: string
   readonly outcome: Outcome | null
   readonly headline: string | null
+  /** What the system suggests. Never an approval (§18.4). */
+  readonly recommendation: string | null
   readonly cause: string | null
+  /** What the policy set said, as recorded when the verdict was reached. */
+  readonly findings: readonly DetailFinding[]
+  /** Which rules were applied, and what they were selected on (D26). */
+  readonly policy: {
+    readonly policySetVersion: number | null
+    readonly selectedRuleIds: readonly string[]
+    readonly submittedOn: string | null
+  }
+  /** The agent's decision, once one has been recorded (§18.5). */
+  readonly decision: {
+    readonly decision: string
+    readonly decidedBy: string
+    readonly decidedAt: string
+    readonly recommendedOutcome: string
+    readonly note: string | null
+  } | null
+  /** The verdict this detail describes, so a decision can name what it answered. */
+  readonly verdictId: string | null
   readonly fields: readonly DetailField[]
   readonly warning: {
     readonly evaluated: boolean
@@ -78,6 +108,23 @@ interface SubmissionRecord {
 interface VerdictRecord {
   id: string
   outcome: string
+  policy_set_version: number | null
+  selected_rule_ids: string | null
+  submitted_on: string | null
+}
+interface FindingRecord {
+  rule_id: string
+  requirement: string
+  state: string
+  severity: string
+  evidence: string
+}
+interface DecisionRecordRow {
+  decision: string
+  decided_by: string
+  decided_at: string
+  recommended_outcome: string
+  note: string | null
 }
 interface FieldRecord {
   field: string
@@ -92,6 +139,23 @@ interface WarningRecord {
   ok: number
   observed: string | null
   deviation: string | null
+}
+
+/**
+ * Rule ids as stored, or none.
+ *
+ * Tolerant on purpose: this column is JSON written by an older or newer
+ * revision of this system, and a malformed value should cost the binding
+ * display, not the whole result panel an agent is trying to read.
+ */
+function parseRuleIds(raw: string | null): readonly string[] {
+  if (raw === null) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []
+  } catch {
+    return []
+  }
 }
 
 /**
@@ -117,7 +181,8 @@ export async function loadSubmissionDetail(
 
   const verdict = await db
     .prepare(
-      `SELECT id, outcome FROM verdict
+      `SELECT id, outcome, policy_set_version, selected_rule_ids, submitted_on
+         FROM verdict
         WHERE submission_id = ? AND superseded_by IS NULL
         ORDER BY created_at DESC LIMIT 1`,
     )
@@ -135,7 +200,12 @@ export async function loadSubmissionDetail(
       state: submission.state,
       outcome: null,
       headline: null,
+      recommendation: null,
       cause: submission.failure_cause,
+      findings: [],
+      policy: { policySetVersion: null, selectedRuleIds: [], submittedOn: null },
+      decision: null,
+      verdictId: null,
       fields: [],
       warning: { evaluated: false, ok: false, segments: [], advisory, referenceUnverified },
       labelImageUrl,
@@ -190,13 +260,65 @@ export async function loadSubmissionDetail(
     }
   })
 
+  const findingRows = (
+    await db
+      .prepare(
+        `SELECT rule_id, requirement, state, severity, evidence
+           FROM policy_finding WHERE verdict_id = ?`,
+      )
+      .bind(verdict.id)
+      .all<FindingRecord>()
+  ).results
+
+  // The requirement text comes from the row, not from today's policy set. A
+  // rule superseded since this verdict was reached would otherwise be shown
+  // with wording it never had when it was applied.
+  const findings: DetailFinding[] = findingRows.map((r) => ({
+    ruleId: r.rule_id,
+    requirement: r.requirement,
+    state: r.state,
+    severity: r.severity,
+    evidence: r.evidence,
+    // The citation is a property of the rule rather than of this verdict, so it
+    // is resolved now. A rule the current set no longer carries yields null
+    // rather than a guess.
+    citation: citationFor(r.rule_id),
+  }))
+
+  const decisionRow = await db
+    .prepare(
+      `SELECT decision, decided_by, decided_at, recommended_outcome, note
+         FROM decision WHERE submission_id = ?
+        ORDER BY decided_at DESC LIMIT 1`,
+    )
+    .bind(submissionId)
+    .first<DecisionRecordRow>()
+
   return {
     submissionId,
     sourceName: submission.source_name,
     state: submission.state,
     outcome: verdict.outcome as Outcome,
     headline: OUTCOME_HEADLINE[verdict.outcome as Outcome],
+    recommendation: OUTCOME_RECOMMENDATION[verdict.outcome as Outcome],
     cause: null,
+    findings,
+    policy: {
+      policySetVersion: verdict.policy_set_version,
+      selectedRuleIds: parseRuleIds(verdict.selected_rule_ids),
+      submittedOn: verdict.submitted_on,
+    },
+    decision:
+      decisionRow === null
+        ? null
+        : {
+            decision: decisionRow.decision,
+            decidedBy: decisionRow.decided_by,
+            decidedAt: decisionRow.decided_at,
+            recommendedOutcome: decisionRow.recommended_outcome,
+            note: decisionRow.note,
+          },
+    verdictId: verdict.id,
     fields,
     warning: {
       evaluated: true,

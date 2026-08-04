@@ -116,6 +116,9 @@ export const PAGE_HTML = `<!doctype html>
   .refcode { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
              font-size: 16px; letter-spacing: 0.06em; color: var(--ink);
              user-select: all; }
+  .decision { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 14px; }
+  .decision input, .decision textarea { width: 100%; margin-bottom: 8px; }
+  .decision-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .warning-seg { padding: 8px 0; }
   .warning-seg .dev { color: var(--muted); font-size: 15px; }
   /* The recommendation sits under the headline in the outcome banner. Normal
@@ -630,6 +633,110 @@ export const PAGE_HTML = `<!doctype html>
     return box
   }
 
+  // The agent's decision (§18.5). The system has said everything it can say by
+  // this point; this is where a person takes responsibility, and the record of
+  // what they chose against what was suggested is the only ground truth this
+  // system will ever have.
+  function renderDecision(d) {
+    var box = el('div', 'decision')
+    box.appendChild(el('h2', null, 'Your decision'))
+
+    if (!d.outcome) {
+      box.appendChild(el('p', 'note', 'This submission has not been checked yet.'))
+      return box
+    }
+
+    if (d.decision) {
+      var agreed = (d.decision.decision === 'APPROVED') ===
+        (d.decision.recommendedOutcome.indexOf('CLEAR') === 0)
+      var head = el('div', 'fstatus ' + (agreed ? 'ok' : 'warn'))
+      head.textContent = d.decision.decision === 'APPROVED' ? '✓  Approved'
+        : d.decision.decision === 'REJECTED' ? '✗  Rejected'
+        : '↩  Returned for better artwork'
+      box.appendChild(head)
+      box.appendChild(el('div', 'dev',
+        'by ' + d.decision.decidedBy + ' on ' + d.decision.decidedAt.slice(0, 10)))
+      // Shown whether or not it agreed. A record that displayed only
+      // disagreements would make the agent's routine work invisible and the
+      // exceptions look like accusations.
+      if (!agreed) box.appendChild(el('div', 'dev', 'This differed from what the check suggested.'))
+      if (d.decision.note) box.appendChild(el('div', 'dev', d.decision.note))
+      return box
+    }
+
+    box.appendChild(el('p', 'note', d.recommendation || ''))
+
+    var who = document.createElement('input')
+    who.type = 'text'; who.id = 'decidedBy'; who.placeholder = 'Your name'
+    who.setAttribute('aria-label', 'Your name')
+    box.appendChild(who)
+
+    var note = document.createElement('textarea')
+    note.id = 'decisionNote'; note.rows = 2
+    note.placeholder = 'Why (required if you differ from the check)'
+    note.setAttribute('aria-label', 'Reason')
+    box.appendChild(note)
+
+    var err = el('p', 'inline-err hidden'); err.id = 'decisionErr'
+    box.appendChild(err)
+
+    var row = el('div', 'decision-actions')
+    ;[['APPROVED', 'Approve'], ['REJECTED', 'Reject'], ['RETURNED', 'Return for better artwork']]
+      .forEach(function (pair) {
+        var b = document.createElement('button')
+        b.type = 'button'
+        b.className = pair[0] === 'APPROVED' ? '' : 'secondary'
+        b.textContent = pair[1]
+        b.addEventListener('click', function () { submitDecision(d, pair[0], b) })
+        row.appendChild(b)
+      })
+    box.appendChild(row)
+    return box
+  }
+
+  function submitDecision(d, decision, button) {
+    var err = byId('decisionErr')
+    err.classList.add('hidden')
+    button.disabled = true
+    fetch('/decision', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        submissionId: d.submissionId,
+        decision: decision,
+        decidedBy: byId('decidedBy').value.trim(),
+        note: byId('decisionNote').value
+      })
+    }).then(function (r) {
+      return r.json().then(function (body) { return { ok: r.ok, body: body } })
+    }).then(function (res) {
+      button.disabled = false
+      if (!res.ok) {
+        // The server's sentence, not one invented here. It is the one that
+        // explains why a departure needs a reason.
+        err.textContent = (res.body && res.body.reason) || 'That could not be recorded.'
+        err.classList.remove('hidden')
+        return
+      }
+      // Re-rendered from what was just recorded rather than refetched: the
+      // single-review path has no job to fetch a detail from, and the outcome
+      // shown is the one the server decided against, not the one this page
+      // sent.
+      d.decision = {
+        decision: decision,
+        decidedBy: byId('decidedBy').value.trim(),
+        decidedAt: new Date().toISOString(),
+        recommendedOutcome: res.body.recommendedOutcome,
+        note: byId('decisionNote').value.trim() || null
+      }
+      renderDetail(d)
+    }).catch(function () {
+      button.disabled = false
+      err.textContent = 'That could not be recorded.'
+      err.classList.remove('hidden')
+    })
+  }
+
   function renderWarning(w) {
     var box = el('div')
     box.appendChild(el('h2', null, 'Government warning'))
@@ -841,6 +948,7 @@ export const PAGE_HTML = `<!doctype html>
     d.fields.forEach(function (f) { left.appendChild(renderField(f)) })
     left.appendChild(renderWarning(d.warning))
     left.appendChild(renderFindings(d.findings))
+    left.appendChild(renderDecision(d))
     layout.appendChild(left)
 
     var right = el('div', 'imgpanel')

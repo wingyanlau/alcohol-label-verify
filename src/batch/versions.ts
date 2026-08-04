@@ -16,5 +16,13 @@ export const RULESET_VERSION = 'compare@1'
 /** Region maps and intake policy — `src/normalise/regions.ts`. */
 export const POLICY_VERSION = 'policy@1'
 
-/** Outcome aggregation — `src/domain/aggregate.ts`. */
-export const AGGREGATION_VERSION = 'aggregate@1'
+/**
+ * Outcome aggregation — `src/domain/aggregate.ts`.
+ *
+ * `@2` since D40: the outcome vocabulary gained `CLEAR_CONFIRM_POLICY` and
+ * aggregation gained policy findings as an input. A verdict reached under `@1`
+ * would not necessarily be reached again today, and replay must report that as
+ * not-comparable rather than silently re-deriving it under the new rules
+ * (§17.3).
+ */
+export const AGGREGATION_VERSION = 'aggregate@2'

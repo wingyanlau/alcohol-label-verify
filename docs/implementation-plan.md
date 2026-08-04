@@ -244,7 +244,7 @@ degrade silently to "cannot check", which reads as fine.
 
 ---
 
-## M11 — Verification layer and the automation path *(designed, not built)*
+## M11 — Verification layer and the automation path
 
 > **As a compliance agent,** I want the submission checked against the rules
 > that actually apply to it **so that** the result is a compliance finding and
@@ -255,24 +255,38 @@ degrade silently to "cannot check", which reads as fine.
 | Beneficiary | Compliance Agent, Auditor |
 | Traces to | FR-10, D25, D26, D27, D30, §8.8.1 layer 3a |
 | Entry | M5 |
-| Status | **Designed in `design.md` §18. Nothing built.** The current code is aligned to permit it, not to anticipate it |
+| Status | **Built.** Designed in `design.md` §18; the sequence in §18.6 was followed |
 
 **Exit criteria**
 
-- [ ] Policy set is versioned, approved data (`config/policy-set.json`), with
+- [x] Policy set is versioned, approved data (`config/policy-set.json`), with
       rules superseded rather than deleted
-- [ ] Checks are a closed vocabulary implemented in code; no expression
+- [x] Checks are a closed vocabulary implemented in code; no expression
       language and no evaluator
-- [ ] Rule selection is a deterministic query over the application record, and
-      the verdict binds the selection **inputs**, not only the version
-- [ ] `UNDETERMINED` is a first-class finding — a check that cannot be judged
-      from artwork never reports satisfied
-- [ ] The recommendation never reads as an approval
-- [ ] `decision.recorded` captures what the agent decided against what was
-      recommended — the only source of real ground truth
+- [x] Rule selection is a deterministic query over the application record, and
+      the verdict binds the selection **inputs**, not only the version —
+      `verdict.selection_inputs`, alongside `selected_rule_ids` and
+      `submitted_on` (migration 0005)
+- [x] `UNDETERMINED` is a first-class finding — a check that cannot be judged
+      from artwork never reports satisfied. It carries its own outcome,
+      `CLEAR_CONFIRM_POLICY` (D40), rather than sharing one with a
+      low-confidence reading
+- [x] The recommendation never reads as an approval — `OUTCOME_RECOMMENDATION`,
+      asserted on every outcome by `aggregate.test.ts`
+- [x] `decision.recorded` captures what the agent decided against what was
+      recommended — `decision` table, committed to the audit chain, and a
+      departure from the recommendation is refused without a reason
 
 **Not done by** adding rules to `compare.ts`. The point is that the rule set is
 data someone other than a developer can own, version and approve.
+
+**Known limitation, asserted rather than described.** Product type is item 5 on
+TTB F 5100.31 and is not one of `FIELDS`, so a record read *from an image*
+never carries it and no rule can be selected for that path. It reports that
+nothing was checked rather than reporting a pass. The batch path supplies
+application data structurally and is unaffected; the single-review form now
+asks for it directly. Teaching the extractor to read item 5 would close this,
+and `verify.test.ts` names the test that should change when it does.
 
 ---
 

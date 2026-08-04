@@ -68,12 +68,35 @@ export interface VerdictRow {
    * than the one it is supposed to reproduce (NFR-13).
    */
   readonly warningLegible: boolean
+  /**
+   * The rule-set binding (D26). Null when no policy set governed the check.
+   *
+   * `policySetVersion` is deliberately not folded into `policyVersion` above,
+   * which means the region maps and intake policy — an unrelated thing with a
+   * confusingly similar name (§18.3). Overloading it would make two independent
+   * things move together and leave neither traceable.
+   */
+  readonly policySetVersion: number | null
+  /** JSON array of rule ids, in the order applied. */
+  readonly selectedRuleIds: string | null
+  /** JSON object of the record values selection ran on. */
+  readonly selectionInputs: string | null
+  readonly submittedOn: string | null
+}
+
+export interface PolicyFindingRow {
+  readonly ruleId: string
+  readonly requirement: string
+  readonly state: string
+  readonly severity: string
+  readonly evidence: string
 }
 
 export interface PersistPlan {
   readonly verdict: VerdictRow
   readonly fields: readonly FieldVerdictRow[]
   readonly warning: readonly WarningVerdictRow[]
+  readonly findings: readonly PolicyFindingRow[]
   readonly extractions: readonly ExtractionRow[]
 }
 
@@ -164,6 +187,10 @@ export function buildPersistPlan(
     )
   }
 
+  // No rules applied is recorded as no binding, not as version 0. A verdict
+  // that names a policy set is claiming rules were applied.
+  const applied = result.policy.selectedRuleIds.length > 0
+
   return {
     verdict: {
       id: ids.verdictId,
@@ -175,9 +202,20 @@ export function buildPersistPlan(
       aggregationVersion: AGGREGATION_VERSION,
       extractionIds: JSON.stringify(extractions.map((e) => e.id)),
       warningLegible: result.warning.legible,
+      policySetVersion: applied ? result.policy.policySetVersion : null,
+      selectedRuleIds: applied ? JSON.stringify(result.policy.selectedRuleIds) : null,
+      selectionInputs: applied ? JSON.stringify(result.policy.selectionInputs) : null,
+      submittedOn: applied ? result.policy.submittedOn : null,
     },
     fields: fieldRows(result.fields),
     warning: warningRows(result.warning),
+    findings: result.findings.map((f) => ({
+      ruleId: f.ruleId,
+      requirement: f.requirement,
+      state: f.state,
+      severity: f.severity,
+      evidence: f.evidence,
+    })),
     extractions,
   }
 }
@@ -228,8 +266,9 @@ export async function persistResult(
         `INSERT INTO verdict
            (id, submission_id, outcome, ruleset_version, reference_data_version,
             policy_version, aggregation_version, extraction_ids, created_at,
-            warning_legible)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            warning_legible, policy_set_version, selected_rule_ids,
+            selection_inputs, submitted_on)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         plan.verdict.id,
@@ -242,8 +281,24 @@ export async function persistResult(
         plan.verdict.extractionIds,
         now,
         plan.verdict.warningLegible ? 1 : 0,
+        plan.verdict.policySetVersion,
+        plan.verdict.selectedRuleIds,
+        plan.verdict.selectionInputs,
+        plan.verdict.submittedOn,
       ),
   )
+
+  for (const f of plan.findings) {
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO policy_finding
+             (verdict_id, rule_id, requirement, state, severity, evidence)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(plan.verdict.id, f.ruleId, f.requirement, f.state, f.severity, f.evidence),
+    )
+  }
 
   for (const f of plan.fields) {
     statements.push(

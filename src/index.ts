@@ -13,6 +13,7 @@ import { appendAudit, readWholeChain, verifyChain } from './batch/audit.js'
 import { MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
 import { BatchTooLarge } from './batch/cap.js'
 import { loadCurrentJob } from './batch/current.js'
+import { checkDecision, DecisionRejected, recordDecision } from './batch/decision.js'
 import { loadSubmissionDetail } from './batch/detail.js'
 import { sha256Hex } from './batch/digest.js'
 import { startBatch } from './batch/intake.js'
@@ -821,6 +822,64 @@ export default {
         if (detail === null) return json({ error: 'not_found' }, 404)
         return json(detail)
       }
+    }
+
+    // What the agent decided (§18.5).
+    //
+    // The only ground truth this system can have. Everything else in the
+    // record is the system's account of its own work; this is the one place
+    // that says whether a person agreed with it, and it is what any future
+    // move toward automation would have to earn its way past.
+    if (pathname === '/decision' && request.method === 'POST') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+
+      const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
+      if (body === null) return json({ error: 'bad_request', reason: 'expected JSON' }, 400)
+
+      const submissionId = String(body.submissionId ?? '')
+      const labelUrl = ''
+      const detail = submissionId
+        ? await loadSubmissionDetail(env.DB, submissionId, labelUrl)
+        : null
+      if (detail === null) return json({ error: 'not_found' }, 404)
+      if (detail.outcome === null || detail.verdictId === null) {
+        // Nothing has been checked yet, so there is no recommendation to
+        // decide against — and a decision recorded against nothing would be
+        // the one row in this table that means nothing.
+        return json({ error: 'conflict', reason: 'this submission has no verdict yet' }, 409)
+      }
+
+      const note = typeof body.note === 'string' && body.note.trim() !== '' ? body.note : null
+      const input = {
+        decision: String(body.decision ?? ''),
+        decidedBy: String(body.decidedBy ?? ''),
+        recommendedOutcome: detail.outcome,
+        note,
+      }
+      try {
+        checkDecision(input)
+      } catch (error) {
+        if (error instanceof DecisionRejected) {
+          return json({ error: 'rejected', reason: error.message }, 422)
+        }
+        throw error
+      }
+
+      // The recommendation is read from the verdict here rather than taken
+      // from the request. A client supplying it could record the agent as
+      // having agreed with something the system never said.
+      await recordDecision(env.DB, {
+        id: crypto.randomUUID(),
+        submissionId,
+        verdictId: detail.verdictId,
+        decidedBy: input.decidedBy,
+        decidedAt: new Date().toISOString(),
+        decision: input.decision,
+        recommendedOutcome: detail.outcome,
+        note,
+      })
+
+      return json({ recorded: true, recommendedOutcome: detail.outcome })
     }
 
     // Single review — one label, checked now (UC-1, ui-design §4).

@@ -44,3 +44,26 @@ describe('the outcome vocabulary never reaches the screen (§12)', () => {
     expect(PAGE_HTML).toContain('d.recommendation')
   })
 })
+
+describe('the decision control (§18.5)', () => {
+  it('offers all three decisions, not just approve and reject', () => {
+    // Returning for better artwork is distinct from rejecting: it is not a
+    // finding against the applicant, and collapsing the two would make every
+    // unreadable scan look like the system was overruled.
+    for (const decision of ['APPROVED', 'REJECTED', 'RETURNED']) {
+      expect(PAGE_HTML, decision).toContain(`'${decision}'`)
+    }
+    expect(PAGE_HTML).toContain('Return for better artwork')
+  })
+
+  it('asks who is deciding', () => {
+    // An unattributable approval is not an approval.
+    expect(PAGE_HTML).toContain("who.id = 'decidedBy'")
+  })
+
+  it('shows the server’s reason rather than inventing one', () => {
+    // The server owns the sentence explaining why a departure needs a reason.
+    // A second copy here would drift from it.
+    expect(PAGE_HTML).toContain('res.body.reason')
+  })
+})
