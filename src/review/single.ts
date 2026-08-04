@@ -34,6 +34,7 @@ import type { ApplicationData, FieldName } from '../domain/types.js'
 import { FIELD_LABELS, FIELDS } from '../domain/types.js'
 import type { VerifyResult } from '../domain/verify.js'
 import { verifySubmission } from '../domain/verify.js'
+import { ruleSetAsAt } from '../policy/archive.js'
 
 /** What the agent typed, before anything has been checked. */
 export interface ReviewRequest {
@@ -156,6 +157,12 @@ export async function reviewOne(
     labelImageUrl: string
     sourceName: string
     env: { LEGIBILITY_FLOOR?: string }
+    /**
+     * The archive, when one is reachable. Absent means fall back to the
+     * reviewed file — which is what a test does, and what this path did before
+     * the rows existed.
+     */
+    db?: D1Database | undefined
   },
 ): Promise<{ view: ReviewResult; result: VerifyResult }> {
   const ref = warningReference()
@@ -166,6 +173,12 @@ export async function reviewOne(
   // as legible — the same rule the batch path applies to an upload — so a
   // missing measurement never fails a submission on its own.
   void configuredLegibilityFloor(opts.env)
+
+  // Both dates, taken once. This path IS the filing — an agent is checking a
+  // label in front of them — so the filing date is today's without assumption.
+  const filedOn = new Date().toISOString().slice(0, 10)
+  const judgedAt = new Date().toISOString()
+  const rules = opts.db === undefined ? null : await ruleSetAsAt(opts.db, filedOn, judgedAt)
 
   const result = await verifySubmission(
     {
@@ -178,7 +191,12 @@ export async function reviewOne(
     {
       provider: opts.provider,
       now: () => Date.now(),
-      submittedOn: new Date().toISOString().slice(0, 10),
+      submittedOn: filedOn,
+      asOf: judgedAt,
+      // From the archive when one is reachable, so the verdict binds rules that
+      // can be rebuilt later. Without a database this falls back to the
+      // reviewed file, which is the path a test takes.
+      ...(rules === null ? {} : { rules }),
     },
   )
 

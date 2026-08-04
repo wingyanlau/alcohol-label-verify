@@ -32,6 +32,7 @@ import {
   type NormaliseResult,
 } from '../normalise/normaliser.js'
 import { TTB_F5100_31_2023, UnknownFormError } from '../normalise/regions.js'
+import { ruleSetAsAt } from '../policy/archive.js'
 import { createProvider } from '../providers/registry.js'
 import type { Provider } from '../providers/types.js'
 import { appendAudit } from './audit.js'
@@ -270,6 +271,13 @@ export async function processItem(
     // applied against a number nobody chose: silently inventing a threshold
     // would decide real verdicts on a policy the deployment never stated.
     const legibilityFloor = configuredLegibilityFloor(env)
+    // Both dates, taken once so every rule in this judgement is selected
+    // against the same instant. The filing date is today's because the corpus
+    // carries none — an assumption, and one the verdict records rather than
+    // hides. A real intake would take it from the application.
+    const filedOn = new Date().toISOString().slice(0, 10)
+    const judgedAt = new Date().toISOString()
+
     const result = await verifySubmission(
       {
         label: {
@@ -300,6 +308,8 @@ export async function processItem(
             : { applicationData: declared },
       },
       // The clock is supplied here, outside the pure core (M1).
+      // Both dates are taken once, before the call, so every rule in one
+      // judgement is selected against the same instant.
       //
       // The filing date is today's, and that is an assumption rather than a
       // fact: the corpus carries no filing date, so there is none to use. It
@@ -309,7 +319,13 @@ export async function processItem(
       {
         provider,
         now: () => Date.now(),
-        submittedOn: new Date().toISOString().slice(0, 10),
+        submittedOn: filedOn,
+        asOf: judgedAt,
+        // The rule set as it stood for a filing on that date, as this
+        // deployment understands it now (D41, D42). Read from the archive
+        // rather than the file so the verdict can be rebuilt later against the
+        // rules that actually produced it.
+        rules: await ruleSetAsAt(env.DB, filedOn, judgedAt),
       },
     )
 

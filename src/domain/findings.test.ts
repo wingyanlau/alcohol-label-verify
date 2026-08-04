@@ -170,6 +170,89 @@ describe('a model may propose a rule; only a person may enact one', () => {
   })
 })
 
+/**
+ * Selection from the archive rather than the file (D41, D42).
+ *
+ * The rules arrive already narrowed to both dates by a database query, so all
+ * that remains here is the product-type question. Doing the temporal filtering
+ * again would be a second implementation of the same predicate — the kind that
+ * agrees right up until it does not.
+ */
+describe('rules supplied by the caller, already narrowed to two dates', () => {
+  const ruleOf = (over: Record<string, unknown> = {}) =>
+    ({
+      id: 'X-RULE',
+      ruleVersion: 1,
+      regulation: '27-CFR-5.63',
+      effectiveFrom: null,
+      effectiveTo: null,
+      supersedes: null,
+      requirement: 'a requirement',
+      appliesWhen: { productType: ['Distilled spirits'] },
+      check: { kind: 'field-present', field: 'brandName' },
+      severity: 'blocking',
+      status: 'active',
+      automation: 'advisory',
+      ...over,
+    }) as unknown as (typeof POLICY_SET)['rules'][number]
+
+  const withRules = (rules: unknown[], productType: string | null = 'Distilled spirits') =>
+    assessPolicy({
+      application: spirits({ productType }),
+      extraction: goodLabel(),
+      warning: warningOk,
+      submittedOn: '2026-08-01',
+      asOf: '2026-08-04T10:00:00.000Z',
+      rules: rules as (typeof POLICY_SET)['rules'],
+    })
+
+  it('applies the rules it was given rather than the loaded file', () => {
+    const r = withRules([ruleOf()])
+    expect(r.binding.selectedRuleIds).toEqual(['X-RULE'])
+  })
+
+  it('still asks which product type a rule governs', () => {
+    // The half of selection that is not a date, and the only half left here.
+    expect(withRules([ruleOf()], 'Wine').findings.map((f) => f.ruleId)).toEqual([
+      'POLICY-SELECTION',
+    ])
+  })
+
+  it('applies a rule that names no product type to everything', () => {
+    const r = withRules([ruleOf({ appliesWhen: {} })], 'Wine')
+    expect(r.binding.selectedRuleIds).toEqual(['X-RULE'])
+  })
+
+  it('never applies a draft, however it arrived', () => {
+    // The archive query already excludes them; asserting it here too is
+    // deliberate. This is the property §18.5a rests on, and it should not
+    // depend on exactly one layer remembering.
+    const r = withRules([ruleOf({ status: 'draft' })])
+    expect(r.binding.selectedRuleIds).toEqual([])
+  })
+
+  it('binds both dates, so the set can be rebuilt later (D41)', () => {
+    const { binding } = withRules([ruleOf()])
+    expect(binding.validOn).toBe('2026-08-01')
+    expect(binding.asOf).toBe('2026-08-04T10:00:00.000Z')
+  })
+
+  it('returns the rules as applied, for the record to snapshot', () => {
+    // Not shown to anyone — it is what keeps the verdict defensible after the
+    // archive has moved on (D44).
+    const r = withRules([ruleOf()])
+    expect(r.applied.map((x) => x.id)).toEqual(['X-RULE'])
+    expect(r.applied[0]?.check).toEqual({ kind: 'field-present', field: 'brandName' })
+  })
+
+  it('reports that nothing was checked when the archive had nothing in force', () => {
+    const r = withRules([])
+    expect(r.findings.map((f) => f.ruleId)).toEqual(['POLICY-SELECTION'])
+    expect(r.applied).toEqual([])
+    expect(r.findings[0]?.evidence).toMatch(/in force on 2026-08-01/)
+  })
+})
+
 describe('selection — which rules govern this submission (D25)', () => {
   it('selects the rules for the product type the application states', () => {
     const ids = assess(spirits()).binding.selectedRuleIds
@@ -206,6 +289,16 @@ describe('selection — which rules govern this submission (D25)', () => {
     expect(binding.selectionInputs).toEqual({ productType: 'Distilled spirits' })
     expect(binding.submittedOn).toBe('2026-08-01')
     expect(binding.selectedRuleIds.length).toBe(assess(spirits()).findings.length)
+  })
+})
+
+describe('the judging moment, when the caller does not state one', () => {
+  it('defaults to the filing date', () => {
+    // Right for a submission being checked now, and what every caller did
+    // before transaction time existed.
+    const { binding } = assess(spirits())
+    expect(binding.asOf).toBe(binding.validOn)
+    expect(binding.validOn).toBe('2026-08-01')
   })
 })
 

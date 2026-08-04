@@ -74,11 +74,14 @@ function result(overrides: Partial<VerifyResult> = {}): VerifyResult {
     },
     judgementCount: 0,
     findings: [],
+    appliedRules: [],
     policy: {
       policySetVersion: 1,
       selectedRuleIds: [],
       selectionInputs: {},
       submittedOn: '2026-08-01',
+      validOn: '2026-08-01',
+      asOf: '2026-08-01T00:00:00.000Z',
     },
     provenance: { label: PROVENANCE, record: PROVENANCE },
     rawResponses: { label: '{"fields":{}}', record: '{"fields":{}}' },
@@ -123,6 +126,8 @@ describe('buildPersistPlan', () => {
           selectedRuleIds: ['DS-STANDARD-OF-FILL'],
           selectionInputs: { productType: 'Distilled spirits' },
           submittedOn: '2026-08-01',
+          validOn: '2026-08-01',
+          asOf: '2026-08-01T00:00:00.000Z',
         },
       })
 

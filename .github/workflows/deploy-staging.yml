@@ -244,29 +244,50 @@ jobs:
       # same reason, as the schema: both have to be right before the revision
       # serves a request. Reconciliation is idempotent, so a deploy that
       # changed no rule reports "already agrees" and writes nothing.
+      # The policy archive is brought current in the same place, and for the
+      # same reason, as the schema: both have to be right before the revision
+      # serves a request. Reconciliation is idempotent, so a deploy that
+      # changed no rule reports "already agrees" and writes nothing.
+      #
+      # Retried, because a route that is new in this revision is not reachable
+      # the instant the version check passes. Cloudflare serves the previous
+      # worker for a few seconds afterwards, and that worker answers an unknown
+      # path with a perfectly valid `{"error":"not_found"}` — which the first
+      # version of this step read as "no actions" and failed on. The body was
+      # right there in the log saying not_found, and the assertion was written
+      # to look past it.
       - name: Reconcile the policy archive
         run: |
           set -euo pipefail
           url="https://alcohol-label-verify-staging.wing-lawrence.workers.dev"
-          body=$(curl -sS --max-time 60 -X POST "$url/policy/reconcile")
-          echo "$body" | jq '{actions, summary, events}'
 
-          # A reconciliation that could not run leaves the deployment enforcing
-          # rules nobody reviewed, which is exactly the state the next step
-          # refuses. Fail here so the cause is named rather than inferred.
-          echo "$body" | jq -e 'has("actions")' >/dev/null \
-            || { echo "::error::reconciliation did not report a result"; exit 1; }
+          for attempt in $(seq 1 10); do
+            code=$(curl -sS --max-time 60 -X POST "$url/policy/reconcile" \
+                     -o /tmp/reconcile.json -w '%{http_code}') || true
+            if [ "$code" = "200" ] && jq -e 'has("actions")' /tmp/reconcile.json >/dev/null 2>&1; then
+              jq '{actions, summary, events}' /tmp/reconcile.json
+              exit 0
+            fi
+            echo "attempt $attempt: http $code — $(head -c 200 /tmp/reconcile.json)"
+            sleep 6
+          done
+
+          # Named, not inferred. A reconciliation that could not run leaves the
+          # deployment enforcing rules nobody reviewed, and the next step
+          # refuses that — but the cause belongs here.
+          echo "::error::reconciliation did not report a result after 10 attempts"
+          cat /tmp/reconcile.json
+          exit 1
 
       # Drift between the reviewed file and the rows is a deployment problem,
       # not a request failure — the rules being enforced would not be the ones
-      # anybody approved. /health/policy answers 503 when they disagree, so a
-      # bare -f is the whole assertion.
+      # anybody approved. /health/policy answers 503 when they disagree.
       - name: Verify the archive matches what was reviewed
         run: |
           set -euo pipefail
           url="https://alcohol-label-verify-staging.wing-lawrence.workers.dev"
           body=$(curl -sS --max-time 60 "$url/health/policy") || true
-          echo "$body" | jq '{rows, pending, inSync, activeInFile, draftsInFile}'
+          echo "$body" | jq '{rows, pending, inSync, activeInFile, draftsInFile}' || echo "$body"
           echo "$body" | jq -e '.inSync == true' >/dev/null \
             || { echo "::error::policy archive does not match the reviewed file"; exit 1; }
 

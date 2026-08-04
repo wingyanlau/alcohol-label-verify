@@ -24,7 +24,7 @@ import type { PolicyFinding } from './evaluate.js'
 import type { ExtractionProvenance, ExtractionProvider } from './extraction.js'
 import type { PolicyBinding } from './findings.js'
 import { assessPolicy } from './findings.js'
-import type { PolicySet } from './policy.js'
+import type { PolicyRule, PolicySet } from './policy.js'
 import type { WarningReference } from './reference.js'
 import type { ApplicationData, Extraction, FieldVerdict, Outcome, WarningVerdict } from './types.js'
 import { FIELDS } from './types.js'
@@ -79,6 +79,13 @@ export interface VerifyResult {
   readonly findings: readonly PolicyFinding[]
   /** Which rules were applied, and what they were selected on (D26). */
   readonly policy: PolicyBinding
+  /**
+   * The rules as applied, for the record to snapshot onto each finding (D44).
+   *
+   * Not shown to anyone. A finding is what the agent reads; this is what the
+   * verdict needs to stay defensible once the archive has moved on.
+   */
+  readonly appliedRules: readonly PolicyRule[]
   readonly application: ApplicationData
   readonly labelExtraction: Extraction
   readonly provenance: {
@@ -136,6 +143,20 @@ export interface VerifyOptions {
   readonly submittedOn: string
   /** Defaults to the loaded archive; injectable so tests can pin a set. */
   readonly policySet?: PolicySet
+  /**
+   * The rules to select from, already narrowed to both dates by the caller
+   * (`ruleSetAsAt`). Absent means fall back to the reviewed file, narrowed by
+   * effective date alone — which is all a file can express.
+   */
+  readonly rules?: readonly PolicyRule[] | undefined
+  /**
+   * When this deployment judged the submission (D41, D42).
+   *
+   * Bound to the verdict alongside the filing date, and together they rebuild
+   * the exact rule set later. Defaults to the filing date, which is right for a
+   * submission being checked now.
+   */
+  readonly asOf?: string | undefined
 }
 
 /** Turn a record-region extraction into application data. */
@@ -202,6 +223,8 @@ export async function verifySubmission(
     extraction: labelResult.extraction,
     warning,
     submittedOn: opts.submittedOn,
+    asOf: opts.asOf,
+    rules: opts.rules,
     policySet: opts.policySet,
   })
   const findings = assessment.findings
@@ -217,6 +240,7 @@ export async function verifySubmission(
     warning,
     findings,
     policy: assessment.binding,
+    appliedRules: assessment.applied,
     application,
     labelExtraction: labelResult.extraction,
     provenance: {

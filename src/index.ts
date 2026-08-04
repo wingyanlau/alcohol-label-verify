@@ -965,6 +965,9 @@ export default {
             labelImageUrl: `/batch/${jobId}/submission/${submissionId}/label.png`,
             sourceName,
             env,
+            // The archive, so this verdict binds rules that can be rebuilt
+            // later rather than the file as it happens to read today.
+            db: env.DB,
           },
         )
 

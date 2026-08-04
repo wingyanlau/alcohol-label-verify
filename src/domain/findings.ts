@@ -21,7 +21,7 @@
 import rawPolicySet from '../../config/policy-set.json' with { type: 'json' }
 import type { EvaluationContext, PolicyFinding } from './evaluate.js'
 import { evaluateRule } from './evaluate.js'
-import type { PolicySet, SelectionInputs } from './policy.js'
+import type { PolicyRule, PolicySet, SelectionInputs } from './policy.js'
 import { rulesFor, validatePolicySet } from './policy.js'
 import type { ApplicationData, Extraction, WarningVerdict } from './types.js'
 import { FIELDS } from './types.js'
@@ -60,11 +60,33 @@ export interface PolicyBinding {
   readonly selectionInputs: SelectionInputs
   /** The submission's own date — the one that decides which rules were in force. */
   readonly submittedOn: string
+  /**
+   * The two dates that reconstruct this rule set (D41, D42).
+   *
+   * `validOn` is the filing date, and is the same value as `submittedOn` — kept
+   * under both names only while the version-era field is still written.
+   * `asOf` is when this deployment judged the submission, and is the one the
+   * version integer never expressed: it is what lets a verdict be re-derived
+   * against the rules as they then stood, rather than refused because they have
+   * since moved.
+   */
+  readonly validOn: string
+  readonly asOf: string
 }
 
 export interface PolicyAssessment {
   readonly binding: PolicyBinding
   readonly findings: readonly PolicyFinding[]
+  /**
+   * The rules actually applied, so the caller can snapshot them onto each
+   * finding (D44).
+   *
+   * Returned rather than folded into `PolicyFinding`: a finding is what the
+   * agent reads, and thickening it with a quote, a citation and a parameter
+   * blob would put the record's needs into the screen's type. The caller that
+   * persists has both and can join them.
+   */
+  readonly applied: readonly PolicyRule[]
 }
 
 export interface AssessInput {
@@ -73,6 +95,22 @@ export interface AssessInput {
   readonly warning: WarningVerdict | null
   /** The date the application was filed. Rules in force *then* govern it. */
   readonly submittedOn: string
+  /**
+   * When this deployment judged the submission. Defaults to the filing date,
+   * which is right for a submission being checked now and is what every caller
+   * did before transaction time existed.
+   */
+  readonly asOf?: string | undefined
+  /**
+   * The rules to select from, **already narrowed to the two dates**.
+   *
+   * Supplied by the caller because that narrowing is a database query
+   * (`ruleSetAsAt`) and this module is in the pure core. When absent the loaded
+   * file is used and narrowed here by effective date only — the path every
+   * caller took before the archive existed, kept so a test can pin a set
+   * without a database.
+   */
+  readonly rules?: readonly PolicyRule[] | undefined
   /** Defaults to the loaded archive; injectable so tests can pin a set. */
   readonly policySet?: PolicySet | undefined
 }
@@ -141,34 +179,67 @@ function contextFor(extraction: Extraction, warning: WarningVerdict | null): Eva
   }
 }
 
+/**
+ * Which of a set of rules govern this submission.
+ *
+ * The product-type half of selection, split from the temporal half. When the
+ * caller supplies `rules` those have already been narrowed to `validOn` and
+ * `asOf` by a database query, and doing it twice would be a second
+ * implementation of the same predicate — the kind that agrees right up until it
+ * does not.
+ */
+function governedBy(rules: readonly PolicyRule[], inputs: SelectionInputs): readonly PolicyRule[] {
+  return rules.filter((rule) => {
+    if (rule.status !== 'active') return false
+    const types = rule.appliesWhen.productType
+    if (types === undefined || types.length === 0) return true
+    return inputs.productType !== undefined && types.includes(inputs.productType)
+  })
+}
+
 export function assessPolicy({
   application,
   extraction,
   warning,
   submittedOn,
+  asOf,
+  rules,
   policySet = POLICY_SET,
 }: AssessInput): PolicyAssessment {
   const productType = application.productType ?? undefined
   // Absent means absent: an input recorded as `undefined` and one never
   // recorded should not be distinguishable in the binding.
   const selectionInputs: SelectionInputs = productType === undefined ? {} : { productType }
-  const selected = rulesFor(policySet, selectionInputs, submittedOn)
+  const judgedAt = asOf ?? submittedOn
+
+  // Rules from the archive arrive already narrowed to both dates; the file path
+  // is narrowed here by effective date alone, which is all a file can express.
+  const selected =
+    rules === undefined
+      ? rulesFor(policySet, selectionInputs, submittedOn)
+      : governedBy(rules, selectionInputs)
 
   const binding: PolicyBinding = {
     policySetVersion: policySet.policySetVersion,
     selectedRuleIds: selected.map((r) => r.id),
     selectionInputs,
     submittedOn,
+    validOn: submittedOn,
+    asOf: judgedAt,
   }
 
   if (selected.length === 0) {
     const evidence =
       productType === undefined
         ? 'the application states no product type, so no rule could be selected and nothing was checked against the policy set'
-        : `no rule in policy set v${policySet.policySetVersion} governs product type "${productType}", so nothing was checked against the policy set`
-    return { binding, findings: [selectionUndetermined(evidence)] }
+        : `no rule governing product type "${productType}" was in force on ${submittedOn}, so nothing was checked against the policy set`
+    return { binding, findings: [selectionUndetermined(evidence)], applied: [] }
   }
 
   const ctx = contextFor(extraction, warning)
-  return { binding, findings: selected.map((rule) => evaluateRule(rule, ctx)) }
+  return {
+    binding,
+    findings: selected.map((rule) => evaluateRule(rule, ctx)),
+    applied: selected,
+  }
 }

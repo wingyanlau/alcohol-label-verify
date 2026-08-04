@@ -16,6 +16,7 @@
  */
 
 import type { ExtractionProvenance } from '../domain/extraction.js'
+import { citationFor } from '../domain/findings.js'
 import type { FieldVerdict, WarningVerdict } from '../domain/types.js'
 import type { VerifyResult } from '../domain/verify.js'
 import { AGGREGATION_VERSION, POLICY_VERSION, RULESET_VERSION } from './versions.js'
@@ -82,6 +83,9 @@ export interface VerdictRow {
   /** JSON object of the record values selection ran on. */
   readonly selectionInputs: string | null
   readonly submittedOn: string | null
+  /** The two dates that rebuild the rule set (D41, D42). Always written. */
+  readonly validOn: string
+  readonly asOf: string
 }
 
 export interface PolicyFindingRow {
@@ -90,6 +94,22 @@ export interface PolicyFindingRow {
   readonly state: string
   readonly severity: string
   readonly evidence: string
+  /**
+   * The rule as applied, frozen onto the finding (D44).
+   *
+   * The citation used to be resolved against *today's* archive when somebody
+   * read the verdict, so a rule since retired yielded nothing and a rule whose
+   * regulation moved yielded the wrong section. The parameters that decided the
+   * outcome were stored nowhere at all — two rules with identical prose and
+   * different permitted values were indistinguishable in the record.
+   *
+   * Null for `POLICY-SELECTION`, which cites no rule because none was reached.
+   */
+  readonly regulationId: string | null
+  readonly citation: string | null
+  readonly quote: string | null
+  readonly checkParams: string | null
+  readonly approvedBy: string | null
 }
 
 export interface PersistPlan {
@@ -206,16 +226,32 @@ export function buildPersistPlan(
       selectedRuleIds: applied ? JSON.stringify(result.policy.selectedRuleIds) : null,
       selectionInputs: applied ? JSON.stringify(result.policy.selectionInputs) : null,
       submittedOn: applied ? result.policy.submittedOn : null,
+      // Always written, unlike the binding above: the dates are true of the
+      // judgement whether or not any rule was selected, and a replay needs them
+      // precisely when nothing was applied — to establish that nothing SHOULD
+      // have been.
+      validOn: result.policy.validOn,
+      asOf: result.policy.asOf,
     },
     fields: fieldRows(result.fields),
     warning: warningRows(result.warning),
-    findings: result.findings.map((f) => ({
-      ruleId: f.ruleId,
-      requirement: f.requirement,
-      state: f.state,
-      severity: f.severity,
-      evidence: f.evidence,
-    })),
+    findings: result.findings.map((f) => {
+      // The rule this finding came from, as it was applied — not as the archive
+      // holds it now.
+      const applied = result.appliedRules.find((r) => r.id === f.ruleId)
+      return {
+        ruleId: f.ruleId,
+        requirement: f.requirement,
+        state: f.state,
+        severity: f.severity,
+        evidence: f.evidence,
+        regulationId: applied?.regulation ?? null,
+        citation: applied === undefined ? null : citationFor(applied.id),
+        quote: applied?.provenance?.quote ?? null,
+        checkParams: applied === undefined ? null : JSON.stringify(applied.check),
+        approvedBy: applied?.approval?.by ?? null,
+      }
+    }),
     extractions,
   }
 }
@@ -267,8 +303,8 @@ export async function persistResult(
            (id, submission_id, outcome, ruleset_version, reference_data_version,
             policy_version, aggregation_version, extraction_ids, created_at,
             warning_legible, policy_set_version, selected_rule_ids,
-            selection_inputs, submitted_on)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            selection_inputs, submitted_on, valid_on, as_of)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         plan.verdict.id,
@@ -285,6 +321,8 @@ export async function persistResult(
         plan.verdict.selectedRuleIds,
         plan.verdict.selectionInputs,
         plan.verdict.submittedOn,
+        plan.verdict.validOn,
+        plan.verdict.asOf,
       ),
   )
 
@@ -293,10 +331,23 @@ export async function persistResult(
       db
         .prepare(
           `INSERT INTO policy_finding
-             (verdict_id, rule_id, requirement, state, severity, evidence)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+             (verdict_id, rule_id, requirement, state, severity, evidence,
+              regulation_id, citation, quote, check_params, approved_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(plan.verdict.id, f.ruleId, f.requirement, f.state, f.severity, f.evidence),
+        .bind(
+          plan.verdict.id,
+          f.ruleId,
+          f.requirement,
+          f.state,
+          f.severity,
+          f.evidence,
+          f.regulationId,
+          f.citation,
+          f.quote,
+          f.checkParams,
+          f.approvedBy,
+        ),
     )
   }
 
