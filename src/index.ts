@@ -37,16 +37,34 @@ import { approvalFor, isApproved } from './domain/approval.js'
 import { ExtractionContractError } from './domain/extraction.js'
 import { POLICY_SET } from './domain/findings.js'
 import { configuredLegibilityFloor } from './domain/legibility.js'
+import type { PolicyRule } from './domain/policy.js'
 import { referenceIsUnverified, warningReference } from './domain/reference.js'
 import type { Env, WorkMessage } from './env.js'
 import { checkImageIntake } from './normalise/image.js'
 import { IntakeRejected } from './normalise/normaliser.js'
-import { archiveHealth, reconcileArchive } from './policy/archive.js'
+import { archiveHealth, reconcileArchive, ruleSetAsAt } from './policy/archive.js'
 import { gatewayFrom } from './providers/gateway.js'
 import { PROMPT_VERSION, promptDigest } from './providers/prompt.js'
 import { createProvider, knownProviderNames, specFor } from './providers/registry.js'
 import { checkReviewRequest, ReviewRejected, reviewOne } from './review/single.js'
 import { PAGE_HTML } from './ui/page.js'
+
+/**
+ * The rules a replay must re-derive against: the archive as it stood at the
+ * verdict's own two dates (D41, D42).
+ *
+ * Empty options for a verdict written before migration 0008, which carries
+ * neither date. Reaching for today's rules there would be the exact failure the
+ * dates exist to prevent, so it falls back to the reviewed file and the version
+ * comparison refuses it instead.
+ */
+async function rulesForReplay(
+  db: D1Database,
+  stored: { validOn: string | null; asOf: string | null },
+): Promise<{ rules?: readonly PolicyRule[] }> {
+  if (stored.validOn === null || stored.asOf === null) return {}
+  return { rules: await ruleSetAsAt(db, stored.validOn, stored.asOf) }
+}
 
 export type ConfigProblem = { readonly setting: string; readonly problem: string }
 
@@ -630,7 +648,8 @@ export default {
       const findings: unknown[] = []
       for (const row of rows) {
         try {
-          const report = await replayVerdict(await loadStoredVerdict(env.DB, row.submission_id))
+          const stored = await loadStoredVerdict(env.DB, row.submission_id)
+          const report = await replayVerdict(stored, await rulesForReplay(env.DB, stored))
           counts[report.status] = (counts[report.status] ?? 0) + 1
           // Only genuine disagreement is quoted back. The other non-identical
           // statuses are facts about the record's age, not about correctness.
@@ -672,7 +691,8 @@ export default {
       if (submissionId === '') return json({ error: 'no submission id' }, 400)
 
       try {
-        const report = await replayVerdict(await loadStoredVerdict(env.DB, submissionId))
+        const stored = await loadStoredVerdict(env.DB, submissionId)
+        const report = await replayVerdict(stored, await rulesForReplay(env.DB, stored))
         return json(report, report.status === 'identical' ? 200 : 409)
       } catch (error) {
         if (error instanceof ReplayUnavailableError) {

@@ -30,6 +30,7 @@
  */
 
 import { POLICY_SET } from '../domain/findings.js'
+import type { PolicyRule } from '../domain/policy.js'
 import { warningReference } from '../domain/reference.js'
 import type { ApplicationData, Outcome } from '../domain/types.js'
 import { FIELDS } from '../domain/types.js'
@@ -87,6 +88,16 @@ export interface StoredVerdict {
    * disagreement as a regression in this system.
    */
   readonly submittedOn: string | null
+  /**
+   * The two dates that rebuild the rule set (D41, D42).
+   *
+   * Null for every verdict written before migration 0008. Such a verdict cannot
+   * be reconstructed — not because anything is wrong, but because the record
+   * lacks the inputs that would identify what governed it — and it falls back
+   * to the version comparison below.
+   */
+  readonly validOn: string | null
+  readonly asOf: string | null
   readonly application: ApplicationData
   readonly fields: Readonly<Record<string, StoredField>>
   readonly warningSegments: readonly StoredWarningSegment[]
@@ -159,6 +170,8 @@ interface VerdictRow {
   /** JSON. Carries the product type, which no field_verdict row can. */
   selection_inputs: string | null
   submitted_on: string | null
+  valid_on: string | null
+  as_of: string | null
 }
 
 /**
@@ -218,7 +231,8 @@ export async function loadStoredVerdict(
     .prepare(
       `SELECT id, submission_id, outcome, warning_legible, ruleset_version, policy_version,
               aggregation_version, reference_data_version, created_at,
-              policy_set_version, selection_inputs, submitted_on
+              policy_set_version, selection_inputs, submitted_on,
+              valid_on, as_of
          FROM verdict
         WHERE submission_id = ?1 AND superseded_by IS NULL
         ORDER BY created_at DESC
@@ -293,6 +307,8 @@ export async function loadStoredVerdict(
     referenceDataVersion: verdict.reference_data_version,
     policySetVersion: verdict.policy_set_version,
     submittedOn: verdict.submitted_on,
+    validOn: verdict.valid_on,
+    asOf: verdict.as_of,
     application,
     fields: Object.fromEntries(
       fieldRows.results.map((r) => [r.field, { state: r.state, observed: r.observed }]),
@@ -426,12 +442,22 @@ function versionDrift(stored: StoredVerdict): string[] {
   // verdict produced under an earlier policy must replay as not-comparable
   // rather than be silently re-derived under today's rules.
   //
-  // Only when the verdict carried a binding. A null means no rule was applied
-  // — a verdict from before the policy layer, or one whose product type was
-  // never stated — and replay applies none either, so there is nothing that
-  // moved. Calling those not-comparable would retire the endpoint for every
-  // record already written.
-  if (stored.policySetVersion !== null) {
+  // Only for a verdict that cannot be RECONSTRUCTED (D41, D42).
+  //
+  // This check was the whole cost of identifying a rule set by a version: any
+  // policy change made every prior verdict permanently not-comparable, because
+  // the rules that produced it no longer existed anywhere to compare against.
+  // A verdict carrying `validOn` and `asOf` is not in that position — the
+  // archive still holds the rules as they stood at both dates, so it can be
+  // re-derived against the rules that actually produced it, and the set having
+  // moved since is irrelevant to whether it reproduces.
+  //
+  // A null pair means a verdict from before migration 0008, which genuinely
+  // cannot be reconstructed. Those keep the version comparison, and a null
+  // `policySetVersion` on top of that means no rule was applied at all — replay
+  // applies none either, so nothing moved.
+  const reconstructable = stored.validOn !== null && stored.asOf !== null
+  if (!reconstructable && stored.policySetVersion !== null) {
     check('policy set', stored.policySetVersion, POLICY_SET.policySetVersion)
   }
   // The one that matters most: FR-5 is word-for-word, so a verdict produced
@@ -453,7 +479,24 @@ function versionDrift(stored: StoredVerdict): string[] {
  * is coincidence, and reporting it as verification would be the single most
  * misleading thing this endpoint could do.
  */
-export async function replayVerdict(stored: StoredVerdict): Promise<ReplayReport> {
+export interface ReplayOptions {
+  /**
+   * The rule set as it stood at the verdict's own two dates, loaded by the
+   * caller with `ruleSetAsAt(db, stored.validOn, stored.asOf)`.
+   *
+   * Supplied rather than fetched because this module holds no database handle,
+   * and because a replay that quietly reached for today's rules is exactly the
+   * failure the two dates exist to prevent. Absent means fall back to the
+   * reviewed file — correct for a verdict too old to carry the dates, and the
+   * only thing available to a test without a database.
+   */
+  readonly rules?: readonly PolicyRule[] | undefined
+}
+
+export async function replayVerdict(
+  stored: StoredVerdict,
+  opts: ReplayOptions = {},
+): Promise<ReplayReport> {
   const base = {
     verdictId: stored.verdictId,
     submissionId: stored.submissionId,
@@ -520,7 +563,11 @@ export async function replayVerdict(stored: StoredVerdict): Promise<ReplayReport
       //
       // Null for a verdict that bound no rules; the date is then irrelevant,
       // because selection has nothing to select whatever day it is told.
-      submittedOn: stored.submittedOn ?? stored.createdAt.slice(0, 10),
+      submittedOn: stored.validOn ?? stored.submittedOn ?? stored.createdAt.slice(0, 10),
+      // The moment the ORIGINAL judgement was made, so selection sees the
+      // archive as it stood then rather than as it stands now.
+      ...(stored.asOf === null ? {} : { asOf: stored.asOf }),
+      ...(opts.rules === undefined ? {} : { rules: opts.rules }),
     },
   )
 

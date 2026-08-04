@@ -71,6 +71,8 @@ const stored = (over: Partial<StoredVerdict> = {}): StoredVerdict => ({
   referenceDataVersion: 1,
   policySetVersion: POLICY_SET.policySetVersion,
   submittedOn: '2026-08-01',
+  validOn: '2026-08-01',
+  asOf: '2026-08-04T10:00:00.000Z',
   application,
   fields: {
     brandName: { state: 'MATCH', observed: 'Old Tom Distillery' },
@@ -241,6 +243,52 @@ describe('the application record, rebuilt from the row', () => {
   })
 })
 
+/**
+ * Reconstruction, which is what the two dates were for (D41, D42).
+ *
+ * Identifying a rule set by a version number had one cost above all others:
+ * ANY policy change made EVERY prior verdict permanently not-comparable,
+ * because the rules that produced it no longer existed anywhere to compare
+ * against. The endpoint degraded a little further with every amendment, and
+ * would eventually have refused everything.
+ */
+describe('a verdict that can be rebuilt is not refused for a moved policy set', () => {
+  it('re-derives across a policy-set change it carries the dates for', async () => {
+    // The set has moved on — that is the ordinary case, not an exception — and
+    // the verdict still reproduces, because the archive still holds the rules
+    // as they stood at its own two dates.
+    const report = await replayVerdict(stored({ policySetVersion: 99 }))
+    expect(report.status).not.toBe('not-comparable')
+    expect(report.differences?.join(' ') ?? '').not.toMatch(/policy set/)
+  })
+
+  it('still refuses a verdict too old to carry the dates', async () => {
+    // Written before migration 0008. It genuinely cannot be reconstructed —
+    // not because anything is wrong, but because the record lacks the inputs
+    // that would say what governed it. Refusing is the honest answer.
+    const report = await replayVerdict(stored({ policySetVersion: 99, validOn: null, asOf: null }))
+    expect(report.status).toBe('not-comparable')
+    expect(report.differences?.join(' ')).toMatch(/policy set.*99/)
+  })
+
+  it('re-derives against the rules it is handed, not the ones loaded today', async () => {
+    // The caller loads the archive as at the verdict's dates. Handing it an
+    // empty set must change the outcome — otherwise the parameter is decorative
+    // and the reconstruction is not really happening.
+    const report = await replayVerdict(stored(), { rules: [] })
+    expect(report.replayedOutcome).not.toBe('CLEAR')
+  })
+
+  it('reproduces the verdict when handed the rules that produced it', async () => {
+    const governing = POLICY_SET.rules.filter(
+      (r) =>
+        r.status === 'active' && (r.appliesWhen.productType ?? []).includes('Distilled spirits'),
+    )
+    const report = await replayVerdict(stored(), { rules: governing })
+    expect(report.status).toBe('identical')
+  })
+})
+
 describe('the filing date a replay judges by', () => {
   it('uses the date the application was filed, not today', async () => {
     // Standards of fill changed in January 2025. Re-deriving a 2024 filing
@@ -259,13 +307,19 @@ describe('the filing date a replay judges by', () => {
 })
 
 describe('rules that have moved since the verdict was recorded', () => {
-  it('refuses when the rule set has moved (§18.3)', async () => {
-    // The rule set joins the versioned identity set. A verdict reached under an
-    // earlier policy must not be silently re-derived under today's rules and
-    // reported as agreeing.
+  /*
+   * Superseded by D41/D42, and rewritten rather than deleted so the change is
+   * visible where the old rule lived.
+   *
+   * §18.3 made a moved rule set a refusal outright, because the rules that
+   * produced the verdict no longer existed anywhere. They do now — the archive
+   * keeps them under both windows — so a verdict carrying its two dates is
+   * rebuilt instead of refused. The refusal survives only for a verdict too old
+   * to carry them, which is asserted above.
+   */
+  it('no longer refuses a moved rule set on its own', async () => {
     const report = await replayVerdict(stored({ policySetVersion: 99 }))
-    expect(report.status).toBe('not-comparable')
-    expect(report.differences?.join(' ')).toMatch(/policy set.*99/)
+    expect(report.status).not.toBe('not-comparable')
   })
 
   it('does not refuse a verdict that bound no rule set at all', async () => {
