@@ -9,7 +9,7 @@
  * §9.5 (configuration).
  */
 
-import { DEPLOY_AGENT, SYSTEM_AGENT } from './batch/agent.js'
+import { SYSTEM_AGENT } from './batch/agent.js'
 import { appendAudit, readWholeChain, verifyChain } from './batch/audit.js'
 import { MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
 import { BatchTooLarge } from './batch/cap.js'
