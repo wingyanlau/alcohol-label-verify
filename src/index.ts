@@ -966,8 +966,11 @@ export default {
           },
         )
 
+        // 'single', so this job does not surface on the batch screen. It exists
+        // to hang an audit record off, not to be watched as a worklist.
         await env.DB.prepare(
-          `INSERT INTO job (id, created_at, state, item_count) VALUES (?, ?, 'COMPLETE', 1)`,
+          `INSERT INTO job (id, created_at, state, item_count, kind)
+           VALUES (?, ?, 'COMPLETE', 1, 'single')`,
         )
           .bind(jobId, now)
           .run()

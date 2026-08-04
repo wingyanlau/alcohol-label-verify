@@ -100,7 +100,11 @@ export async function startBatch(env: Env): Promise<BatchStarted> {
   )
 
   await env.DB.prepare(
-    `INSERT INTO job (id, created_at, state, item_count) VALUES (?, ?, 'PROCESSING', ?)`,
+    // Explicit rather than left to the column default: the kind is what decides
+    // whether this job ever appears on the batch screen, and a default is not
+    // where a decision like that should live.
+    `INSERT INTO job (id, created_at, state, item_count, kind)
+     VALUES (?, ?, 'PROCESSING', ?, 'batch')`,
   )
     .bind(jobId, now, prepared.length)
     .run()

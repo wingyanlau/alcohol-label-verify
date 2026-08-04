@@ -40,15 +40,22 @@ export function isRunning(counts: JobStateCounts): boolean {
 }
 
 /**
- * The most recent job, whatever state it is in.
+ * The most recent BATCH job, whatever state it is in.
  *
  * Most recent rather than most recent *running*: when nothing is in flight the
  * page still shows the last worklist, so results survive a reload and a
  * reviewer opening the link sees the outcome instead of a bare button.
+ *
+ * Batch rather than any job, because `/review` also inserts one — a job of one,
+ * since every review needs an audit record and the record hangs off a job.
+ * Without the filter this returned whichever came last, so performing a single
+ * review replaced the corpus on the batch screen with a one-item worklist. It
+ * was reported twice as the test cases having disappeared; nothing had, and the
+ * page was faithfully showing the job it was handed.
  */
 export async function loadCurrentJob(db: D1Database): Promise<CurrentJob | null> {
   const job = await db
-    .prepare(`SELECT id FROM job ORDER BY created_at DESC LIMIT 1`)
+    .prepare(`SELECT id FROM job WHERE kind = 'batch' ORDER BY created_at DESC LIMIT 1`)
     .first<{ id: string }>()
   if (job === null) return null
 
