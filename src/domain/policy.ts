@@ -56,6 +56,16 @@ export const CHECK_KINDS = [
   'value-in-set',
   'numeric-consistency',
   'statutory-text',
+  // Added when the BAM's class-and-type chapter showed a shape the first five
+  // could not express: a bound on one field determined by the VALUE OF
+  // ANOTHER. Minimum bottling strength depends on the labelled class — whisky
+  // and gin at 40% ABV, liqueurs at 30%, rock-and-bourbon at 24% — so the
+  // check needs both fields at once.
+  //
+  // Worth noting how this arrived: a new shape of check required a code change
+  // and a review, which is what §18.2 intends. A rule language would have
+  // absorbed it silently into a config file, untested.
+  'numeric-bound',
 ] as const
 
 export type CheckKind = (typeof CHECK_KINDS)[number]

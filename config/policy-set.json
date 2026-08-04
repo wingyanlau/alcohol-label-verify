@@ -90,11 +90,22 @@
       "textDigest": "see config/warning-statement.json",
       "extractedFromIssueDate": "2026-07-30",
       "$comment": "Extracted earlier and verified byte for byte; kept in its own file because the corpus is generated from it."
+    },
+    {
+      "id": "TTB-BAM-VOL2-CH4",
+      "title": 27,
+      "part": 5,
+      "section": "BAM vol. 2 ch. 4",
+      "heading": "Class and type designation (Beverage Alcohol Manual, distilled spirits)",
+      "amendmentCitation": "04/2007 edition",
+      "textDigest": "pages 1-6 and 9-12 read; not fingerprinted (PDF, not eCFR XML)",
+      "extractedFromIssueDate": "2007-04",
+      "$comment": "TTB's own guidance restating the standards of identity in 27 CFR 5 subpart C. Cited as the practical source; the binding text is the CFR."
     }
   ],
   "coverage": {
     "$comment": "Stated so silence is never read as compliance.",
-    "Distilled spirits": "mandatory information, alcohol content, standards of fill",
+    "Distilled spirits": "mandatory information, alcohol content, standards of fill; class/type minimum bottling strength extracted as a DRAFT from BAM ch. 4 (pages 1-6, 9-12 of 30 read)",
     "Wine": "standards of fill only",
     "Malt beverages": "not extracted — part 7 read for section titles only. A rule set that half-covers a commodity is worse than one that says it does not."
   },
@@ -294,6 +305,65 @@
       "status": "active",
       "automation": "advisory",
       "$note": "Implemented before this archive existed, against config/warning-statement.json. Listed so the set describes everything checked, not only what it added."
+    },
+    {
+      "id": "DS-MINIMUM-BOTTLING-STRENGTH",
+      "ruleVersion": 1,
+      "regulation": "TTB-BAM-VOL2-CH4",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "supersedes": null,
+      "requirement": "The stated alcohol content is not below the minimum bottling strength for the labelled class or type.",
+      "appliesWhen": {
+        "productType": ["Distilled spirits"]
+      },
+      "check": {
+        "kind": "numeric-bound",
+        "field": "alcoholContent",
+        "determinedBy": "classType",
+        "unit": "percent-abv",
+        "minimumByClass": {
+          "Neutral Spirits or Alcohol": 40,
+          "Vodka": 40,
+          "Grain Spirits": 40,
+          "Whisky": 40,
+          "Gin": 40,
+          "Brandy": 40,
+          "Rock and Bourbon": 24,
+          "Rock and Brandy": 24,
+          "Rock and Rum": 24,
+          "Rum Liqueur": 30,
+          "Gin Liqueur": 30,
+          "Brandy Liqueur": 30,
+          "Flavored Brandy": 30,
+          "Flavored Gin": 30,
+          "Flavored Rum": 30,
+          "Flavored Vodka": 30,
+          "Flavored Whisky": 30
+        },
+        "whenClassUnknown": "undetermined"
+      },
+      "severity": "blocking",
+      "status": "draft",
+      "automation": "advisory",
+      "provenance": {
+        "sourceDocument": "DOC-BAM-VOL2-CH4",
+        "quote": "Spirits distilled from a fermented mash of grain at less than 95% alcohol by volume (190 proof) ... and bottled at not less than 40% alcohol by volume (80 proof)",
+        "extractedBy": "model",
+        "model": "claude-opus-5",
+        "extractedAt": "2026-08-03"
+      },
+      "$note": "DRAFT, not active. Extracted by a model from a supplied PDF and not yet approved by a person — which is the contract working as intended rather than an oversight. It also needs the class/type vocabulary problem below resolved first.",
+      "$openQuestion": "The table is keyed by class name, but a label states a DESIGNATION ('Kentucky Straight Bourbon Whiskey') which must be resolved to its class ('Whisky') before the bound applies. That resolution is a taxonomy lookup this system does not have. Note also the spelling: the BAM writes 'Whisky', the corpus label reads 'Whiskey', and both are permitted — a naive set membership test would produce a confident false finding on a compliant label."
+    }
+  ],
+  "sourceDocuments": [
+    {
+      "id": "DOC-BAM-VOL2-CH4",
+      "title": "TTB Beverage Alcohol Manual, volume 2, chapter 4 — Class and Type Designation",
+      "url": "https://www.ttb.gov/system/files/images/pdfs/spirits_bam/chapter4.pdf",
+      "digest": "not computed — supplied as a PDF and read by page, not parsed",
+      "retrievedAt": "2026-08-03"
     }
   ]
 }
