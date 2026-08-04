@@ -61,6 +61,14 @@ describe('the decision control (§18.5)', () => {
     expect(PAGE_HTML).toContain("who.id = 'decidedBy'")
   })
 
+  it('is told whether the agent agreed rather than working it out', () => {
+    // It had its own copy of the rule — a string-prefix test on the outcome
+    // name — with no way to notice if it drifted from the one the agreement
+    // statistics are drawn from.
+    expect(PAGE_HTML).toContain('d.decision.agreed')
+    expect(PAGE_HTML).not.toContain("indexOf('CLEAR')")
+  })
+
   it('shows the server’s reason rather than inventing one', () => {
     // The server owns the sentence explaining why a departure needs a reason.
     // A second copy here would drift from it.

@@ -9,7 +9,13 @@
 
 import { describe, expect, it } from 'vitest'
 import type { Outcome } from '../domain/types.js'
-import { checkDecision, DecisionRejected, isDecision, isDisagreement } from './decision.js'
+import {
+  alreadyDecided,
+  checkDecision,
+  DecisionRejected,
+  isDecision,
+  isDisagreement,
+} from './decision.js'
 
 const check = (decision: string, recommendedOutcome: Outcome, note: string | null = null) =>
   checkDecision({ decision, decidedBy: 'jenny', recommendedOutcome, note })
@@ -75,6 +81,31 @@ describe('agreement and disagreement', () => {
     // clearer scan is not a finding against the applicant, and collapsing the
     // two would make every unreadable scan look like the system overruled.
     expect(isDisagreement({ decision: 'RETURNED', recommendedOutcome: 'INCOMPLETE' })).toBe(false)
+  })
+})
+
+describe('a verdict is decided once', () => {
+  /*
+   * Asked per verdict rather than per submission, and the difference matters.
+   *
+   * A correction supersedes a verdict (UC-3) and produces a new one that
+   * genuinely needs deciding again. Refusing on "this submission was decided
+   * once" would leave a corrected submission permanently undecidable; refusing
+   * on "this verdict was decided" stops only the duplicate — a second tab, a
+   * double click, a retried request — which would otherwise append a row that
+   * masks the first without superseding it.
+   */
+  const db = (rows: unknown) =>
+    ({
+      prepare: () => ({ bind: () => ({ first: async () => rows }) }),
+    }) as unknown as D1Database
+
+  it('reports a verdict that already carries a decision', async () => {
+    expect(await alreadyDecided(db({ found: 1 }), 'v-1')).toBe(true)
+  })
+
+  it('reports one that does not', async () => {
+    expect(await alreadyDecided(db(null), 'v-1')).toBe(false)
   })
 })
 

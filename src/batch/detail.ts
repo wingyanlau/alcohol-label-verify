@@ -18,6 +18,7 @@ import { citationFor } from '../domain/findings.js'
 import { referenceIsUnverified, warningReference } from '../domain/reference.js'
 import type { FieldName, Outcome } from '../domain/types.js'
 import { FIELD_LABELS, FIELDS } from '../domain/types.js'
+import { isDecision, isDisagreement } from './decision.js'
 import { referenceCodeFor } from './reference-code.js'
 
 export interface DetailField {
@@ -71,6 +72,15 @@ export interface SubmissionDetail {
     readonly decidedBy: string
     readonly decidedAt: string
     readonly recommendedOutcome: string
+    /**
+     * Whether it matched what the system suggested.
+     *
+     * Computed here, from the same function the endpoint uses. The page had its
+     * own version — a string-prefix test on the outcome name — and a second
+     * implementation of "did the agent agree" is one that can disagree with the
+     * one the agreement statistics are drawn from.
+     */
+    readonly agreed: boolean
     readonly note: string | null
   } | null
   /** The verdict this detail describes, so a decision can name what it answered. */
@@ -316,6 +326,12 @@ export async function loadSubmissionDetail(
             decidedBy: decisionRow.decided_by,
             decidedAt: decisionRow.decided_at,
             recommendedOutcome: decisionRow.recommended_outcome,
+            agreed: isDecision(decisionRow.decision)
+              ? !isDisagreement({
+                  decision: decisionRow.decision,
+                  recommendedOutcome: decisionRow.recommended_outcome as Outcome,
+                })
+              : false,
             note: decisionRow.note,
           },
     verdictId: verdict.id,

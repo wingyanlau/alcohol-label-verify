@@ -29,6 +29,7 @@
  * partly circular by construction.
  */
 
+import { POLICY_SET } from '../domain/findings.js'
 import { warningReference } from '../domain/reference.js'
 import type { ApplicationData, Outcome } from '../domain/types.js'
 import { FIELDS } from '../domain/types.js'
@@ -72,6 +73,20 @@ export interface StoredVerdict {
   readonly policyVersion: string
   readonly aggregationVersion: string
   readonly referenceDataVersion: number
+  /**
+   * The rule set this verdict was reached under, or null when no rule was
+   * applied — including every verdict written before the policy layer existed.
+   */
+  readonly policySetVersion: number | null
+  /**
+   * The filing date the rules were selected for. Null alongside a null
+   * `policySetVersion`, for the same reason.
+   *
+   * Replay must re-derive against the rules in force *then*. Using today's date
+   * would judge a 2024 filing by a 2025 standard of fill and report the
+   * disagreement as a regression in this system.
+   */
+  readonly submittedOn: string | null
   readonly application: ApplicationData
   readonly fields: Readonly<Record<string, StoredField>>
   readonly warningSegments: readonly StoredWarningSegment[]
@@ -140,6 +155,10 @@ interface VerdictRow {
   aggregation_version: string
   reference_data_version: number
   created_at: string
+  policy_set_version: number | null
+  /** JSON. Carries the product type, which no field_verdict row can. */
+  selection_inputs: string | null
+  submitted_on: string | null
 }
 
 /**
@@ -198,7 +217,8 @@ export async function loadStoredVerdict(
   const verdict = await db
     .prepare(
       `SELECT id, submission_id, outcome, warning_legible, ruleset_version, policy_version,
-              aggregation_version, reference_data_version, created_at
+              aggregation_version, reference_data_version, created_at,
+              policy_set_version, selection_inputs, submitted_on
          FROM verdict
         WHERE submission_id = ?1 AND superseded_by IS NULL
         ORDER BY created_at DESC
@@ -255,8 +275,7 @@ export async function loadStoredVerdict(
   ])
 
   const expected = new Map(fieldRows.results.map((r) => [r.field, r.expected]))
-  const application = {} as Record<string, string | null>
-  for (const field of FIELDS) application[field] = expected.get(field) ?? null
+  const application = applicationFrom(expected, verdict.selection_inputs)
 
   const digests = parseDigests(recordedEvent?.detail ?? null)
 
@@ -272,7 +291,9 @@ export async function loadStoredVerdict(
     policyVersion: verdict.policy_version,
     aggregationVersion: verdict.aggregation_version,
     referenceDataVersion: verdict.reference_data_version,
-    application: application as unknown as ApplicationData,
+    policySetVersion: verdict.policy_set_version,
+    submittedOn: verdict.submitted_on,
+    application,
     fields: Object.fromEntries(
       fieldRows.results.map((r) => [r.field, { state: r.state, observed: r.observed }]),
     ),
@@ -345,6 +366,52 @@ async function checkIntegrity(
   return differences.length === 0 ? { status: 'verified' } : { status: 'altered', differences }
 }
 
+/**
+ * The application record as the verdict saw it.
+ *
+ * Field values come from `field_verdict.expected` — what the agent said the
+ * application claimed, kept because it is the evidence they acted on.
+ *
+ * **Product type cannot come from there, and this is the whole reason D26 binds
+ * the selection inputs rather than only the policy-set version.** It is not one
+ * of `FIELDS` — no label states "Distilled spirits", so it is never compared
+ * and no `field_verdict` row carries it. Rebuilt from `FIELDS` alone, every
+ * replay selected no rules, produced the "nothing could be checked" finding,
+ * and re-derived as `CLEAR_CONFIRM_POLICY`. A stored `CLEAR` would then be
+ * reported as a regression in the comparison rules, on every submission, and
+ * the tests missed it because a hand-built fixture supplied a product type that
+ * the database never could.
+ */
+export function applicationFrom(
+  expected: ReadonlyMap<string, string | null>,
+  selectionInputs: string | null,
+): ApplicationData {
+  const application = {} as Record<string, string | null>
+  for (const field of FIELDS) application[field] = expected.get(field) ?? null
+  application.productType = productTypeFrom(selectionInputs)
+  return application as unknown as ApplicationData
+}
+
+/**
+ * The product type bound to the verdict, or null.
+ *
+ * Tolerant of a malformed value on purpose: a replay is a diagnostic, and it
+ * should report what it could and could not reproduce rather than throwing on
+ * the way in. A null here yields "nothing could be checked", which is the
+ * honest reading of a binding nobody can parse.
+ */
+function productTypeFrom(selectionInputs: string | null): string | null {
+  if (selectionInputs === null) return null
+  try {
+    const parsed: unknown = JSON.parse(selectionInputs)
+    if (parsed === null || typeof parsed !== 'object') return null
+    const value = (parsed as { productType?: unknown }).productType
+    return typeof value === 'string' ? value : null
+  } catch {
+    return null
+  }
+}
+
 /** Rules that have moved since the verdict was recorded, named. */
 function versionDrift(stored: StoredVerdict): string[] {
   const current = warningReference()
@@ -355,6 +422,18 @@ function versionDrift(stored: StoredVerdict): string[] {
   check('ruleset', stored.rulesetVersion, RULESET_VERSION)
   check('policy', stored.policyVersion, POLICY_VERSION)
   check('aggregation', stored.aggregationVersion, AGGREGATION_VERSION)
+  // The rule set, which §18.3 requires join the versioned identity set: a
+  // verdict produced under an earlier policy must replay as not-comparable
+  // rather than be silently re-derived under today's rules.
+  //
+  // Only when the verdict carried a binding. A null means no rule was applied
+  // — a verdict from before the policy layer, or one whose product type was
+  // never stated — and replay applies none either, so there is nothing that
+  // moved. Calling those not-comparable would retire the endpoint for every
+  // record already written.
+  if (stored.policySetVersion !== null) {
+    check('policy set', stored.policySetVersion, POLICY_SET.policySetVersion)
+  }
   // The one that matters most: FR-5 is word-for-word, so a verdict produced
   // against one statutory text tells you nothing about today's.
   check('reference data', stored.referenceDataVersion, current.configVersion)
@@ -434,6 +513,14 @@ export async function replayVerdict(stored: StoredVerdict): Promise<ReplayReport
       // A replay's timings describe the replay, not the original run, and
       // nothing reads them — but the clock still comes from outside.
       now: () => Date.now(),
+      // The date the application was FILED, never today's. Re-deriving a 2024
+      // filing against the rules in force now would judge it by a standard of
+      // fill that did not exist, and report the disagreement as a regression
+      // in this system rather than as the anachronism it is.
+      //
+      // Null for a verdict that bound no rules; the date is then irrelevant,
+      // because selection has nothing to select whatever day it is told.
+      submittedOn: stored.submittedOn ?? stored.createdAt.slice(0, 10),
     },
   )
 

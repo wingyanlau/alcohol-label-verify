@@ -116,31 +116,27 @@ export interface VerifyOptions {
    */
   readonly warningLegible?: boolean
   /**
-   * The date the application was filed, as `YYYY-MM-DD`.
+   * The date the application was filed, as `YYYY-MM-DD`. **Required**, for the
+   * same reason `now` is.
    *
    * Not today's date, and the distinction is the whole reason the archive
    * carries effective dates: standards of fill changed in January 2025, so a
    * 2024 filing judged by today's list is judged by a rule that did not govern
    * it — invisibly, because the verdict looks perfectly ordinary.
    *
-   * Defaults to the supplied clock when a caller has no filing date to give,
-   * which is right for a submission handed in now and wrong for a backlog. The
-   * date used is bound into the verdict either way, so the assumption is
-   * visible rather than implied.
+   * It was briefly optional, defaulting to a date derived from `now`. That is
+   * wrong twice over. `now` is the *timing* clock — it measures stage
+   * durations, and a caller is entitled to hand in a monotonic one, which
+   * yields 1970-01-01 and silently drops every rule with an `effectiveFrom`;
+   * the suite was doing exactly that, selecting seven rules where it read as
+   * eight. And a default meant a caller replaying an old verdict could forget
+   * to supply the date it was filed and get today's rules without noticing.
+   * Requiring it makes both impossible at compile time.
    */
-  readonly submittedOn?: string
+  readonly submittedOn: string
   /** Defaults to the loaded archive; injectable so tests can pin a set. */
   readonly policySet?: PolicySet
 }
-
-/**
- * The calendar date of an instant the caller supplied.
- *
- * Takes the milliseconds as an argument rather than reading them: M1's rule is
- * that no file in `src/domain` reads a clock, and this does not — it formats
- * one that was handed in.
- */
-const isoDate = (ms: number): string => new Date(ms).toISOString().slice(0, 10)
 
 /** Turn a record-region extraction into application data. */
 function toApplicationData(extraction: Extraction): ApplicationData {
@@ -205,7 +201,7 @@ export async function verifySubmission(
     application,
     extraction: labelResult.extraction,
     warning,
-    submittedOn: opts.submittedOn ?? isoDate(started),
+    submittedOn: opts.submittedOn,
     policySet: opts.policySet,
   })
   const findings = assessment.findings

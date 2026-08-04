@@ -300,7 +300,17 @@ export async function processItem(
             : { applicationData: declared },
       },
       // The clock is supplied here, outside the pure core (M1).
-      { provider, now: () => Date.now() },
+      //
+      // The filing date is today's, and that is an assumption rather than a
+      // fact: the corpus carries no filing date, so there is none to use. It
+      // is bound into the verdict, so a reader can see which day's rules were
+      // applied instead of having to infer it. A real intake would take the
+      // date from the application.
+      {
+        provider,
+        now: () => Date.now(),
+        submittedOn: new Date().toISOString().slice(0, 10),
+      },
     )
 
     // Keep the rasterised label crop so the results view can show the artwork

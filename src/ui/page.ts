@@ -647,8 +647,9 @@ export const PAGE_HTML = `<!doctype html>
     }
 
     if (d.decision) {
-      var agreed = (d.decision.decision === 'APPROVED') ===
-        (d.decision.recommendedOutcome.indexOf('CLEAR') === 0)
+      // Told, not worked out. This had its own copy of the agreement rule and
+      // no way to notice if it drifted from the one the record uses.
+      var agreed = d.decision.agreed
       var head = el('div', 'fstatus ' + (agreed ? 'ok' : 'warn'))
       head.textContent = d.decision.decision === 'APPROVED' ? '✓  Approved'
         : d.decision.decision === 'REJECTED' ? '✗  Rejected'
@@ -727,6 +728,7 @@ export const PAGE_HTML = `<!doctype html>
         decidedBy: byId('decidedBy').value.trim(),
         decidedAt: new Date().toISOString(),
         recommendedOutcome: res.body.recommendedOutcome,
+        agreed: res.body.agreed,
         note: byId('decisionNote').value.trim() || null
       }
       renderDetail(d)

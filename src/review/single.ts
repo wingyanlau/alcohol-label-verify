@@ -172,8 +172,14 @@ export async function reviewOne(
       label: { image: request.image, mimeType: request.mimeType },
       record: { applicationData: request.application },
     },
-    // The clock comes from the edge; the domain reads none (M1).
-    { provider: opts.provider, now: () => Date.now() },
+    // The clock comes from the edge; the domain reads none (M1). The filing
+    // date is today's because this path IS the filing — an agent is checking a
+    // label in front of them, not working a backlog.
+    {
+      provider: opts.provider,
+      now: () => Date.now(),
+      submittedOn: new Date().toISOString().slice(0, 10),
+    },
   )
 
   const byField = new Map(result.fields.map((f) => [f.field, f]))

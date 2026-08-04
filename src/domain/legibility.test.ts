@@ -22,6 +22,16 @@ const clock = () => {
   return () => (t += 10)
 }
 
+/**
+ * The filing date, stated rather than derived.
+ *
+ * `now` above is the TIMING clock — it counts in tens so durations are facts
+ * about the test. Deriving a calendar date from it gave 1970-01-01, which
+ * silently dropped every rule with an `effectiveFrom` and left these tests
+ * exercising seven rules while reading as though they exercised eight.
+ */
+const FILED = '2026-08-01'
+
 const COMPLIANT = JSON.stringify({
   fields: {
     brandName: { value: 'Old Tom Distillery', confidence: 0.97 },
@@ -84,7 +94,7 @@ const check = (legibility?: { measured: number; floor: number }) =>
       },
       record: { applicationData: application },
     },
-    { provider, now: clock() },
+    { provider, now: clock(), submittedOn: FILED },
   )
 
 describe('the legibility floor', () => {

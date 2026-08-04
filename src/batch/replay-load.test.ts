@@ -10,10 +10,16 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { POLICY_SET } from '../domain/findings.js'
 import type { ApplicationData } from '../domain/types.js'
 import { sha256Hex } from './digest.js'
 import type { RecordedExtraction } from './replay.js'
-import { type ReplayReport, replayVerdict, type StoredVerdict } from './replay-load.js'
+import {
+  applicationFrom,
+  type ReplayReport,
+  replayVerdict,
+  type StoredVerdict,
+} from './replay-load.js'
 import { AGGREGATION_VERSION, POLICY_VERSION, RULESET_VERSION } from './versions.js'
 
 const application: ApplicationData = {
@@ -63,6 +69,8 @@ const stored = (over: Partial<StoredVerdict> = {}): StoredVerdict => ({
   policyVersion: POLICY_VERSION,
   aggregationVersion: AGGREGATION_VERSION,
   referenceDataVersion: 1,
+  policySetVersion: POLICY_SET.policySetVersion,
+  submittedOn: '2026-08-01',
   application,
   fields: {
     brandName: { state: 'MATCH', observed: 'Old Tom Distillery' },
@@ -175,7 +183,100 @@ describe('replaying a stored verdict', () => {
   })
 })
 
+/**
+ * Rebuilding the application record the verdict was computed from.
+ *
+ * This was a genuine break, not a hypothetical. The record was rebuilt from
+ * `FIELDS` alone, and product type is not one of them — no label states
+ * "Distilled spirits", so nothing compares it and no `field_verdict` row keeps
+ * it. Every replay therefore selected no rules, produced the "nothing could be
+ * checked" finding, and re-derived `CLEAR_CONFIRM_POLICY` where the verdict
+ * said `CLEAR`. Reported as a regression in the comparison rules, on every
+ * submission that had ever been checked.
+ *
+ * It survived a green suite because the fixture above supplies a product type
+ * the database could not. So the reconstruction is now tested where it lives,
+ * against the columns it actually reads.
+ */
+describe('the application record, rebuilt from the row', () => {
+  const expected = new Map([
+    ['brandName', 'Old Tom Distillery'],
+    ['classType', 'Kentucky Straight Bourbon Whiskey'],
+    ['alcoholContent', '45% Alc./Vol.'],
+    ['netContents', '750 mL'],
+  ])
+
+  it('takes the compared fields from what the verdict recorded', () => {
+    const record = applicationFrom(expected, null)
+    expect(record.brandName).toBe('Old Tom Distillery')
+    expect(record.netContents).toBe('750 mL')
+  })
+
+  it('recovers the product type from the selection inputs bound to the verdict', () => {
+    // The reason D26 binds the inputs and not only the policy-set version.
+    const record = applicationFrom(expected, '{"productType":"Distilled spirits"}')
+    expect(record.productType).toBe('Distilled spirits')
+  })
+
+  it('reports no product type when the verdict bound none', () => {
+    expect(applicationFrom(expected, null).productType).toBeNull()
+    expect(applicationFrom(expected, '{}').productType).toBeNull()
+  })
+
+  it('reports no product type rather than throwing on a binding it cannot read', () => {
+    // A replay is a diagnostic. It should say what it could not reproduce, not
+    // fail on the way in.
+    for (const broken of ['not json', 'null', '[]', '{"productType":42}']) {
+      expect(applicationFrom(expected, broken).productType, broken).toBeNull()
+    }
+  })
+
+  it('reproduces the stored outcome once the product type is recovered', async () => {
+    // End to end, through the path that was broken: a record rebuilt the way
+    // production rebuilds it must re-derive the verdict it came from.
+    const rebuilt = applicationFrom(expected, '{"productType":"Distilled spirits"}')
+    const report = await replayVerdict(stored({ application: rebuilt }))
+    expect(report.status).toBe('identical')
+    expect(report.replayedOutcome).toBe('CLEAR')
+  })
+})
+
+describe('the filing date a replay judges by', () => {
+  it('uses the date the application was filed, not today', async () => {
+    // Standards of fill changed in January 2025. Re-deriving a 2024 filing
+    // against today's list applies a rule that never governed it — and the
+    // disagreement would be reported as a regression in this system.
+    const report = await replayVerdict(
+      stored({ submittedOn: '2024-06-01', policySetVersion: POLICY_SET.policySetVersion }),
+    )
+    expect(report.status).toBe('identical')
+  })
+
+  it('falls back to the day the verdict was written when none was bound', async () => {
+    const report = await replayVerdict(stored({ submittedOn: null, policySetVersion: null }))
+    expect(report.status).toBe('identical')
+  })
+})
+
 describe('rules that have moved since the verdict was recorded', () => {
+  it('refuses when the rule set has moved (§18.3)', async () => {
+    // The rule set joins the versioned identity set. A verdict reached under an
+    // earlier policy must not be silently re-derived under today's rules and
+    // reported as agreeing.
+    const report = await replayVerdict(stored({ policySetVersion: 99 }))
+    expect(report.status).toBe('not-comparable')
+    expect(report.differences?.join(' ')).toMatch(/policy set.*99/)
+  })
+
+  it('does not refuse a verdict that bound no rule set at all', async () => {
+    // Null means no rule was applied — a verdict from before the policy layer,
+    // or one whose product type was never stated. Replay applies none either,
+    // so nothing has moved. Treating these as not-comparable would retire the
+    // endpoint for every record already written.
+    const report = await replayVerdict(stored({ policySetVersion: null, submittedOn: null }))
+    expect(report.status).not.toBe('not-comparable')
+  })
+
   // The most misleading possible "identical": re-deriving against today's
   // statutory text a verdict that was produced against yesterday's. FR-5 is
   // word-for-word, so this is exactly where agreement means least.

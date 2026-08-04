@@ -13,7 +13,13 @@ import { appendAudit, readWholeChain, verifyChain } from './batch/audit.js'
 import { MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
 import { BatchTooLarge } from './batch/cap.js'
 import { loadCurrentJob } from './batch/current.js'
-import { checkDecision, DecisionRejected, recordDecision } from './batch/decision.js'
+import {
+  alreadyDecided,
+  checkDecision,
+  DecisionRejected,
+  isDisagreement,
+  recordDecision,
+} from './batch/decision.js'
 import { loadSubmissionDetail } from './batch/detail.js'
 import { sha256Hex } from './batch/digest.js'
 import { startBatch } from './batch/intake.js'
@@ -849,6 +855,16 @@ export default {
         return json({ error: 'conflict', reason: 'this submission has no verdict yet' }, 409)
       }
 
+      // A verdict is decided once. Without this a second POST — two tabs, a
+      // double click, a retried request — appends another row, and the detail
+      // view shows only the latest, so an earlier approval is masked rather
+      // than superseded. Approval is a legal act; it should not be quietly
+      // replaceable. A corrected submission gets a NEW verdict, and that one
+      // is decidable again.
+      if (await alreadyDecided(env.DB, detail.verdictId)) {
+        return json({ error: 'conflict', reason: 'this verdict has already been decided' }, 409)
+      }
+
       const note = typeof body.note === 'string' && body.note.trim() !== '' ? body.note : null
       const input = {
         decision: String(body.decision ?? ''),
@@ -879,7 +895,15 @@ export default {
         note,
       })
 
-      return json({ recorded: true, recommendedOutcome: detail.outcome })
+      // `agreed` is computed here rather than left to the page. The browser had
+      // its own copy of the rule, as a string-prefix test on the outcome name,
+      // and a second implementation of "did the agent agree" is one that can
+      // disagree with the one the statistics are drawn from.
+      return json({
+        recorded: true,
+        recommendedOutcome: detail.outcome,
+        agreed: !isDisagreement({ decision: input.decision, recommendedOutcome: detail.outcome }),
+      })
     }
 
     // Single review — one label, checked now (UC-1, ui-design §4).

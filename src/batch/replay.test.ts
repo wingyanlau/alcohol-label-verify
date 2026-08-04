@@ -60,6 +60,10 @@ const replay = (opts: { legible?: boolean; recordedRows?: RecordedExtraction[] }
     {
       provider: createReplayProvider(opts.recordedRows ?? [recorded()]),
       now: clock(),
+      // The date the application was filed. `now` is the timing clock and
+      // counts in tens, so a date derived from it would be 1970 and would
+      // select a different set of rules than the verdict was reached under.
+      submittedOn: '2026-08-01',
       ...(opts.legible === false ? { warningLegible: false } : {}),
     },
   )

@@ -22,6 +22,16 @@ const clock = () => {
   return () => (t += 10)
 }
 
+/**
+ * The filing date, stated rather than derived.
+ *
+ * `now` above is the TIMING clock — it counts in tens so durations are facts
+ * about the test. Deriving a calendar date from it gave 1970-01-01, which
+ * silently dropped every rule with an `effectiveFrom` and left these tests
+ * exercising seven rules while reading as though they exercised eight.
+ */
+const FILED = '2026-08-01'
+
 const REQUIRED = warningReference()
   .segments.map((s) => s.text)
   .join(' ')
@@ -99,7 +109,7 @@ const images = {
 describe('the pipeline produces a verdict', () => {
   it('a compliant submission raises no discrepancy', async () => {
     const { provider } = stubProvider({ label: labelReading(), record: recordReading })
-    const r = await verifySubmission(images, { provider, now: clock() })
+    const r = await verifySubmission(images, { provider, now: clock(), submittedOn: FILED })
     expect(r.problemCount).toBe(0)
     expect(r.fields.every((f) => f.state === 'MATCH')).toBe(true)
     expect(r.warning.ok).toBe(true)
@@ -109,11 +119,29 @@ describe('the pipeline produces a verdict', () => {
     const { provider } = stubProvider({ label: labelReading(), record: recordReading })
     const r = await verifySubmission(
       { label: images.label, record: { applicationData: application } },
-      { provider, now: clock() },
+      { provider, now: clock(), submittedOn: FILED },
     )
     expect(r.outcome).toBe('CLEAR')
     expect(r.summary).toBe('Everything matches')
     expect(r.findings.some((f) => f.state === 'VIOLATED')).toBe(false)
+    // Named, not counted. A dated rule dropping out of selection is invisible
+    // in a count and in an outcome — the submission still passes, on fewer
+    // rules than anyone reading this test would assume were applied.
+    expect(r.policy.selectedRuleIds).toContain('DS-STANDARD-OF-FILL')
+    expect(r.policy.submittedOn).toBe(FILED)
+  })
+
+  it('judges the submission by the rules in force on its filing date', async () => {
+    // The same submission, filed before the January 2025 standards of fill.
+    // Selection must drop that rule — and the date has to come from the caller
+    // for it to be able to.
+    const { provider } = stubProvider({ label: labelReading(), record: recordReading })
+    const r = await verifySubmission(
+      { label: images.label, record: { applicationData: application } },
+      { provider, now: clock(), submittedOn: '2024-06-01' },
+    )
+    expect(r.policy.selectedRuleIds).not.toContain('DS-STANDARD-OF-FILL')
+    expect(r.policy.selectedRuleIds).toContain('DS-BRAND-NAME-PRESENT')
   })
 
   /*
@@ -130,7 +158,7 @@ describe('the pipeline produces a verdict', () => {
    */
   it('says nothing was checked when the record was read from an image', async () => {
     const { provider } = stubProvider({ label: labelReading(), record: recordReading })
-    const r = await verifySubmission(images, { provider, now: clock() })
+    const r = await verifySubmission(images, { provider, now: clock(), submittedOn: FILED })
     expect(r.outcome).toBe('CLEAR_CONFIRM_POLICY')
     expect(r.policy.selectedRuleIds).toEqual([])
     expect(r.findings.map((f) => f.ruleId)).toEqual(['POLICY-SELECTION'])
@@ -141,7 +169,7 @@ describe('the pipeline produces a verdict', () => {
       label: labelReading({ fields: { alcoholContent: { value: '40% Alc./Vol.' } } }),
       record: recordReading,
     })
-    const r = await verifySubmission(images, { provider, now: clock() })
+    const r = await verifySubmission(images, { provider, now: clock(), submittedOn: FILED })
     expect(r.outcome).toBe('DISCREPANCIES_FOUND')
     expect(r.fields.filter((f) => f.state === 'MISMATCH').map((f) => f.field)).toEqual([
       'alcoholContent',
@@ -159,7 +187,7 @@ describe('the pipeline produces a verdict', () => {
       }),
       record: recordReading,
     })
-    const r = await verifySubmission(images, { provider, now: clock() })
+    const r = await verifySubmission(images, { provider, now: clock(), submittedOn: FILED })
     expect(r.outcome).toBe('INCOMPLETE')
   })
 
@@ -170,7 +198,7 @@ describe('the pipeline produces a verdict', () => {
       }),
       record: recordReading,
     })
-    const r = await verifySubmission(images, { provider, now: clock() })
+    const r = await verifySubmission(images, { provider, now: clock(), submittedOn: FILED })
     expect(r.outcome).toBe('DISCREPANCIES_FOUND')
     expect(r.warning.ok).toBe(false)
   })
@@ -179,7 +207,7 @@ describe('the pipeline produces a verdict', () => {
     const { provider, seen } = stubProvider({ label: labelReading(), record: recordReading })
     const r = await verifySubmission(
       { label: images.label, record: { applicationData: application } },
-      { provider, now: clock() },
+      { provider, now: clock(), submittedOn: FILED },
     )
     expect(r.outcome).toBe('CLEAR')
     expect(seen.map((s) => s.region)).toEqual(['label'])
@@ -190,19 +218,19 @@ describe('the pipeline produces a verdict', () => {
 describe('B-D1 — the extractions are separate and blind', () => {
   it('makes two calls, one per region', async () => {
     const { provider, seen } = stubProvider({ label: labelReading(), record: recordReading })
-    await verifySubmission(images, { provider, now: clock() })
+    await verifySubmission(images, { provider, now: clock(), submittedOn: FILED })
     expect(seen.map((s) => s.region).sort()).toEqual(['label', 'record'])
   })
 
   it('runs them concurrently, so the layer costs one round trip (§8.8.2)', async () => {
     const { provider, peak } = stubProvider({ label: labelReading(), record: recordReading })
-    await verifySubmission(images, { provider, now: clock() })
+    await verifySubmission(images, { provider, now: clock(), submittedOn: FILED })
     expect(peak()).toBe(2)
   })
 
   it('D4 — no application value reaches either call', async () => {
     const { provider, seen } = stubProvider({ label: labelReading(), record: recordReading })
-    await verifySubmission(images, { provider, now: clock() })
+    await verifySubmission(images, { provider, now: clock(), submittedOn: FILED })
     const payload = JSON.stringify(seen.map((s) => ({ ...s, image: '<bytes>' })))
     for (const leak of Object.values(application)) {
       if (leak) expect(payload).not.toContain(leak)
@@ -211,7 +239,7 @@ describe('B-D1 — the extractions are separate and blind', () => {
 
   it('only the label extraction asks for the warning statement', async () => {
     const { provider, seen } = stubProvider({ label: labelReading(), record: recordReading })
-    await verifySubmission(images, { provider, now: clock() })
+    await verifySubmission(images, { provider, now: clock(), submittedOn: FILED })
     expect(seen.find((s) => s.region === 'label')?.includeWarning).toBe(true)
     expect(seen.find((s) => s.region === 'record')?.includeWarning).toBe(false)
   })
@@ -220,14 +248,14 @@ describe('B-D1 — the extractions are separate and blind', () => {
 describe('provenance and timings', () => {
   it('reports provenance for each extraction it performed', async () => {
     const { provider } = stubProvider({ label: labelReading(), record: recordReading })
-    const r = await verifySubmission(images, { provider, now: clock() })
+    const r = await verifySubmission(images, { provider, now: clock(), submittedOn: FILED })
     expect(r.provenance.label.modelId).toBe('stub@1')
     expect(r.provenance.record?.modelId).toBe('stub@1')
   })
 
   it('retains both raw responses — provenance and test fixture', async () => {
     const { provider } = stubProvider({ label: labelReading(), record: recordReading })
-    const r = await verifySubmission(images, { provider, now: clock() })
+    const r = await verifySubmission(images, { provider, now: clock(), submittedOn: FILED })
     expect(r.rawResponses.label).toContain('OLD TOM DISTILLERY')
     expect(r.rawResponses.record).toContain('Old Tom Distillery')
   })
@@ -235,7 +263,11 @@ describe('provenance and timings', () => {
   it('records per-stage timings for the latency budget (§9.1)', async () => {
     let t = 0
     const { provider } = stubProvider({ label: labelReading(), record: recordReading })
-    const r = await verifySubmission(images, { provider, now: () => (t += 10) })
+    const r = await verifySubmission(images, {
+      provider,
+      now: () => (t += 10),
+      submittedOn: FILED,
+    })
     expect(r.timings.extractMs).toBeGreaterThan(0)
     expect(r.timings.totalMs).toBeGreaterThanOrEqual(r.timings.extractMs)
   })
@@ -249,8 +281,8 @@ describe('dependency failure', () => {
         throw new Error('provider unavailable')
       }),
     }
-    await expect(verifySubmission(images, { provider, now: clock() })).rejects.toThrow(
-      /provider unavailable/,
-    )
+    await expect(
+      verifySubmission(images, { provider, now: clock(), submittedOn: FILED }),
+    ).rejects.toThrow(/provider unavailable/)
   })
 })

@@ -121,6 +121,23 @@ export function checkDecision(input: {
  * is free text an agent wrote about an applicant, and D20 keeps that out of the
  * log even when the log is durable.
  */
+/**
+ * Whether this verdict has already been decided.
+ *
+ * Asked per VERDICT, not per submission, and the distinction is the whole
+ * point. A correction supersedes a verdict (UC-3), producing a new one that
+ * genuinely needs deciding again; refusing on "this submission was decided
+ * once" would leave a corrected submission permanently undecidable. Refusing
+ * on "this verdict was decided" stops only the duplicate.
+ */
+export async function alreadyDecided(db: D1Database, verdictId: string): Promise<boolean> {
+  const row = await db
+    .prepare(`SELECT 1 AS found FROM decision WHERE verdict_id = ? LIMIT 1`)
+    .bind(verdictId)
+    .first<{ found: number }>()
+  return row !== null
+}
+
 export async function recordDecision(db: D1Database, record: DecisionRecord): Promise<void> {
   await db
     .prepare(
