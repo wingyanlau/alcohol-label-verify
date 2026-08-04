@@ -90,9 +90,26 @@ describe('the edges', () => {
   })
 
   it('carries no class minimum where the regulation states none', () => {
-    // 5.148 agave spirits states no class-level bottling floor. Null is the
-    // honest value; zero would read as "no limit" and satisfy any ABV.
-    const agave = resolveDesignation('Agave Spirits')
-    expect(agave.class?.minimumBottlingAbv).toBeNull()
+    // 5.150(a) defines cordials and liqueurs without a bottling floor — every
+    // figure in that section (30%, 24%) belongs to a TYPE. Null is the honest
+    // value; zero would read as "no limit" and satisfy any ABV.
+    expect(resolveDesignation('Coffee Liqueur').class?.minimumBottlingAbv).toBeNull()
+  })
+
+  // The regression this section exists to prevent. 5.148 says "bottled at or
+  // above 40 percent", not "at not less than" — a regex matching one phrasing
+  // left agave spirits with no floor, so a 20% ABV tequila would have passed
+  // unchecked. Permissive failures are the ones that matter.
+  it('reads a minimum stated in either phrasing', () => {
+    expect(resolveDesignation('Agave Spirits').class?.minimumBottlingAbv).toBe(40)
+    expect(resolveDesignation('Straight Bourbon Whiskey').class?.minimumBottlingAbv).toBe(40)
+  })
+
+  it('resolves type designations the regulation names as label designations', () => {
+    // 5.148: agave spirits meeting the standard "may be designated as 'agave
+    // spirits,' or as 'Tequila' or 'Mezcal'". 5.147 names cachaca likewise.
+    expect(resolveDesignation('Tequila').class?.name).toBe('Agave spirits')
+    expect(resolveDesignation('Mezcal').class?.name).toBe('Agave spirits')
+    expect(resolveDesignation('Cachaça').class?.name).toBe('Rum')
   })
 })

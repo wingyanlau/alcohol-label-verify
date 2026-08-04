@@ -1,6 +1,6 @@
 {
   "$comment": "The standards of identity as a lookup: printed designation -> class. Extracted from 27 CFR part 5 subpart I via the eCFR versioner API at title 27 issue date 2026-07-31. Minimum bottling strengths and permitted spellings are parsed from the regulation text, not transcribed.",
-  "taxonomyVersion": 1,
+  "taxonomyVersion": 2,
   "source": {
     "title": 27,
     "part": 5,
@@ -53,7 +53,7 @@
       "id": "27-CFR-5.147",
       "name": "Rum",
       "citation": "27 CFR 5.147",
-      "spellings": ["rum"],
+      "spellings": ["cachaça", "rum"],
       "minimumBottlingAbv": 40.0,
       "textDigest": "ab08493306a06dc9"
     },
@@ -61,8 +61,8 @@
       "id": "27-CFR-5.148",
       "name": "Agave spirits",
       "citation": "27 CFR 5.148",
-      "spellings": ["agave spirits"],
-      "minimumBottlingAbv": null,
+      "spellings": ["agave spirits", "mezcal", "tequila"],
+      "minimumBottlingAbv": 40.0,
       "textDigest": "e7520dfb146476fe"
     },
     {
@@ -70,7 +70,7 @@
       "name": "Cordials and liqueurs",
       "citation": "27 CFR 5.150",
       "spellings": ["cordial", "cordials and liqueurs", "liqueur"],
-      "minimumBottlingAbv": 30.0,
+      "minimumBottlingAbv": null,
       "textDigest": "5d37c3b65e93a75c"
     },
     {
@@ -98,5 +98,6 @@
       "textDigest": "769de79fb60675e4"
     }
   ],
-  "$limits": "Class-level only. Several TYPES carry their own minimum — the BAM gives 24% for Rock and Bourbon, a type under cordials and liqueurs whose class minimum is 30%. A class-keyed bound is therefore a floor for the class and can be wrong for a type beneath it, so a designation naming a type is UNDETERMINED for the strength check until the type table is extracted."
+  "$limits": "Class-level only. Several TYPES carry their own minimum — the BAM gives 24% for Rock and Bourbon, a type under cordials and liqueurs whose class minimum is 30%. A class-keyed bound is therefore a floor for the class and can be wrong for a type beneath it, so a designation naming a type is UNDETERMINED for the strength check until the type table is extracted.",
+  "$extraction": "Minimum bottling strength is read from PARAGRAPH (a) — the class statement — and nowhere else. Two mistakes made that necessary. A regex matching only 'bottled at not less than' missed 5.148's 'bottled at or above', leaving agave spirits with no floor at all, which is the permissive direction. And taking the first match anywhere in a section took a TYPE figure for 5.150, twice and differently. Both phrasings are now matched, and only within paragraph (a)."
 }

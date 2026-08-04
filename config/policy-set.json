@@ -334,7 +334,8 @@
         "unit": "percent-abv",
         "source": "class-type-taxonomy",
         "whenClassUnknown": "undetermined",
-        "whenClassAmbiguous": "undetermined"
+        "whenClassAmbiguous": "undetermined",
+        "whenClassHasNoMinimum": "undetermined"
       },
       "severity": "blocking",
       "status": "draft",
@@ -347,7 +348,7 @@
         "extractedAt": "2026-08-03"
       },
       "$note": "Still a DRAFT and still unapproved — the contract requires a person, and nobody has signed it. The blocking dependency is gone: designations now resolve to classes via config/class-type-taxonomy.json.",
-      "$openQuestion": "Class-level only. Several TYPES carry their own minimum — the BAM gives 24% for Rock and Bourbon, a type under cordials and liqueurs whose CLASS minimum is 30% — so applying a class floor to a type-designated label can be wrong in the permissive direction. Type minimums are not extracted."
+      "$openQuestion": "Class-level only, and two classes have NO class-level floor at all — cordials and liqueurs (5.150) and distilled spirits specialty products (5.156) — where every stated minimum belongs to a TYPE. A designation resolving to those classes is UNDETERMINED, not satisfied: 'Rock and Rye' has a 24% floor and no class floor to fall back on, so treating a null as 'no limit' would pass any strength."
     }
   ],
   "sourceDocuments": [
