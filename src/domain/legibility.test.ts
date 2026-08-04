@@ -16,6 +16,12 @@ import type { ExtractionProvider } from './extraction.js'
 import { configuredLegibilityFloor } from './legibility.js'
 import { verifySubmission } from './verify.js'
 
+/** A deterministic clock. Timings are then facts about the test, not the machine. */
+const clock = () => {
+  let t = 0
+  return () => (t += 10)
+}
+
 const COMPLIANT = JSON.stringify({
   fields: {
     brandName: { value: 'Old Tom Distillery', confidence: 0.97 },
@@ -76,7 +82,7 @@ const check = (legibility?: { measured: number; floor: number }) =>
       },
       record: { applicationData: application },
     },
-    { provider },
+    { provider, now: clock() },
   )
 
 describe('the legibility floor', () => {

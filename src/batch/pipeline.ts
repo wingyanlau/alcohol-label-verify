@@ -299,7 +299,8 @@ export async function processItem(
             ? { image: normalised.record.image, mimeType: normalised.record.mimeType }
             : { applicationData: declared },
       },
-      { provider },
+      // The clock is supplied here, outside the pure core (M1).
+      { provider, now: () => Date.now() },
     )
 
     // Keep the rasterised label crop so the results view can show the artwork

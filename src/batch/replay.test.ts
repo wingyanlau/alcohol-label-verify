@@ -10,6 +10,12 @@ import { describe, expect, it } from 'vitest'
 import { verifySubmission } from '../domain/verify.js'
 import { createReplayProvider, type RecordedExtraction } from './replay.js'
 
+/** A deterministic clock. Timings are then facts about the test, not the machine. */
+const clock = () => {
+  let t = 0
+  return () => (t += 10)
+}
+
 const application = {
   brandName: 'Old Tom Distillery',
   classType: 'Kentucky Straight Bourbon Whiskey',
@@ -51,6 +57,7 @@ const replay = (opts: { legible?: boolean; recordedRows?: RecordedExtraction[] }
     },
     {
       provider: createReplayProvider(opts.recordedRows ?? [recorded()]),
+      now: clock(),
       ...(opts.legible === false ? { warningLegible: false } : {}),
     },
   )

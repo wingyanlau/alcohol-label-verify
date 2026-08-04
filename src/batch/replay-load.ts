@@ -431,6 +431,9 @@ export async function replayVerdict(stored: StoredVerdict): Promise<ReplayReport
     {
       provider: createReplayProvider(stored.extractions),
       warningLegible: stored.warningLegible,
+      // A replay's timings describe the replay, not the original run, and
+      // nothing reads them — but the clock still comes from outside.
+      now: () => Date.now(),
     },
   )
 

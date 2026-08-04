@@ -82,8 +82,17 @@ export interface VerifyResult {
 export interface VerifyOptions {
   readonly provider: ExtractionProvider
   readonly warningRef?: WarningReference
-  /** Injected so timings are deterministic in tests (test-plan §17). */
-  readonly now?: () => number
+  /**
+   * The clock. **Required**, and that is the point.
+   *
+   * M1's exit criterion is that no file in `src/domain` reads a clock, and it
+   * is verified by grep. An optional parameter with a wall-clock fallback
+   * satisfied the spirit and failed the letter: the call still lived in the
+   * domain, so the property held only while nobody added a second one.
+   * Requiring the clock moves it outside the pure core where it belongs, and
+   * the compiler keeps it there — a caller cannot forget.
+   */
+  readonly now: () => number
   /**
    * The legibility decision, already made.
    *
@@ -109,7 +118,7 @@ export async function verifySubmission(
   input: VerifyInput,
   opts: VerifyOptions,
 ): Promise<VerifyResult> {
-  const now = opts.now ?? (() => Date.now())
+  const now = opts.now
   const started = now()
 
   const needsRecordExtraction = 'image' in input.record

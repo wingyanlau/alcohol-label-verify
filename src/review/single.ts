@@ -148,7 +148,8 @@ export async function reviewOne(
       label: { image: request.image, mimeType: request.mimeType },
       record: { applicationData: request.application },
     },
-    { provider: opts.provider },
+    // The clock comes from the edge; the domain reads none (M1).
+    { provider: opts.provider, now: () => Date.now() },
   )
 
   const byField = new Map(result.fields.map((f) => [f.field, f]))

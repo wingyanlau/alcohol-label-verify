@@ -2189,13 +2189,24 @@ oversight.*
 
 | # | Target | Measured | Date | Met | Notes |
 |---|---|---|---|---|---|
-| S1 | p95 ≤ 5s | | | | |
-| S2 | ≤ 5s | | | | |
-| S3 | No false pass on seeded mismatch | | | | Report rules and end-to-end separately |
-| S4 | All warning cases classified correctly | | | | |
-| S5 | Variance cases reported as matches | | | | |
-| S6 | No blocking confusion | | | | Record what the participant hesitated over |
-| S7 | Unreadable ≠ mismatch | | | | |
+| S1 | p95 ≤ 5s | **p95 3.6 s**, median 3.2 s, min 2.7 s (n=26, batch) | 2026-08-03 | **Yes** | Gemini via AI Gateway, pre-rasterised corpus. One item took 142 s — the corrupt file, the only submission needing a live browser, waiting out a 20 s rate limit. Excluding it: p95 3.4 s, max 3.6 s |
+| S2 | ≤ 5s | **2.6 s** single review, end to end | 2026-08-03 | **Yes** | `POST /review` with L01 artwork; extraction 2.6 s of it |
+| S3 | No false pass on seeded mismatch | **5 / 5**, zero false passes | 2026-08-03 | **Yes** | L04, L15, L17, L19, L22. Reported separately from the rules layer per D22 — the deterministic layer is exhaustively tested (397 unit cases); this is 5 end-to-end cases and no more |
+| S4 | All warning cases classified correctly | **4 / 4** | 2026-08-03 | **Yes** | L05 absent, L06 title-case header, L07 one word altered, L23 clauses reordered |
+| S5 | Variance cases reported as matches | **6 / 6** | 2026-08-03 | **Yes** | L02, L03, L14, L18, L20, L25 — capitalisation, proof, unit conversion, abbreviation, ampersand, fanciful name |
+| S6 | No blocking confusion | **Not measured** | — | **Unknown** | Requires a participant. No agent has used this, so the claim cannot be made — and inferring it from my own use would be worthless (§16.5) |
+| S7 | Unreadable ≠ mismatch | **2 / 2** | 2026-08-03 | **Yes** | L10 out-of-focus → `INCOMPLETE`; L24 unreadable field beside a genuine mismatch → `INCOMPLETE`, the aggregation-ordering case |
+
+**Read S3–S7 with §16.5 in mind.** These are 17 end-to-end cases from a corpus
+that was authored alongside the system and rendered as vector text. They show
+the pipeline behaves as designed on cases it was designed against. They are not
+evidence about real submissions, and no percentage is claimed from them.
+
+**S1 has a caveat the number hides.** 3.2 s is the *pre-rasterised* path: the
+corpus ships its regions already rendered, so the browser is never launched.
+An uploaded PDF takes the live path and pays a browser launch against a ceiling
+of one every twenty seconds, which is the 142 s outlier. The target is met for
+the measured path and unproven for the other one.
 
 **Supporting measurements**, recorded even though no criterion depends on them —
 they are what make a missed target diagnosable:

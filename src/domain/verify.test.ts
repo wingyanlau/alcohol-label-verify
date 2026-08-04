@@ -16,6 +16,12 @@ import { warningReference } from './reference.js'
 import type { ApplicationData } from './types.js'
 import { verifySubmission } from './verify.js'
 
+/** A deterministic clock. Timings are then facts about the test, not the machine. */
+const clock = () => {
+  let t = 0
+  return () => (t += 10)
+}
+
 const REQUIRED = warningReference()
   .segments.map((s) => s.text)
   .join(' ')
@@ -91,7 +97,7 @@ const images = {
 describe('the pipeline produces a verdict', () => {
   it('a compliant submission is CLEAR with no false discrepancy', async () => {
     const { provider } = stubProvider({ label: labelReading(), record: recordReading })
-    const r = await verifySubmission(images, { provider })
+    const r = await verifySubmission(images, { provider, now: clock() })
     expect(r.outcome).toBe('CLEAR')
     expect(r.problemCount).toBe(0)
     expect(r.summary).toBe('Everything matches')
@@ -102,7 +108,7 @@ describe('the pipeline produces a verdict', () => {
       label: labelReading({ fields: { alcoholContent: { value: '40% Alc./Vol.' } } }),
       record: recordReading,
     })
-    const r = await verifySubmission(images, { provider })
+    const r = await verifySubmission(images, { provider, now: clock() })
     expect(r.outcome).toBe('DISCREPANCIES_FOUND')
     expect(r.fields.filter((f) => f.state === 'MISMATCH').map((f) => f.field)).toEqual([
       'alcoholContent',
@@ -120,7 +126,7 @@ describe('the pipeline produces a verdict', () => {
       }),
       record: recordReading,
     })
-    const r = await verifySubmission(images, { provider })
+    const r = await verifySubmission(images, { provider, now: clock() })
     expect(r.outcome).toBe('INCOMPLETE')
   })
 
@@ -131,7 +137,7 @@ describe('the pipeline produces a verdict', () => {
       }),
       record: recordReading,
     })
-    const r = await verifySubmission(images, { provider })
+    const r = await verifySubmission(images, { provider, now: clock() })
     expect(r.outcome).toBe('DISCREPANCIES_FOUND')
     expect(r.warning.ok).toBe(false)
   })
@@ -140,7 +146,7 @@ describe('the pipeline produces a verdict', () => {
     const { provider, seen } = stubProvider({ label: labelReading(), record: recordReading })
     const r = await verifySubmission(
       { label: images.label, record: { applicationData: application } },
-      { provider },
+      { provider, now: clock() },
     )
     expect(r.outcome).toBe('CLEAR')
     expect(seen.map((s) => s.region)).toEqual(['label'])
@@ -151,19 +157,19 @@ describe('the pipeline produces a verdict', () => {
 describe('B-D1 — the extractions are separate and blind', () => {
   it('makes two calls, one per region', async () => {
     const { provider, seen } = stubProvider({ label: labelReading(), record: recordReading })
-    await verifySubmission(images, { provider })
+    await verifySubmission(images, { provider, now: clock() })
     expect(seen.map((s) => s.region).sort()).toEqual(['label', 'record'])
   })
 
   it('runs them concurrently, so the layer costs one round trip (§8.8.2)', async () => {
     const { provider, peak } = stubProvider({ label: labelReading(), record: recordReading })
-    await verifySubmission(images, { provider })
+    await verifySubmission(images, { provider, now: clock() })
     expect(peak()).toBe(2)
   })
 
   it('D4 — no application value reaches either call', async () => {
     const { provider, seen } = stubProvider({ label: labelReading(), record: recordReading })
-    await verifySubmission(images, { provider })
+    await verifySubmission(images, { provider, now: clock() })
     const payload = JSON.stringify(seen.map((s) => ({ ...s, image: '<bytes>' })))
     for (const leak of Object.values(application)) {
       if (leak) expect(payload).not.toContain(leak)
@@ -172,7 +178,7 @@ describe('B-D1 — the extractions are separate and blind', () => {
 
   it('only the label extraction asks for the warning statement', async () => {
     const { provider, seen } = stubProvider({ label: labelReading(), record: recordReading })
-    await verifySubmission(images, { provider })
+    await verifySubmission(images, { provider, now: clock() })
     expect(seen.find((s) => s.region === 'label')?.includeWarning).toBe(true)
     expect(seen.find((s) => s.region === 'record')?.includeWarning).toBe(false)
   })
@@ -181,14 +187,14 @@ describe('B-D1 — the extractions are separate and blind', () => {
 describe('provenance and timings', () => {
   it('reports provenance for each extraction it performed', async () => {
     const { provider } = stubProvider({ label: labelReading(), record: recordReading })
-    const r = await verifySubmission(images, { provider })
+    const r = await verifySubmission(images, { provider, now: clock() })
     expect(r.provenance.label.modelId).toBe('stub@1')
     expect(r.provenance.record?.modelId).toBe('stub@1')
   })
 
   it('retains both raw responses — provenance and test fixture', async () => {
     const { provider } = stubProvider({ label: labelReading(), record: recordReading })
-    const r = await verifySubmission(images, { provider })
+    const r = await verifySubmission(images, { provider, now: clock() })
     expect(r.rawResponses.label).toContain('OLD TOM DISTILLERY')
     expect(r.rawResponses.record).toContain('Old Tom Distillery')
   })
@@ -210,6 +216,8 @@ describe('dependency failure', () => {
         throw new Error('provider unavailable')
       }),
     }
-    await expect(verifySubmission(images, { provider })).rejects.toThrow(/provider unavailable/)
+    await expect(verifySubmission(images, { provider, now: clock() })).rejects.toThrow(
+      /provider unavailable/,
+    )
   })
 })
