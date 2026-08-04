@@ -2541,6 +2541,56 @@ determinism (D23), remove the ability to name the rule behind a finding
 principal asset for convenience. **The loop makes the deterministic layer more
 confident; it does not replace it.**
 
+### 18.5a Requirements of the policy engine
+
+*The rules come from outside. What follows is what this system requires of
+whatever supplies them — the contract it validates on load, and refuses.*
+
+**The policy set is data with an identity.** A version, a named approver, and a
+registry of the regulations it derives from. A set that cannot be cited by a
+verdict is a set whose findings cannot be defended.
+
+**Two dates, never conflated.** `effectiveFrom`/`effectiveTo` bound the
+*submission* dates a rule governs; a regulation's `extractedFromIssueDate`
+records when the text was last read. An application filed in 2024 is judged by
+the rules in force in 2024 — standards of fill changed in January 2025, and
+judging an earlier filing by today's list applies a rule that did not govern
+it, invisibly, because the verdict looks perfectly ordinary.
+
+**Each regulation carries a digest of the text that was read.** Re-extract
+later, and a changed digest means the regulation moved and every rule citing it
+needs review. The same tripwire as the model fingerprint, for the same reason:
+the alternative is discovering it from a complaint.
+
+**An unknown check refuses the whole set.** A rule this deployment cannot
+perform is not skipped, because skipping reports compliance against a
+requirement that was never applied — under-enforcement indistinguishable from
+enforcement, and absent from every output. Refusing to load is loud.
+
+**A model may propose a rule; only a person may enact one.** This is the
+governing principle turned on the policy itself, and it is the requirement that
+matters most once a document can be handed in for extraction. A rule whose
+provenance says a model read it cannot be `active` without a recorded approval
+— it is a draft until somebody signs it. That is what lets an LLM-assisted
+policy knowledge base be genuinely useful without becoming authoritative.
+
+The blast radius is why the rule is stricter here than for labels: a model
+misreading one label produces one wrong verdict, which a reviewer catches. A
+model misreading a *regulation* produces a wrong rule, applied confidently to
+every submission thereafter, with each verdict correctly citing it.
+
+**Every derived rule carries the verbatim words it came from**, and the
+document those words are in is registered with a digest. Without the quote,
+reviewing one rule means re-reading the whole regulation — which means nobody
+reviews it, and the approval becomes a formality. Without the digest, the
+document a rule cites can be edited afterwards and nothing shows it.
+
+**Validation is all-or-nothing.** A partially-loaded set leaves the deployment
+enforcing an arbitrary subset of somebody's policy while reporting that it
+applied "the rules", with no output revealing which were dropped.
+
+---
+
 ### 18.6 Sequence
 
 | | |

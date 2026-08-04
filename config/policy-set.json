@@ -1,0 +1,299 @@
+{
+  "$comment": "The policy archive: federal label requirements as versioned data. Extracted from the eCFR versioner API, digests included so a later re-extraction can detect that a regulation moved. Rules are superseded, never deleted (D27); nothing is enforced without a named approval. Design: design.md §18.",
+  "policySetVersion": 1,
+  "supersedes": null,
+  "approvedBy": "IT Systems Administrator (role unfilled — prototype)",
+  "approvedAt": "2026-08-03",
+  "source": {
+    "authority": "eCFR versioner API",
+    "endpoint": "https://www.ecfr.gov/api/versioner/v1/full/{issueDate}/title-27.xml?part={part}",
+    "title": 27,
+    "issueDate": "2026-07-31",
+    "parts": [4, 5, 16],
+    "$comment": "Numeric lists are parsed from the fetched text, never transcribed."
+  },
+  "$dating": "TWO DIFFERENT DATES, deliberately kept apart. `effectiveFrom` on a rule is the range of SUBMISSION dates it governs — an application filed in 2024 must be judged by the rules in force in 2024, not today's. `extractedFromIssueDate` on a regulation is when this deployment last read the text. Conflating them would let a rule change silently re-judge past decisions.",
+  "regulations": [
+    {
+      "id": "27-CFR-5.63",
+      "title": 27,
+      "part": 5,
+      "section": "5.63",
+      "heading": "Mandatory label information.",
+      "amendmentCitation": null,
+      "textDigest": "9ae12efb7c62fcca",
+      "textLength": 3541,
+      "extractedFromIssueDate": "2026-07-31"
+    },
+    {
+      "id": "27-CFR-5.64",
+      "title": 27,
+      "part": 5,
+      "section": "5.64",
+      "heading": "Brand name.",
+      "amendmentCitation": null,
+      "textDigest": "dc6aea3c57d28bc5",
+      "textLength": 852,
+      "extractedFromIssueDate": "2026-07-31"
+    },
+    {
+      "id": "27-CFR-5.65",
+      "title": 27,
+      "part": 5,
+      "section": "5.65",
+      "heading": "Alcohol content.",
+      "amendmentCitation": null,
+      "textDigest": "997f3d0e82454917",
+      "textLength": 2317,
+      "extractedFromIssueDate": "2026-07-31"
+    },
+    {
+      "id": "27-CFR-5.70",
+      "title": 27,
+      "part": 5,
+      "section": "5.70",
+      "heading": "Net contents.",
+      "amendmentCitation": null,
+      "textDigest": "419776967a068c0c",
+      "textLength": 1832,
+      "extractedFromIssueDate": "2026-07-31"
+    },
+    {
+      "id": "27-CFR-5.203",
+      "title": 27,
+      "part": 5,
+      "section": "5.203",
+      "heading": "Standards of fill (container sizes).",
+      "amendmentCitation": "T.D. TTB-200, 90 FR 1876, Jan. 10, 2025",
+      "textDigest": "17b5ebf2f68349e7",
+      "textLength": 992,
+      "extractedFromIssueDate": "2026-07-31"
+    },
+    {
+      "id": "27-CFR-4.72",
+      "title": 27,
+      "part": 4,
+      "section": "4.72",
+      "heading": "Metric standards of fill.",
+      "amendmentCitation": "T.D. ATF-12, 39 FR 45223, Dec. 31, 1974, as amended by T.D. ATF-49, 43 FR 19848, May 9, 1978; T.D. ATF-76, 46 FR 1727, Jan. 7, 1981; T.D. ATF-303, 55 FR 42713, Oct. 23, 1990. Redesignated by T.D. ATF-953, 68 FR 39455, July 2, 2003; T.D. TTB-165, 85 FR 85520, Dec. 29, 2020; T.D. TTB-200, 90 FR 1875, Jan. 20, 2025",
+      "textDigest": "89efaea7ff06dd39",
+      "textLength": 1277,
+      "extractedFromIssueDate": "2026-07-31"
+    },
+    {
+      "id": "27-CFR-16.21",
+      "title": 27,
+      "part": 16,
+      "section": "16.21",
+      "heading": "Mandatory label information (health warning statement)",
+      "amendmentCitation": null,
+      "textDigest": "see config/warning-statement.json",
+      "extractedFromIssueDate": "2026-07-30",
+      "$comment": "Extracted earlier and verified byte for byte; kept in its own file because the corpus is generated from it."
+    }
+  ],
+  "coverage": {
+    "$comment": "Stated so silence is never read as compliance.",
+    "Distilled spirits": "mandatory information, alcohol content, standards of fill",
+    "Wine": "standards of fill only",
+    "Malt beverages": "not extracted — part 7 read for section titles only. A rule set that half-covers a commodity is worse than one that says it does not."
+  },
+  "rules": [
+    {
+      "id": "DS-BRAND-NAME-PRESENT",
+      "ruleVersion": 1,
+      "regulation": "27-CFR-5.63",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "supersedes": null,
+      "requirement": "The brand name appears on the label.",
+      "appliesWhen": {
+        "productType": ["Distilled spirits"]
+      },
+      "check": {
+        "kind": "field-present",
+        "field": "brandName"
+      },
+      "severity": "blocking",
+      "status": "active",
+      "automation": "advisory"
+    },
+    {
+      "id": "DS-CLASS-TYPE-PRESENT",
+      "ruleVersion": 1,
+      "regulation": "27-CFR-5.63",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "supersedes": null,
+      "requirement": "The class, type, or other designation appears on the label.",
+      "appliesWhen": {
+        "productType": ["Distilled spirits"]
+      },
+      "check": {
+        "kind": "field-present",
+        "field": "classType"
+      },
+      "severity": "blocking",
+      "status": "active",
+      "automation": "advisory"
+    },
+    {
+      "id": "DS-ALCOHOL-CONTENT-PRESENT",
+      "ruleVersion": 1,
+      "regulation": "27-CFR-5.65",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "supersedes": null,
+      "requirement": "Alcohol content is stated as a percentage of alcohol by volume.",
+      "appliesWhen": {
+        "productType": ["Distilled spirits"]
+      },
+      "check": {
+        "kind": "field-present",
+        "field": "alcoholContent"
+      },
+      "severity": "blocking",
+      "status": "active",
+      "automation": "advisory"
+    },
+    {
+      "id": "DS-NET-CONTENTS-PRESENT",
+      "ruleVersion": 1,
+      "regulation": "27-CFR-5.70",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "supersedes": null,
+      "requirement": "Net contents appear on the container.",
+      "appliesWhen": {
+        "productType": ["Distilled spirits"]
+      },
+      "check": {
+        "kind": "field-present",
+        "field": "netContents",
+        "whenAbsent": "undetermined"
+      },
+      "severity": "blocking",
+      "status": "active",
+      "automation": "advisory",
+      "$note": "Absence from artwork is NOT a breach: 5.63(b)(2) permits net contents to be blown, embossed or moulded into the container, which no label image can show. Absent therefore means UNDETERMINED and goes to the agent."
+    },
+    {
+      "id": "DS-ALCOHOL-CONTENT-FORMAT",
+      "ruleVersion": 1,
+      "regulation": "27-CFR-5.65",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "supersedes": null,
+      "requirement": "The statement reads \"Alcohol __ percent by volume\", \"__ percent alcohol by volume\", or \"Alcohol by volume __ percent\"; alcohol may be \"alc\", percent may be \"%\", \"by\" may be \"/\", volume may be \"vol\", periods and parentheses optional.",
+      "appliesWhen": {
+        "productType": ["Distilled spirits"]
+      },
+      "check": {
+        "kind": "format-matches",
+        "field": "alcoholContent",
+        "format": "abv-statement"
+      },
+      "severity": "blocking",
+      "status": "active",
+      "automation": "advisory",
+      "$examples": [
+        "40% alc/vol",
+        "Alc. 40 percent by vol.",
+        "Alc 40% by vol",
+        "40% Alcohol by Volume"
+      ]
+    },
+    {
+      "id": "DS-PROOF-CONSISTENT",
+      "ruleVersion": 1,
+      "regulation": "27-CFR-5.65",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "supersedes": null,
+      "requirement": "Where degrees of proof are also stated, proof is twice the alcohol by volume.",
+      "appliesWhen": {
+        "productType": ["Distilled spirits"]
+      },
+      "check": {
+        "kind": "numeric-consistency",
+        "field": "alcoholContent",
+        "relation": "proof-is-twice-abv"
+      },
+      "severity": "blocking",
+      "status": "active",
+      "automation": "advisory",
+      "$note": "Answers open question Q8. Needs no application data and no model — the label is checked against itself."
+    },
+    {
+      "id": "DS-STANDARD-OF-FILL",
+      "ruleVersion": 1,
+      "regulation": "27-CFR-5.203",
+      "effectiveFrom": "2025-01-10",
+      "effectiveTo": null,
+      "supersedes": null,
+      "requirement": "Net contents are an authorised metric standard of fill for distilled spirits.",
+      "appliesWhen": {
+        "productType": ["Distilled spirits"]
+      },
+      "check": {
+        "kind": "value-in-set",
+        "field": "netContents",
+        "unit": "mL",
+        "permitted": [
+          3750, 3000, 2000, 1800, 1750, 1500, 1000, 945, 900, 750, 720, 710, 700, 570, 500, 475,
+          375, 355, 350, 331, 250, 200, 187, 100, 50
+        ]
+      },
+      "severity": "blocking",
+      "status": "active",
+      "automation": "advisory",
+      "$note": "Amended by T.D. TTB-200, 90 FR 1876 (10 Jan 2025), which changed the authorised list. The prior list is NOT in this archive, so a submission filed before that date is UNDETERMINED for this rule rather than judged by a list that did not govern it."
+    },
+    {
+      "id": "WINE-STANDARD-OF-FILL",
+      "ruleVersion": 1,
+      "regulation": "27-CFR-4.72",
+      "effectiveFrom": "2025-01-20",
+      "effectiveTo": null,
+      "supersedes": null,
+      "requirement": "Net contents are an authorised standard of fill for wine.",
+      "appliesWhen": {
+        "productType": ["Wine"]
+      },
+      "check": {
+        "kind": "value-in-set",
+        "field": "netContents",
+        "unit": "mL",
+        "permitted": [
+          3000, 2250, 1800, 1500, 1000, 750, 720, 700, 620, 600, 568, 550, 500, 473, 375, 360, 355,
+          330, 300, 250, 200, 187, 180, 100, 50
+        ],
+        "notApplicableAbove": 3000
+      },
+      "severity": "blocking",
+      "status": "active",
+      "automation": "advisory",
+      "$note": "4.72(b) permits containers above 3 litres in even litres; this rule stops at 3 litres and a larger container is NOT_APPLICABLE, not a breach."
+    },
+    {
+      "id": "HEALTH-WARNING-TEXT",
+      "ruleVersion": 1,
+      "regulation": "27-CFR-16.21",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "supersedes": null,
+      "requirement": "The health warning statement appears word for word as prescribed.",
+      "appliesWhen": {
+        "productType": ["Distilled spirits", "Wine", "Malt beverages"]
+      },
+      "check": {
+        "kind": "statutory-text",
+        "reference": "warning-statement"
+      },
+      "severity": "blocking",
+      "status": "active",
+      "automation": "advisory",
+      "$note": "Implemented before this archive existed, against config/warning-statement.json. Listed so the set describes everything checked, not only what it added."
+    }
+  ]
+}
