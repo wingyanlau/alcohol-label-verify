@@ -6,7 +6,7 @@
  * the applicant claimed.
  */
 
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { ExtractionProvider, ExtractionRequest } from '../domain/extraction.js'
 import { checkReviewRequest, ReviewRejected, reviewOne } from './single.js'
 
