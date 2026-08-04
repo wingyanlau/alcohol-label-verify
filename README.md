@@ -23,6 +23,30 @@ question a reviewer of this system would ask first: *how do you know the model
 did not simply agree with the applicant?* It cannot, because it is never shown
 what the applicant claimed (D4, guarded by `CT-10`).
 
+**It is now enforced rather than asserted.** Every recorded act names the agent
+that performed it, with a kind — `human`, `model` or `system` — and the code
+refuses an act the kind is not entitled to: a model cannot record a decision,
+and neither a model nor a deployment can enact a rule (design §19, D46). Until
+that landed the principle lived in one validation and a lot of prose, and prose
+does not fail a build. It found a real hole on its first run.
+
+---
+
+## What it does, end to end
+
+| Layer | What it produces |
+|---|---|
+| **Read** | Two blind extractions — label artwork and application record — neither shown the other's values |
+| **Compare** | Field verdicts against the application, and the health warning against the statute, word for word |
+| **Check compliance** | Findings against a versioned, effective-dated policy set: each with its citation, the check as applied, and the regulation text it rests on |
+| **Recommend** | An outcome and a sentence that never says *approved* — only *ready for your approval* |
+| **Decide** | A person approves, rejects or returns. Recorded against what was recommended, so agreement can be measured |
+| **Audit** | A hash-chained trail; any verdict re-derivable from the record without calling a model |
+
+The last three arrived late and are the part worth reading: `docs/design.md`
+§18 (the verification layer), §18.8 (the policy archive as a bitemporal record)
+and §19 (the agent).
+
 ---
 
 ## Running it
@@ -179,8 +203,9 @@ degraded submission.
 | | |
 |---|---|
 | `ADV-07` (concurrency) untested | Cross-request state isolation is asserted by design, not by a test |
-| No single-review screen | The batch worklist and detail panel exist; the dedicated one-submission screen in `ui-design.md` §4 does not (M5 open) |
-| Per-stage timings not logged | They are computed and returned, but not emitted as structured log dimensions (M7 open) |
+| Attribution is declared, not verified | This deployment authenticates nobody. `decided_by` is a name typed into a box, so no record here is evidence of *who* — only of *what* (design §19.5) |
+| The policy cannot be read out of the system | The archive holds 15 rules with their windows, citations and approvers, and nothing exposes them. `/health/policy` returns counts. You can review the rules only in the reviewed file |
+| The enforced rules carry no provenance | The nine rules in force hold no source quote; the six drafts do. A finding pins its regulation by digest and issue date instead, which is traceable but not *reviewable* (§18.5a) |
 | Durable Object has no test harness | `vitest.config.ts` runs on Node; the coordinator is exercised only end to end |
 | No reviewer gate on production | The `production` GitHub environment has no required approver, and the `prod` branch does not exist |
 
@@ -199,24 +224,61 @@ as not re-derivable rather than quietly passing.
 
 In the order I would actually do them.
 
-1. **Answer B-Q4 with a measurement.** Two adapters, one instruction, one
+0. **Expose the policy for reading.** The archive is built, populated and
+   audited, and nothing can display it. Until a reviewer can see the six
+   proposed rules beside their citations and quotes, none of them can be
+   approved — you cannot review what you cannot read. Smallest item here and
+   the prerequisite for the next one.
+1. **Enact a rule, and watch a past verdict survive it.** Six drafts wait on a
+   named approval. Enacting one is the experiment worth running: verdicts
+   recorded before the change must still replay `identical`, because the
+   archive rebuilds the rules as they stood. Under a version-numbered policy
+   the same change would have made every prior verdict permanently
+   incomparable.
+2. **Answer B-Q4 with a measurement.** Two adapters, one instruction, one
    prompt version, one corpus: which model reads a 4.5pt warning statement best
    is a controlled comparison this system is already built for, and nobody has
    run it.
-2. **Rebuild replay around a stored input set** (see `docs/design.md`). The
+3. **Rebuild replay around a stored input set** (see `docs/design.md`). The
    current implementation recovers digests by parsing an audit string and
    infers schema capability from a migration filename — it works and is tested,
    but three parts of it are convention where they should be data.
-3. **Structured logging with stage timings**, which is also what fills the
-   latency table above from production rather than from one run.
-4. **Retention driven by a records schedule** rather than a number I chose.
+4. **An authenticated identity.** Everything attributed here is a name someone
+   typed. Until that changes, no record is evidence of *who*, which is the
+   single largest gap between this and something an auditor could rely on.
+5. **Retention driven by a records schedule** rather than a number I chose.
 
-Beyond that sits the verification layer proper — checking a submission against
-a versioned, approved policy set rather than only against its own application
-form, and recording what the agent decided against what was recommended so that
-automating any part of it could one day be justified by evidence. It is
-designed in [docs/design.md](docs/design.md) §18 and deliberately unbuilt; the
-current code is aligned to permit it, not to anticipate it.
+### The recall gap, which is the honest headline
+
+**What the system decided is fully recoverable. What it decided *by* is not.**
+
+A verdict can be called up by the code an agent quoted, and it answers
+completely: which rules were applied, what each required, what was observed,
+who decided, and a replay that re-derives the outcome from the stored readings
+without calling a model. On the current record that is `identical` for every
+verdict written since the archive existed.
+
+The policy behind it is reachable only through the file in git:
+
+| | |
+|---|---|
+| **No way to read the rules out** | The archive holds them — both time windows, citations, approvers, and the six unapproved drafts — and no endpoint exposes any of it. This is the next thing to build, and it is small |
+| **The regulation text is not stored** | A registered regulation holds a digest, a length and an issue date. That pins the source exactly and cannot be paraphrased, but recalling *the words* means fetching eCFR |
+| **The enforced rules have no quote** | Adding one means asserting who read the regulation, which is a governance act rather than a schema change (§18.5a, D46). The diff is small; it needs a person's name on it, not mine |
+
+**Where an LLM would earn its place.** Recall is exactly the shape of problem
+these models are good at and this system currently refuses to use them for:
+given a finding, produce the passage it rests on, the neighbouring provisions
+that qualify it, and the ones a reviewer would want to have seen. Nothing about
+that touches a verdict — the model would be assisting *review of the rules*,
+not deciding compliance — so it sits cleanly on the right side of the governing
+principle. The agent concept (§19) is what would make it accountable: such a
+model is an agent of kind `model`, its work attributable, and structurally
+incapable of deciding anything.
+
+That is the direction this prototype is pointed at, and deliberately did not
+take: the reading layer was kept narrow so that everything downstream of it
+could be deterministic and defensible first.
 
 ---
 
