@@ -68,7 +68,7 @@ const finding = (rule: PolicyRule, state: FindingState, evidence: string): Polic
  */
 const ALC = String.raw`(?:alcohol|alc\.?)`
 const VOL = String.raw`(?:volume|vol\.?)`
-const PCT = String.raw`(?:percent|%)`
+const PCT = '(?:percent|%)'
 const N = String.raw`\d+(?:\.\d+)?`
 const ABV_FORMS = [
   // "Alcohol __ percent by volume"
