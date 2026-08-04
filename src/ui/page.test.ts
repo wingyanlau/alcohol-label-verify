@@ -75,3 +75,18 @@ describe('the decision control (§18.5)', () => {
     expect(PAGE_HTML).toContain('res.body.reason')
   })
 })
+
+describe('a failed start says what failed (D38)', () => {
+  it('reads the response body even when the request failed', () => {
+    // The server puts the real cause in "detail". Throwing the response away
+    // gave an agent a sentence that named nothing, and gave whoever they
+    // reported it to no more.
+    expect(PAGE_HTML).toContain('body.detail')
+  })
+
+  it('still leads with the sentence an agent can act on', () => {
+    // The cause is appended, not substituted. "Nothing was saved" is what tells
+    // them it is safe to press it again.
+    expect(PAGE_HTML).toContain('The check could not be started. Nothing was saved.')
+  })
+})

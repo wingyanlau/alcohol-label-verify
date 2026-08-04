@@ -242,12 +242,66 @@ export async function startBatch(env: Env): Promise<BatchStarted> {
   })
 
   // Enqueue accepted items. Queue sends are capped per call, so send in batches.
-  for (const message of messages) await env.WORK.send(message)
+  //
+  // This is the LAST step, and until it completes the ledger describes work
+  // that nothing will ever pick up: the coordinator holds every item QUEUED and
+  // the queue holds nothing. A failure here — or in the two appends above —
+  // used to leave exactly that, and because `loadCurrentJob` reads "running"
+  // from the submissions rather than the job row, the dead job then answered
+  // every later press of the button with "joined" instead of starting a fresh
+  // one. Observed on staging: 25 items queued, 0 attempts, indefinitely.
+  //
+  // So a failure past this point undoes the claim rather than leaving it
+  // standing. The job is not recoverable — some messages may have gone — and
+  // saying so is the honest outcome, because the alternative is a batch that
+  // looks alive and is not.
+  try {
+    for (const message of messages) await env.WORK.send(message)
+  } catch (error) {
+    await abandonPartialJob(db, stub, jobId, error)
+    throw error
+  }
 
   return {
     jobId,
     total: prepared.length,
     accepted: messages.length,
     rejected: rejectedItems.length,
+  }
+}
+
+/**
+ * Undo a job that was opened and never enqueued.
+ *
+ * Settles every item the ledger still shows as pending and aborts the
+ * coordinator, so the job stops counting as running. Without this a partial
+ * start is indistinguishable from a batch in flight, and the only way back is
+ * for somebody to know to press reset.
+ *
+ * Best effort by design: this runs while something is already failing, and a
+ * second failure here must not replace the first. The original error is what
+ * the caller reports.
+ */
+async function abandonPartialJob(
+  db: D1Database,
+  stub: { abort: (reason: string) => Promise<unknown> },
+  jobId: string,
+  cause: unknown,
+): Promise<void> {
+  const reason = `The batch could not be started: ${cause instanceof Error ? cause.message : String(cause)}`
+  try {
+    await db
+      .prepare(
+        `UPDATE submission SET state = 'FAILED', failure_cause = ?
+          WHERE job_id = ? AND state IN ('QUEUED', 'RUNNING')`,
+      )
+      .bind(reason, jobId)
+      .run()
+    await db.prepare(`UPDATE job SET state = 'CANCELLED' WHERE id = ?`).bind(jobId).run()
+    await stub.abort(reason)
+  } catch {
+    // Swallowed deliberately. The caller is already reporting a failure, and
+    // replacing its cause with a cleanup error would send the next person
+    // after the wrong problem (D38).
   }
 }

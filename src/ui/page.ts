@@ -543,16 +543,33 @@ export const PAGE_HTML = `<!doctype html>
     // The server returns the job in flight if there is one, so this is a join
     // rather than a second batch. Nothing here needs to distinguish them.
     fetch('/batch', { method: 'POST' })
-      .then(function (r) { if (!r.ok) throw new Error('start failed'); return r.json() })
+      // The body is read whether or not the request succeeded. The server puts
+      // the actual cause in "detail", and throwing the response away meant an
+      // agent — and whoever they reported it to — got a sentence that named
+      // nothing. An error must say what was observed (D38).
+      .then(function (r) {
+        return r.json().then(function (body) {
+          if (!r.ok) {
+            var e = new Error((body && (body.detail || body.reason)) || 'start failed')
+            throw e
+          }
+          return body
+        })
+      })
       .then(function (data) {
         jobId = data.jobId
         batchSection.classList.remove('hidden')
         setButton('running')
         connect()
       })
-      .catch(function () {
+      .catch(function (err) {
         setButton('idle')
-        startErr.textContent = 'The check could not be started. Nothing was saved. Please try again in a moment.'
+        // The sentence an agent can act on, followed by what actually failed.
+        // The first half is for them; the second is for whoever they tell.
+        var said = err && err.message && err.message !== 'start failed' ? err.message : ''
+        startErr.textContent =
+          'The check could not be started. Nothing was saved. Please try again in a moment.' +
+          (said ? ' (' + said + ')' : '')
         startErr.classList.remove('hidden')
       })
   })
