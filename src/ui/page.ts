@@ -108,10 +108,125 @@ export const PAGE_HTML = `<!doctype html>
   .advisory label { display: flex; gap: 10px; align-items: flex-start; padding: 5px 0; }
   .banner { background: #fdf6e3; border: 1px solid #ecdca6; border-radius: 6px; padding: 10px 14px; font-size: 15px; color: var(--warn); margin-bottom: 16px; }
   .err { color: var(--bad); margin-top: 12px; }
+
+  /* Single review (§4). */
+  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .modes { display: flex; gap: 8px; }
+  .mode { padding: 8px 16px; font-size: 16px; }
+  .mode[aria-selected="false"] { background: var(--panel); color: var(--ink); }
+  .layout2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
+  @media (max-width: 820px) { .layout2 { grid-template-columns: 1fr; } }
+  .panel { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 20px 22px; }
+  .panel h2 { margin: 0 0 16px; font-size: 18px; }
+  .fieldrow { margin-bottom: 16px; }
+  /* Labels sit ABOVE inputs, never inside them: placeholder-as-label
+     disappears on focus and strands a hesitant user mid-form (§4.2). */
+  .fieldrow label { display: block; font-weight: 600; margin-bottom: 6px; }
+  .fieldrow input { width: 100%; font: inherit; padding: 10px 12px; border: 1px solid var(--line);
+                    border-radius: 6px; background: #fff; color: var(--ink); }
+  .fieldrow input:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+  .fieldrow input[aria-invalid="true"] { border-color: var(--bad); }
+  .req { color: var(--muted); font-weight: 400; }
+  .hint { color: var(--muted); font-size: 15px; margin: 6px 0 0; }
+  .inline-err { color: var(--bad); font-size: 15px; margin: 6px 0 0; }
+  .suffixed { position: relative; }
+  /* The % is an adornment inside the border, not part of the value (§4.2). */
+  .suffix { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+  .suffixed input { padding-right: 32px; }
+  .drop { border: 2px dashed var(--line); border-radius: 8px; padding: 28px 20px; text-align: center; }
+  .drop.over { border-style: solid; border-color: var(--focus); background: #f5f7fb; }
+  .dropmsg { margin: 0 0 14px; color: var(--muted); }
+  .constraint { color: var(--muted); font-size: 15px; margin: 14px 0 0; }
+  .picked { display: flex; gap: 14px; align-items: flex-start; }
+  .picked img { width: 120px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  .pickactions { display: flex; gap: 8px; margin-top: 8px; }
+  .pickactions button { padding: 6px 12px; font-size: 15px; }
+  .primary-row { margin-top: 24px; text-align: center; }
+  .primary-row button { font-size: 19px; padding: 14px 28px; }
+  @media (max-width: 820px) { .primary-row button { width: 100%; } }
 </style>
 </head>
 <body>
 <main>
+  <!-- Region A: product name and the mode switch, and no other chrome (§4.1). -->
+  <div class="topbar">
+    <h1>TTB Label Check</h1>
+    <div class="modes" role="tablist" aria-label="Mode">
+      <button id="modeSingle" type="button" class="mode" role="tab" aria-selected="true">Single review</button>
+      <button id="modeBatch" type="button" class="mode secondary" role="tab" aria-selected="false">Batch</button>
+    </div>
+  </div>
+
+  <!-- Single review (§4). Two numbered panels, because the numbering describes
+       the comparison the agent is performing rather than imposing steps. -->
+  <section id="single">
+    <div class="layout2">
+      <div class="panel">
+        <h2>1. The application says</h2>
+        <div class="fieldrow">
+          <label for="brandName">Brand name <span class="req">(required)</span></label>
+          <input id="brandName" name="brandName" type="text" autocomplete="off">
+          <p class="inline-err hidden" id="brandNameErr"></p>
+        </div>
+        <div class="fieldrow">
+          <label for="classType">Class / type</label>
+          <input id="classType" name="classType" type="text" autocomplete="off">
+          <p class="hint">e.g. Kentucky Straight Bourbon Whiskey</p>
+        </div>
+        <div class="fieldrow">
+          <!-- Text, not type=number: a number input rejects a pasted
+               "45% Alc./Vol.", adds spinners nobody wants, and disagrees with
+               itself across locale decimal separators (§4.2). -->
+          <label for="alcoholContent">Alcohol content</label>
+          <div class="suffixed">
+            <input id="alcoholContent" name="alcoholContent" type="text" autocomplete="off">
+            <span class="suffix">%</span>
+          </div>
+        </div>
+        <div class="fieldrow">
+          <label for="netContents">Net contents</label>
+          <input id="netContents" name="netContents" type="text" autocomplete="off">
+          <p class="hint">e.g. 750 mL</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>2. The label</h2>
+        <!-- Drag-and-drop is never the only affordance: the button is the
+             primary one, the drop zone a convenience (§4.3). -->
+        <div id="drop" class="drop">
+          <p class="dropmsg">Drop the label image here</p>
+          <button id="pickBtn" type="button" class="secondary">Choose a file</button>
+          <p class="constraint">JPEG or PNG, up to 10 MB</p>
+          <input id="file" type="file" accept="image/png,image/jpeg" class="hidden">
+        </div>
+        <div id="picked" class="picked hidden">
+          <img id="thumb" alt="The label you attached">
+          <div>
+            <div id="pickedName" class="row-name"></div>
+            <div id="pickedSize" class="row-summary"></div>
+            <div class="pickactions">
+              <button id="replaceBtn" type="button" class="secondary">Replace</button>
+              <button id="removeBtn" type="button" class="secondary">Remove</button>
+            </div>
+          </div>
+        </div>
+        <p class="inline-err hidden" id="fileErr"></p>
+      </div>
+    </div>
+
+    <!-- Never disabled (§4.4). A disabled button is unfocusable, announces
+         nothing, and gives a hesitant person no reason for the silence.
+         Pressing it with an incomplete form runs validation and moves focus to
+         the problem, which tells them what to do. -->
+    <div class="primary-row">
+      <button id="checkBtn" type="button">Check this label</button>
+      <p id="working" class="note hidden" role="status" aria-live="polite"></p>
+    </div>
+    <div id="singleResult"></div>
+  </section>
+
+  <section id="batchHome" class="hidden">
   <h1>Label check</h1>
   <p class="lede">Check each submission's label artwork against its application record, and verify the government health warning. This produces evidence for review — it does not approve or reject.</p>
 
@@ -129,6 +244,8 @@ export const PAGE_HTML = `<!doctype html>
     <div class="bar"><span id="bar"></span></div>
     <div class="counts" id="counts" role="status" aria-live="polite"></div>
     <ul class="worklist" id="worklist"></ul>
+  </section>
+
   </section>
 
   <div id="detail" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="detailTitle"></div>
@@ -371,13 +488,23 @@ export const PAGE_HTML = `<!doctype html>
         if (!data || !data.jobId) return
         jobId = data.jobId
         batchSection.classList.remove('hidden')
-        if (data.running) setButton('running')
+        // A job in flight is the one case where the batch screen matters more
+        // than the single-review form: everyone watching must see the same
+        // thing, which is the whole point of adopting the job at all.
+        if (data.running) { setButton('running'); showMode(false) }
         connect()
       })
       .catch(function () { /* no current job to adopt; the button stands */ })
   }
 
   bootstrap()
+
+  // Single review is the landing mode: it is the interactive path an agent
+  // reaches for, and the batch screen is the demonstration. The bootstrap may
+  // still switch to batch if a job is already running, which is the one case
+  // where the other screen matters more.
+  singleInit()
+  showMode(true)
 
   // ---- Detail view (ui-design §5-§7) --------------------------------------
 
@@ -463,6 +590,127 @@ export const PAGE_HTML = `<!doctype html>
   }
 
   function onDetailKey(e) { if (e.key === 'Escape') closeDetail() }
+
+  // ---- Single review (§4) -------------------------------------------------
+  var attached = null
+
+  function byId(id) { return document.getElementById(id) }
+
+  function showMode(single) {
+    byId('single').classList.toggle('hidden', !single)
+    byId('batchHome').classList.toggle('hidden', single)
+    byId('modeSingle').setAttribute('aria-selected', String(single))
+    byId('modeBatch').setAttribute('aria-selected', String(!single))
+  }
+
+  function clearFieldError(id) {
+    var input = byId(id)
+    if (input) input.removeAttribute('aria-invalid')
+    var err = byId(id + 'Err')
+    if (err) { err.textContent = ''; err.classList.add('hidden') }
+  }
+
+  // Marked invalid for assistive technology, message beneath the control, and
+  // focus moved to the first problem — which tells the agent what to do rather
+  // than leaving them to work it out (§4.5).
+  function showFieldError(id, message) {
+    var input = byId(id)
+    if (input) { input.setAttribute('aria-invalid', 'true'); input.focus() }
+    var err = byId(id + 'Err')
+    if (err) { err.textContent = message; err.classList.remove('hidden') }
+  }
+
+  function attach(file) {
+    if (!file) return
+    attached = file
+    byId('pickedName').textContent = file.name
+    byId('pickedSize').textContent = (file.size / 1048576).toFixed(1) + ' MB'
+    // A thumbnail BEFORE submission: the commonest upload mistake is the wrong
+    // file, and finding that out after a five-second wait is a wasted review.
+    byId('thumb').src = URL.createObjectURL(file)
+    byId('drop').classList.add('hidden')
+    byId('picked').classList.remove('hidden')
+    clearFieldError('file')
+  }
+
+  function detach() {
+    attached = null
+    byId('file').value = ''
+    byId('picked').classList.add('hidden')
+    byId('drop').classList.remove('hidden')
+  }
+
+  function singleInit() {
+    byId('modeSingle').addEventListener('click', function () { showMode(true) })
+    byId('modeBatch').addEventListener('click', function () { showMode(false) })
+
+    byId('pickBtn').addEventListener('click', function () { byId('file').click() })
+    byId('replaceBtn').addEventListener('click', function () { byId('file').click() })
+    byId('removeBtn').addEventListener('click', detach)
+    byId('file').addEventListener('change', function (e) { attach(e.target.files[0]) })
+
+    var drop = byId('drop')
+    ;['dragenter', 'dragover'].forEach(function (type) {
+      drop.addEventListener(type, function (e) { e.preventDefault(); drop.classList.add('over') })
+    })
+    ;['dragleave', 'drop'].forEach(function (type) {
+      drop.addEventListener(type, function (e) { e.preventDefault(); drop.classList.remove('over') })
+    })
+    drop.addEventListener('drop', function (e) {
+      if (e.dataTransfer && e.dataTransfer.files) attach(e.dataTransfer.files[0])
+    })
+
+    byId('checkBtn').addEventListener('click', runSingle)
+  }
+
+  function runSingle() {
+    clearFieldError('brandName'); clearFieldError('file')
+    byId('singleResult').textContent = ''
+
+    // Validation on submit only, never on blur: flagging an incomplete entry
+    // before someone has finished thinking is hostile to a slow typist (§4.5).
+    var brand = byId('brandName').value.trim()
+    if (!brand) return showFieldError('brandName', 'Please enter the brand name from the application.')
+    if (!attached) return showFieldError('file', 'Please add an image of the label.')
+
+    var working = byId('working')
+    working.textContent = 'Reading the label…'
+    working.classList.remove('hidden')
+    var extended = setTimeout(function () {
+      working.textContent = 'Still working — this is taking longer than usual.'
+    }, 8000)
+
+    var form = new FormData()
+    form.append('label', attached)
+    form.append('brandName', brand)
+    form.append('classType', byId('classType').value.trim())
+    form.append('alcoholContent', byId('alcoholContent').value.trim())
+    form.append('netContents', byId('netContents').value.trim())
+
+    fetch('/review', { method: 'POST', body: form })
+      .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b } }) })
+      .then(function (res) {
+        clearTimeout(extended)
+        working.classList.add('hidden')
+        if (!res.ok) {
+          if (res.body && res.body.field === 'image') return showFieldError('file', res.body.reason)
+          if (res.body && res.body.field === 'brandName') return showFieldError('brandName', res.body.reason)
+          var e = el('p', 'err', (res.body && res.body.reason) || 'Something went wrong. Nothing was saved.')
+          byId('singleResult').appendChild(e)
+          return
+        }
+        // The same renderer as the batch path. One review screen, not two.
+        detail.textContent = ''
+        renderDetail(res.body)
+      })
+      .catch(function () {
+        clearTimeout(extended)
+        working.classList.add('hidden')
+        byId('singleResult').appendChild(
+          el('p', 'err', 'The label reading service is not responding. Nothing is wrong with your label — please try again in a moment.'),
+        )
+      })
+  }
 
   function renderDetail(d) {
     detail.textContent = ''

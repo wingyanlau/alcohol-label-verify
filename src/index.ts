@@ -14,10 +14,15 @@ import { MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
 import { BatchTooLarge } from './batch/cap.js'
 import { loadCurrentJob } from './batch/current.js'
 import { loadSubmissionDetail } from './batch/detail.js'
+import { sha256Hex } from './batch/digest.js'
 import { startBatch } from './batch/intake.js'
 import { contentKey, labelImageKey } from './batch/keys.js'
 import { processItem } from './batch/pipeline.js'
-import { isReferenceCode, normaliseReferenceCode } from './batch/reference-code.js'
+import {
+  isReferenceCode,
+  normaliseReferenceCode,
+  referenceCodeFor,
+} from './batch/reference-code.js'
 import { loadStoredVerdict, ReplayUnavailableError, replayVerdict } from './batch/replay-load.js'
 import { retentionPolicyText, retentionWindowDays, sweepRetention } from './batch/retention.js'
 import { approvalFor, isApproved } from './domain/approval.js'
@@ -25,9 +30,12 @@ import { ExtractionContractError } from './domain/extraction.js'
 import { configuredLegibilityFloor } from './domain/legibility.js'
 import { referenceIsUnverified, warningReference } from './domain/reference.js'
 import type { Env, WorkMessage } from './env.js'
+import { checkImageIntake } from './normalise/image.js'
+import { IntakeRejected } from './normalise/normaliser.js'
 import { gatewayFrom } from './providers/gateway.js'
 import { PROMPT_VERSION, promptDigest } from './providers/prompt.js'
 import { createProvider, knownProviderNames, specFor } from './providers/registry.js'
+import { checkReviewRequest, ReviewRejected, reviewOne } from './review/single.js'
 import { PAGE_HTML } from './ui/page.js'
 
 export type ConfigProblem = { readonly setting: string; readonly problem: string }
@@ -811,6 +819,105 @@ export default {
         const detail = await loadSubmissionDetail(env.DB, decodeURIComponent(itemId), labelUrl)
         if (detail === null) return json({ error: 'not_found' }, 404)
         return json(detail)
+      }
+    }
+
+    // Single review — one label, checked now (UC-1, ui-design §4).
+    //
+    // The interactive path. It shares every rule with the batch path and
+    // differs only in where the pixels come from, so a verdict here and a
+    // verdict there are the same verdict computed the same way.
+    //
+    // It persists like any other review. M4 says every review produces an
+    // audit record, and a second entry point that quietly produced none would
+    // make that claim false while looking finished — and would lose replay,
+    // retention and reference lookup, all of which key off the record.
+    if (pathname === '/review' && request.method === 'POST') {
+      if (!env.DB || !env.STAGING) return json({ error: 'unavailable' }, 503)
+
+      try {
+        const form = await request.formData()
+        const file = form.get('label')
+        const image = file instanceof File ? await file.arrayBuffer() : null
+        const application = {
+          brandName: String(form.get('brandName') ?? ''),
+          classType: String(form.get('classType') ?? ''),
+          alcoholContent: String(form.get('alcoholContent') ?? ''),
+          netContents: String(form.get('netContents') ?? ''),
+        }
+
+        // Re-enforced server-side, always. Client validation exists for
+        // responsiveness and never for correctness (§4.5, §9.3).
+        checkReviewRequest({ application, image })
+        checkImageIntake(image as ArrayBuffer, { maxBytes: Number(env.MAX_UPLOAD_BYTES) })
+
+        const submissionId = crypto.randomUUID()
+        const jobId = crypto.randomUUID()
+        const reference = await referenceCodeFor(submissionId)
+        const now = new Date().toISOString()
+        const sourceName = file instanceof File && file.name ? file.name : 'label image'
+        const mimeType = file instanceof File && file.type ? file.type : 'image/png'
+
+        // The artwork, kept for the results panel and purged by the same sweep
+        // as everything else — a single review is a job of one, so retention
+        // needs no special case.
+        await env.STAGING.put(labelImageKey(jobId, submissionId), image as ArrayBuffer, {
+          httpMetadata: { contentType: mimeType },
+        })
+
+        const result = await reviewOne(
+          { application, image: image as ArrayBuffer, mimeType },
+          {
+            provider: createProvider(env),
+            submissionId,
+            reference,
+            labelImageUrl: `/batch/${jobId}/submission/${submissionId}/label.png`,
+            sourceName,
+            env,
+          },
+        )
+
+        await env.DB.prepare(
+          `INSERT INTO job (id, created_at, state, item_count) VALUES (?, ?, 'COMPLETE', 1)`,
+        )
+          .bind(jobId, now)
+          .run()
+        await env.DB.prepare(
+          `INSERT INTO submission
+             (id, job_id, source_name, content_digest, byte_size, content_key, state,
+              created_at, reference_code)
+           VALUES (?, ?, ?, ?, ?, NULL, 'COMPLETED', ?, ?)`,
+        )
+          .bind(
+            submissionId,
+            jobId,
+            sourceName,
+            await sha256Hex(image as ArrayBuffer),
+            (image as ArrayBuffer).byteLength,
+            now,
+            reference,
+          )
+          .run()
+
+        return json(result)
+      } catch (error) {
+        if (error instanceof ReviewRejected) {
+          // The field, so the screen can move focus to it (§4.5).
+          return json({ error: 'invalid', field: error.field, reason: error.message }, 400)
+        }
+        if (error instanceof IntakeRejected) {
+          return json({ error: error.reason, field: 'image', reason: error.message }, 400)
+        }
+        return json(
+          {
+            error: 'review_unavailable',
+            reason:
+              'The label reading service is not responding. Nothing is wrong with your ' +
+              'label — please try again in a moment.',
+            fault: faultOf(env, error),
+          },
+          503,
+        )
       }
     }
 
