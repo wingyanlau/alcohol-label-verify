@@ -153,6 +153,9 @@ describe('the decision history (ui-design §2.3)', () => {
   const row = (over: Record<string, unknown> = {}) => ({
     submission_id: 's-1',
     reference_code: 'ABCD-1234',
+    source_name: 'L01-fully-compliant.pdf',
+    job_id: 'job-1',
+    judged_at: '2026-08-04T09:00:00.000Z',
     verdict_id: 'v-1',
     decided_by: 'jenny',
     decided_at: '2026-08-04T10:00:00.000Z',
@@ -190,6 +193,42 @@ describe('the decision history (ui-design §2.3)', () => {
   it('tolerates a submission whose reference cannot be resolved', async () => {
     const [entry] = await listDecisions(rows([row({ reference_code: null })]))
     expect(entry?.reference).toBe('')
+  })
+
+  it('tells two runs of the same file apart', async () => {
+    // The batch is meant to be run repeatedly, and each run produces fresh
+    // submissions with new ids and new reference codes. Both are decidable,
+    // which is right — but a list carrying only a code and a date would show
+    // two identical-looking rows for the same label.
+    const entries = await listDecisions(
+      rows([
+        row({ submission_id: 's-2', job_id: 'job-2', judged_at: '2026-08-04T15:00:00.000Z' }),
+        row(),
+      ]),
+    )
+    expect(entries.map((e) => e.sourceName)).toEqual([
+      'L01-fully-compliant.pdf',
+      'L01-fully-compliant.pdf',
+    ])
+    // Same label, different run, different moment of judging.
+    expect(entries[0]?.jobId).not.toBe(entries[1]?.jobId)
+    expect(entries[0]?.judgedAt).not.toBe(entries[1]?.judgedAt)
+  })
+
+  it('keeps when it was judged apart from when it was decided', async () => {
+    // Different moments, and a reviewer comparing runs needs both: one says
+    // when the system reached the verdict, the other when a person answered it.
+    const [entry] = await listDecisions(rows([row()]))
+    expect(entry?.judgedAt).toBe('2026-08-04T09:00:00.000Z')
+    expect(entry?.decidedAt).toBe('2026-08-04T10:00:00.000Z')
+  })
+
+  it('survives a verdict or submission that cannot be joined', async () => {
+    const [entry] = await listDecisions(
+      rows([row({ source_name: null, job_id: null, judged_at: null })]),
+    )
+    expect(entry?.sourceName).toBe('')
+    expect(entry?.jobId).toBeNull()
   })
 
   it('returns nothing when nothing has been decided', async () => {

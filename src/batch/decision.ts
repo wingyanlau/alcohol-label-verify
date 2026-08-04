@@ -182,6 +182,23 @@ export interface DecisionEntry {
   readonly reference: string
   readonly verdictId: string
   /**
+   * Which submission, and from which run.
+   *
+   * The batch can be run repeatedly, and it is meant to be — the same 26 files
+   * produce a fresh set of submissions each time, with new ids and new
+   * reference codes, so both runs are independently decidable. What that costs
+   * is legibility: two decisions on "L01-fully-compliant.pdf" are
+   * indistinguishable in a list that carries only a code and a date.
+   *
+   * The name says WHICH label, the job says WHICH RUN, and `judgedAt` says when
+   * the verdict being decided was reached — as against `decidedAt`, when
+   * somebody decided about it. Those are different moments and a reviewer
+   * comparing two runs needs both.
+   */
+  readonly sourceName: string
+  readonly jobId: string | null
+  readonly judgedAt: string | null
+  /**
    * The name entered by whoever decided — **declared, not authenticated.**
    *
    * This deployment has no accounts, so nothing verifies it. Carried under a
@@ -210,6 +227,9 @@ export interface DecisionEntry {
 interface DecisionListRow {
   submission_id: string
   reference_code: string | null
+  source_name: string | null
+  job_id: string | null
+  judged_at: string | null
   verdict_id: string
   decided_by: string
   decided_at: string
@@ -231,9 +251,12 @@ export async function listDecisions(db: D1Database, limit = 100): Promise<Decisi
   const { results } = await db
     .prepare(
       `SELECT d.submission_id, d.verdict_id, d.decided_by, d.decided_at,
-              d.decision, d.recommended_outcome, d.note, s.reference_code
+              d.decision, d.recommended_outcome, d.note,
+              s.reference_code, s.source_name, s.job_id,
+              v.created_at AS judged_at
          FROM decision d
          LEFT JOIN submission s ON s.id = d.submission_id
+         LEFT JOIN verdict    v ON v.id = d.verdict_id
         ORDER BY d.decided_at DESC
         LIMIT ?1`,
     )
@@ -243,6 +266,9 @@ export async function listDecisions(db: D1Database, limit = 100): Promise<Decisi
   return results.map((r) => ({
     submissionId: r.submission_id,
     reference: r.reference_code ?? '',
+    sourceName: r.source_name ?? '',
+    jobId: r.job_id,
+    judgedAt: r.judged_at,
     verdictId: r.verdict_id,
     decidedByAsEntered: r.decided_by,
     decidedAt: r.decided_at,
