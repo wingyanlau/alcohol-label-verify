@@ -365,3 +365,19 @@ jobs:
           if [ "$stale" -ne 0 ]; then
             echo "::warning::$stale verdict(s) predate the record they would need; not re-derivable by design"
           fi
+
+          # The same false pass as `checked -eq 0`, one level up, and this one
+          # has already happened: bumping AGGREGATION_VERSION made every stored
+          # verdict not-comparable, so this step reported success having
+          # re-derived nothing. `differs` cannot be non-zero when nothing was
+          # comparable, which is why the checks above stayed green through a
+          # revision that reproduced no verdict at all.
+          #
+          # A warning rather than a failure, for the reason given above: after a
+          # deliberate version bump this is the correct and expected state, and
+          # failing would block every deploy until a fresh batch has been run.
+          # It stops the step from reading as verification it did not perform.
+          identical=$(echo "$body" | jq -r '.identical // 0')
+          if [ "$identical" -eq 0 ]; then
+            echo "::warning::$checked verdict(s) checked, none comparable — re-derivability unverified. Run a batch under this revision to confirm."
+          fi
