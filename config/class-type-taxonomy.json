@@ -1,0 +1,102 @@
+{
+  "$comment": "The standards of identity as a lookup: printed designation -> class. Extracted from 27 CFR part 5 subpart I via the eCFR versioner API at title 27 issue date 2026-07-31. Minimum bottling strengths and permitted spellings are parsed from the regulation text, not transcribed.",
+  "taxonomyVersion": 1,
+  "source": {
+    "title": 27,
+    "part": 5,
+    "subpart": "I — Standards of Identity for Distilled Spirits",
+    "issueDate": "2026-07-31"
+  },
+  "$resolution": "How a designation resolves to a class, and why. 5.141(a) divides spirits into classes, further divided into types. 5.141(d) requires all words in a designation to appear together. 5.143(b) permits a place to appear as part of the designation — 'New York Bourbon Whisky'. So a designation belongs to a class when the class name, in any permitted spelling, appears as a whole word within it. 'Kentucky Straight Bourbon Whiskey' resolves to Whisky.\n\n5.141(b)(2) allows a product to conform to more than one class and be labelled with any one of them, so more than one match is genuinely AMBIGUOUS and is reported as such — never resolved by picking the first.",
+  "classes": [
+    {
+      "id": "27-CFR-5.142",
+      "name": "Neutral spirits or alcohol",
+      "citation": "27 CFR 5.142",
+      "spellings": ["alcohol", "neutral spirits", "neutral spirits or alcohol"],
+      "minimumBottlingAbv": 40.0,
+      "textDigest": "b8b5307cf6257a96"
+    },
+    {
+      "id": "27-CFR-5.143",
+      "name": "Whisky",
+      "citation": "27 CFR 5.143",
+      "spellings": ["whiskey", "whisky"],
+      "minimumBottlingAbv": 40.0,
+      "textDigest": "2881be753d903031"
+    },
+    {
+      "id": "27-CFR-5.144",
+      "name": "Gin",
+      "citation": "27 CFR 5.144",
+      "spellings": ["gin"],
+      "minimumBottlingAbv": 40.0,
+      "textDigest": "29e2f3404a6a4070"
+    },
+    {
+      "id": "27-CFR-5.145",
+      "name": "Brandy",
+      "citation": "27 CFR 5.145",
+      "spellings": ["brandy"],
+      "minimumBottlingAbv": 40.0,
+      "textDigest": "404cb04d01acb0ec"
+    },
+    {
+      "id": "27-CFR-5.146",
+      "name": "Blended applejack",
+      "citation": "27 CFR 5.146",
+      "spellings": ["blended applejack"],
+      "minimumBottlingAbv": 40.0,
+      "textDigest": "40557b790d85ab75"
+    },
+    {
+      "id": "27-CFR-5.147",
+      "name": "Rum",
+      "citation": "27 CFR 5.147",
+      "spellings": ["rum"],
+      "minimumBottlingAbv": 40.0,
+      "textDigest": "ab08493306a06dc9"
+    },
+    {
+      "id": "27-CFR-5.148",
+      "name": "Agave spirits",
+      "citation": "27 CFR 5.148",
+      "spellings": ["agave spirits"],
+      "minimumBottlingAbv": null,
+      "textDigest": "e7520dfb146476fe"
+    },
+    {
+      "id": "27-CFR-5.150",
+      "name": "Cordials and liqueurs",
+      "citation": "27 CFR 5.150",
+      "spellings": ["cordial", "cordials and liqueurs", "liqueur"],
+      "minimumBottlingAbv": 30.0,
+      "textDigest": "5d37c3b65e93a75c"
+    },
+    {
+      "id": "27-CFR-5.151",
+      "name": "Flavored spirits",
+      "citation": "27 CFR 5.151",
+      "spellings": ["flavored spirits"],
+      "minimumBottlingAbv": 30.0,
+      "textDigest": "3b8de9fb412523c4"
+    },
+    {
+      "id": "27-CFR-5.152",
+      "name": "Imitations",
+      "citation": "27 CFR 5.152",
+      "spellings": ["imitations"],
+      "minimumBottlingAbv": null,
+      "textDigest": "7c4474b9c193b07d"
+    },
+    {
+      "id": "27-CFR-5.156",
+      "name": "Distilled spirits specialty products",
+      "citation": "27 CFR 5.156",
+      "spellings": ["distilled spirits specialty products"],
+      "minimumBottlingAbv": null,
+      "textDigest": "769de79fb60675e4"
+    }
+  ],
+  "$limits": "Class-level only. Several TYPES carry their own minimum — the BAM gives 24% for Rock and Bourbon, a type under cordials and liqueurs whose class minimum is 30%. A class-keyed bound is therefore a floor for the class and can be wrong for a type beneath it, so a designation naming a type is UNDETERMINED for the strength check until the type table is extracted."
+}
