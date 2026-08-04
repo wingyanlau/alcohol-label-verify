@@ -2036,8 +2036,9 @@ plainly in the README, which is the correct handling of a known limitation.
 | D40 | Advisory and `UNDETERMINED` policy findings get their own outcome, `CLEAR_CONFIRM_POLICY`, ranked above `CLEAR_CONFIRM_FLAGGED` (§18.4) | Reusing `CLEAR_CONFIRM_FLAGGED` with a payload saying which kind of confirmation is wanted | Two different requests to the agent — *confirm this reading* and *make this judgement* — need two names, or `OUTCOME_HEADLINE` stops being a total function of the outcome and every consumer branches on a payload to learn what it is being asked. A fifth state costs one map entry, once; an overloaded fourth costs a branch at every call site, forever. It ranks higher because a judgement the artwork cannot supply is a larger ask than a reading a better scan would settle | Easy — additive, and no existing outcome changes meaning |
 | D41 | A rule's identity is **when it is in force**, not a release number. `policySetVersion` is demoted to a deployment label and is no longer bound to a verdict (§18.8.1) | Keeping the version integer as the identity | It was a second fact describing one thing, maintained by hand, with nothing checking it against the file. On the first amendment after it was built it stayed at 1 while four regulations, fourteen documents and five rules were added — under which every existing verdict would have replayed as *comparable* against rules it was never judged by. Effective dates were already present and are the truth | Moderate — verdicts must bind dates instead, and replay must reconstruct |
 | D42 | The archive is **bitemporal**: `effectiveFrom`/`effectiveTo` for valid time, `recordedAt`/`retiredAt` for transaction time (§18.8.2) | A single effective-date timeline | One timeline cannot distinguish *the law changed* from *we were wrong about the law*, and both are asked in an audit. Dating a correction from today asserts the wrong rule legitimately governed earlier filings; backdating it asserts verdicts used a rule they never saw. Neither is true, and only two axes can say so | **One-way** — it is a claim about what the record means |
-| D43 | The archive lives in **D1, append-only**, and a policy change is a transaction that emits into the verdict hash chain under `subject_type = 'config'` (§18.8.3, §18.8.4) | Keeping `config/policy-set.json` as the archive | A file edit cannot be audited, so the policy had no history an auditor could read — only the git log of a JSON file, which is neither the audit trail nor tamper-evident. `config` was a subject type declared in 0001 that nothing ever wrote. Cost: review-by-pull-request is lost, which is the main thing to dislike (§18.8.8) | Hard — a migration, a loader rewrite, and an approval path |
+| D43 | The **runtime** archive lives in D1, append-only, and a policy change is a transaction that emits into the verdict hash chain under `subject_type = 'config'` (§18.8.3, §18.8.4). *Amended by D45: the JSON file is retained as the reviewed source that seeds it* | Keeping `config/policy-set.json` as the runtime archive | A file edit cannot be audited, so the policy had no history an auditor could read — only the git log of a JSON file, which is neither the audit trail nor tamper-evident. `config` was a subject type declared in 0001 that nothing ever wrote. Cost: review-by-pull-request is lost, which is the main thing to dislike (§18.8.8) | Hard — a migration, a loader rewrite, and an approval path |
 | D44 | Each finding carries a **snapshot of the rule as applied** — citation, quote, check parameters, approver — and the verdict binds `valid_on` and `as_of` (§18.8.5) | Binding the dates alone and resolving from the archive on demand | Today the citation is resolved against *today's* archive at read time, so a dropped rule yields nothing and a moved regulation yields the wrong section; the parameters actually applied are not stored at all. Evidence that depends on a live lookup is not evidence, and the lookup fails precisely when it matters — years later, or when the archive itself is disputed | Easy — additive columns |
+| D45 | `config/policy-set.json` stays the **reviewed source** and seeds the D1 rows; the rows are derived, append-only, and never hand-authored (§18.8.3) | Rows as the only archive (D43 as first written); or the file as the only archive | The two answer different questions — the file *what do we intend the rules to be*, the rows *what did we actually apply and between when*. Rows alone lose review by pull request, which is the one place a wrong rule is caught before it is enforced against every submission; a file alone has no auditable history. Seeding becomes the transaction that emits the policy events, and it is idempotent, so the deploy records the change rather than being the change | Easy — it is the reconciler that carries the cost, and it is derived |
 
 ---
 
@@ -2738,10 +2739,41 @@ rulesFor(inputs, validOn, asOf) -> rules
 bound to the verdict, and together they reproduce the exact rule set forever
 without the archive needing to be frozen.
 
-### 18.8.3 The archive moves into the record
+### 18.8.3 The file is the reviewed source; the rows are the history
 
-A JSON file loaded at module start makes a policy change a *file edit* — which
-is why nothing about it is auditable. The archive becomes tables:
+A JSON file loaded at module start makes a policy change a *file edit*, which is
+why nothing about it is auditable. Moving the archive wholesale into D1 fixes
+that and loses something real: a rule change is currently a diff a person reads
+before it merges, and rows are not reviewable that way.
+
+**Both are kept, because they are answering different questions (D45).**
+
+| | Role | Answers |
+|---|---|---|
+| `config/policy-set.json` | The **reviewed source**. Human-authored, changed by pull request, carrying the approver and the quote | *What do we intend the rules to be?* |
+| `policy_rule` rows in D1 | The **runtime archive and the history**. Derived, append-only, never authored by hand | *What did we actually apply, and between when?* |
+
+The file states current intent. It does not accumulate — a superseded rule is
+edited or removed there, and its past exists in git. The rows accumulate and
+never lose anything, which is what an audit needs and what a file cannot give.
+
+**Seeding is the transaction.** On deploy the engine reconciles the file against
+the rows, and that reconciliation is what emits the audit events in §18.8.4:
+
+| Found | Action | Transaction time |
+|---|---|---|
+| In the file, not in the rows | Insert | `recorded_at` opens at the deploy |
+| In both, body unchanged | Nothing | Untouched — re-running changes nothing |
+| In both, body **changed** | Close the predecessor's `retired_at`, insert the successor | Old row keeps its window; new row opens |
+| In the rows, gone from the file | Close `retired_at`. **Never deleted** | Window closes; the row and its history remain |
+
+Reconciliation is **idempotent** — the same file applied twice produces one set
+of rows and one set of events — and it is **append-only**, so it can add to the
+history but never rewrite it. A per-rule body digest is what makes "changed"
+decidable; it is the same tripwire the regulations already carry, applied one
+level down.
+
+The archive becomes tables:
 
 ```
 policy_rule
@@ -2761,12 +2793,16 @@ never delete") enforced by the schema rather than by discipline.
 
 ### 18.8.4 A policy change is a transaction, not a deploy
 
+The steps below are what **reconciliation performs**; the authoring happens in
+the reviewed file (§18.8.3). A person still writes and approves the change, and
+the deploy is what records it.
+
 | Step | What happens | Recorded as |
 |---|---|---|
-| **Propose** | A rule is drafted, from a regulation or a document. It has provenance and a quote, and no approval | `policy.rule.proposed` |
-| **Enact** | A named person approves it. `recorded_at` opens; the rule begins applying | `policy.rule.enacted` |
-| **Supersede** | A successor is inserted and the predecessor's window is closed, atomically | `policy.rule.superseded` |
-| **Retire** | A rule is withdrawn without replacement | `policy.rule.retired` |
+| **Propose** | A rule is drafted, from a regulation or a document. It has provenance and a quote, and no approval. It seeds as a row but never selects | `policy.rule.proposed` |
+| **Enact** | The file carries a named approval. `recorded_at` opens; the rule begins applying | `policy.rule.enacted` |
+| **Supersede** | The file's rule body changed. A successor is inserted and the predecessor's window closed, in one batch | `policy.rule.superseded` |
+| **Retire** | The rule left the file. Its window is closed and the row kept | `policy.rule.retired` |
 
 Each emits into **the same hash chain as the verdicts**, under `subject_type =
 'config'` — a subject type declared in `0001_init.sql` that nothing has ever
@@ -2825,8 +2861,10 @@ is evidence, and evidence that depends on a live lookup is not evidence.
 
 | | |
 |---|---|
-| Review by pull request is lost | The JSON file was reviewable in a diff. Rows are not. Mitigation: the enact step requires a named approver, and proposals carry their quote — but this genuinely trades one review surface for another, and is the main thing to dislike about the change |
-| Seeding | The current file becomes a seed migration. Its rules must enter with honest `recorded_at` values — the dates they actually began applying, not the migration date |
+| ~~Review by pull request is lost~~ | **Resolved by D45.** The file stays the reviewed source and seeds the rows, so a rule change is still a diff a person reads before it merges |
+| Two representations can disagree | The cost of keeping both. Rows are *derived* and never hand-authored, reconciliation is idempotent, and `/health` should compare the file's `contentDigest` against the digest last seeded — a deployment whose archive does not match its source is a startup problem, exactly as a drifted retention policy already is (D32) |
+| Seeding the existing rules | The current file becomes the first reconciliation. Its rules must enter with honest `recorded_at` values — the dates they actually began applying, not the migration date. Where that date is unknown it should be the earliest verdict that cites the rule, and where even that is unknown, stated as unknown rather than guessed |
+| A rule's past leaves the file | Superseding edits the file in place, so the previous wording survives only in git and in the rows. That is the intended division — the file is current intent, the rows are history — but it means the file alone can no longer answer "what did this rule used to say" |
 | Bigger records | Accepted. See §18.8.5 |
 | Two dates to get right | `validOn` from the filing, `asOf` from the clock at judgement. Both must be supplied by the caller, as `submittedOn` already is (M1 keeps clocks out of the core) |
 
