@@ -15,6 +15,7 @@ import {
   DecisionRejected,
   isDecision,
   isDisagreement,
+  listDecisions,
 } from './decision.js'
 
 const check = (decision: string, recommendedOutcome: Outcome, note: string | null = null) =>
@@ -131,5 +132,69 @@ describe('a departure from the recommendation must say why', () => {
     // the noise.
     expect(() => check('APPROVED', 'CLEAR')).not.toThrow()
     expect(() => check('REJECTED', 'DISCREPANCIES_FOUND')).not.toThrow()
+  })
+})
+
+describe('the decision history (ui-design §2.3)', () => {
+  /*
+   * A transparent record rather than a supervisor's screen. This deployment
+   * authenticates nobody, so gating it behind a role would imply an access
+   * control that does not exist — and this is the one record that says what
+   * humans did rather than what the system found.
+   */
+  const rows = (results: unknown[]) =>
+    ({
+      prepare: () => ({
+        bind: () => ({ all: async () => ({ results }) }),
+        all: async () => ({ results }),
+      }),
+    }) as unknown as D1Database
+
+  const row = (over: Record<string, unknown> = {}) => ({
+    submission_id: 's-1',
+    reference_code: 'ABCD-1234',
+    verdict_id: 'v-1',
+    decided_by: 'jenny',
+    decided_at: '2026-08-04T10:00:00.000Z',
+    decision: 'APPROVED',
+    recommended_outcome: 'CLEAR',
+    note: null,
+    ...over,
+  })
+
+  it('reports attribution as entered, not as identity', async () => {
+    // The field name carries the caveat, so a reader cannot mistake a typed
+    // name for a verified one.
+    const [entry] = await listDecisions(rows([row()]))
+    expect(entry?.decidedByAsEntered).toBe('jenny')
+  })
+
+  it('computes agreement with the one implementation, not a second copy', async () => {
+    const [agreed] = await listDecisions(rows([row()]))
+    expect(agreed?.agreed).toBe(true)
+    const [differed] = await listDecisions(
+      rows([row({ decision: 'APPROVED', recommended_outcome: 'DISCREPANCIES_FOUND' })]),
+    )
+    expect(differed?.agreed).toBe(false)
+  })
+
+  it('says a reason exists without publishing it', async () => {
+    // The note is free text an agent wrote about an applicant. It is already
+    // kept out of the audit chain on D20 grounds, and a browsable list is a
+    // weaker place for it than a log somebody had a reason to open.
+    const [entry] = await listDecisions(rows([row({ note: 'corrected label by email' })]))
+    expect(entry?.hasNote).toBe(true)
+    expect(JSON.stringify(entry)).not.toContain('corrected label by email')
+  })
+
+  it('tolerates a submission whose reference cannot be resolved', async () => {
+    const [entry] = await listDecisions(rows([row({ reference_code: null })]))
+    expect(entry?.reference).toBe('')
+  })
+
+  it('returns nothing when nothing has been decided', async () => {
+    // Distinct from "everything agreed", which is what an empty list reads as
+    // if the caller does not say otherwise.
+    expect(await listDecisions(rows([]))).toEqual([])
   })
 })

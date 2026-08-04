@@ -14,10 +14,12 @@ import { MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
 import { BatchTooLarge } from './batch/cap.js'
 import { loadCurrentJob } from './batch/current.js'
 import {
+  agreementByOutcome,
   alreadyDecided,
   checkDecision,
   DecisionRejected,
   isDisagreement,
+  listDecisions,
   recordDecision,
 } from './batch/decision.js'
 import { loadSubmissionDetail } from './batch/detail.js'
@@ -1150,6 +1152,37 @@ export default {
     //
     // Returns the location rather than the result, so there is exactly one
     // renderer for a review and this route cannot drift away from it.
+    // What people actually decided, newest first (ui-design §2.3).
+    //
+    // Not scoped to a reviewer. This deployment authenticates nobody, so a
+    // role-gated history would imply an access control that does not exist —
+    // and this is the one record that says what humans did rather than what the
+    // system found, which is the ground truth §18.5 says any move toward
+    // automation would have to be earned against.
+    //
+    // Attribution is DECLARED, not verified, and the field name says so.
+    if (pathname === '/audit/decisions' && request.method === 'GET') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+      const limit = Math.min(
+        Number(new URL(request.url).searchParams.get('limit') ?? '100') || 100,
+        500,
+      )
+      const [decisions, agreement] = await Promise.all([
+        listDecisions(env.DB, limit),
+        agreementByOutcome(env.DB),
+      ])
+      return json({
+        decisions,
+        agreement,
+        // Stated rather than left to be inferred from an empty list, which
+        // reads as "nobody disagreed" when it means "nobody has decided".
+        note:
+          decisions.length === 0
+            ? 'No decision has been recorded yet. This is empty because nothing has been decided, not because everything agreed.'
+            : 'Attribution is the name entered by whoever decided. This deployment authenticates nobody.',
+      })
+    }
+
     // Everything needed to defend one verdict, in one answer (ui-design §2.3,
     // "Auditor / compliance reviewer").
     //

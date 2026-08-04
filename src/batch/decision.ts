@@ -175,3 +175,105 @@ export async function recordDecision(db: D1Database, record: DecisionRecord): Pr
     }),
   })
 }
+
+/** One decision, as a transparent record renders it. */
+export interface DecisionEntry {
+  readonly submissionId: string
+  readonly reference: string
+  readonly verdictId: string
+  /**
+   * The name entered by whoever decided — **declared, not authenticated.**
+   *
+   * This deployment has no accounts, so nothing verifies it. Carried under a
+   * name that says so, because a record whose attribution reads as identity is
+   * transparent about something weaker than it appears, and a reader would
+   * reasonably assume more.
+   */
+  readonly decidedByAsEntered: string
+  readonly decidedAt: string
+  readonly decision: string
+  readonly recommendedOutcome: string
+  /** Whether it matched what the system suggested. One implementation (§18.5). */
+  readonly agreed: boolean
+  /**
+   * That a reason was given, not the reason itself.
+   *
+   * The note is free text an agent wrote about an applicant. It is already kept
+   * out of the audit chain's detail on D20 grounds, and the same reasoning
+   * applies to a list anyone can browse — more so, because a log is read by
+   * someone with a reason to be looking. The note stays on the individual
+   * trace, where that is true.
+   */
+  readonly hasNote: boolean
+}
+
+interface DecisionListRow {
+  submission_id: string
+  reference_code: string | null
+  verdict_id: string
+  decided_by: string
+  decided_at: string
+  decision: string
+  recommended_outcome: string
+  note: string | null
+}
+
+/**
+ * The decision history, newest first (ui-design §2.3).
+ *
+ * Deliberately not scoped to a reviewer. Every other read here is about one
+ * submission; this is the only view of what people actually did, and it is the
+ * ground truth §18.5 says any move toward automation would have to be earned
+ * against. Gating it behind a role this deployment cannot authenticate would
+ * imply an access control that does not exist.
+ */
+export async function listDecisions(db: D1Database, limit = 100): Promise<DecisionEntry[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT d.submission_id, d.verdict_id, d.decided_by, d.decided_at,
+              d.decision, d.recommended_outcome, d.note, s.reference_code
+         FROM decision d
+         LEFT JOIN submission s ON s.id = d.submission_id
+        ORDER BY d.decided_at DESC
+        LIMIT ?1`,
+    )
+    .bind(limit)
+    .all<DecisionListRow>()
+
+  return results.map((r) => ({
+    submissionId: r.submission_id,
+    reference: r.reference_code ?? '',
+    verdictId: r.verdict_id,
+    decidedByAsEntered: r.decided_by,
+    decidedAt: r.decided_at,
+    decision: r.decision,
+    recommendedOutcome: r.recommended_outcome,
+    agreed: isDecision(r.decision)
+      ? !isDisagreement({
+          decision: r.decision,
+          recommendedOutcome: r.recommended_outcome as Outcome,
+        })
+      : false,
+    hasNote: (r.note ?? '').trim() !== '',
+  }))
+}
+
+/**
+ * How often the agent agreed, per recommended outcome.
+ *
+ * The number §18.5 says a graduation to auto-approval would have to be earned
+ * against. Reported as counts rather than a percentage: three decisions out of
+ * three is not 100% of anything worth acting on, and a bare percentage invites
+ * exactly that reading.
+ */
+export async function agreementByOutcome(
+  db: D1Database,
+): Promise<Array<{ recommendedOutcome: string; decided: string; count: number }>> {
+  const { results } = await db
+    .prepare(
+      `SELECT recommended_outcome AS recommendedOutcome, decision AS decided, COUNT(*) AS count
+         FROM decision GROUP BY recommended_outcome, decision ORDER BY count DESC`,
+    )
+    .all<{ recommendedOutcome: string; decided: string; count: number }>()
+  return results
+}
