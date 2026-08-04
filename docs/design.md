@@ -2640,6 +2640,22 @@ sequence above did not anticipate, recorded because each cost something:
   state and aggregation gained an input, so a verdict reached under `@1` may
   not be reached again today; replay must report that as not-comparable rather
   than silently re-deriving it (§17.3).
+- **Step 3 says "and the replay drift check", and the first pass did not do
+  it.** The cost was larger than a missing check. The selection inputs are not
+  decoration on the verdict — they are the only record of the *product type*,
+  which is not one of `FIELDS` and therefore appears in no `field_verdict` row.
+  Replay rebuilds the application record from those rows, so without reading
+  the binding back it selected no rules on every submission, re-derived
+  `CLEAR_CONFIRM_POLICY` where the verdict said `CLEAR`, and reported the
+  difference as a regression in the comparison rules. NFR-13 was false for
+  every stored verdict while the suite stayed green, because the test fixture
+  supplied a product type the database could not.
+
+  **This is what D26 is for.** The binding was being treated as something to
+  display; it is what makes the verdict re-derivable. Anything that decides an
+  outcome and is not a compared field has to be bound, or replay cannot
+  reconstruct the inputs — and the failure is invisible, because a replay that
+  disagrees looks exactly like a rule that moved.
 
 ### 18.7 What this section does not settle
 
