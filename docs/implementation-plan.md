@@ -280,6 +280,15 @@ degrade silently to "cannot check", which reads as fine.
 **Not done by** adding rules to `compare.ts`. The point is that the rule set is
 data someone other than a developer can own, version and approve.
 
+**Superseded in part by §18.8 (D41–D45).** The exit criteria above are met as
+written, and the design has since moved past two of them. A rule's identity
+becomes *when it is in force* rather than a set version; the archive becomes
+bitemporal rows in D1, seeded from this same reviewed file; and a finding
+carries a snapshot of the rule it was judged by. None of it is built. M12
+should carry it, in the order: seed migration and reconciler → bitemporal
+selection → finding snapshot columns → the `/health` drift check between the
+file and the rows.
+
 **Known limitation, asserted rather than described.** Product type is item 5 on
 TTB F 5100.31 and is not one of `FIELDS`, so a record read *from an image*
 never carries it and no rule can be selected for that path. It reports that

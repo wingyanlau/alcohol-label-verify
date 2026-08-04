@@ -2397,6 +2397,11 @@ that says so".
 
 ### 18.1 The policy set is versioned data
 
+> **Superseded in part by §18.8 (D41, D45).** The reasoning below stands and the
+> file remains the reviewed source, but **a set version is no longer a rule's
+> identity** — effective dates are. Read §18.8 before relying on
+> `policySetVersion` for anything.
+
 Following the precedent already set by `config/approved-models.json` and
 `config/warning-statement.json`: a rule set is a **governed artefact**, not
 source code, because the people who own it are not the people who deploy.
@@ -2461,6 +2466,18 @@ nothing in the output revealing it.
 `policySetVersion` then joins the versioned identity set, so a verdict produced
 under an earlier policy replays as `not-comparable` rather than being silently
 re-derived under today's rules (§17.3).
+
+> **Superseded by §18.8 (D41, D42).** Binding the selection *inputs* — the
+> paragraph above — stands and is unaffected. What changes is the version:
+>
+> - A verdict binds `valid_on` and `as_of` instead of `policySetVersion`.
+> - Replay stops degrading. Under this paragraph *every* policy change made
+>   *every* prior verdict permanently `not-comparable`, because the rules that
+>   produced it no longer existed anywhere. With `as_of` the engine reconstructs
+>   the set that was in force and re-derives honestly.
+>
+> The version integer was also unenforceable: it is maintained by hand, and on
+> the first amendment after this section was written it was not bumped (§18.8.1).
 
 **Beware the name.** `verdict.policy_version` already exists and means
 something else — the region maps and intake policy (`POLICY_VERSION` in
