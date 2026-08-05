@@ -151,6 +151,36 @@ endpoint would 401 and leave the page half-built for exactly that visitor.
 
 ---
 
+### 3c. Agents — the division of labour, not a user table
+
+An earlier revision listed who was recognised, with their roles and
+entitlements. That is the register rendered to a screen: true, and it
+demonstrates nothing. The page now answers the question the agent concept
+exists for.
+
+| Section | Content |
+|---|---|
+| **Who does what, on one submission** | System stages and purges; model reads, twice and blind; rules compare and select; human decides, audits, enacts. Each row also says what that kind **cannot** do |
+| **What each kind has done here** | Counts from the chained record — proof the division is real rather than drawn |
+| The register | Who is recognised, their role, entitlements, and whether they may decide |
+| **How a model earns more work** | Reads → retrieves → proposes → decides by category → *never* enacts a rule, each with what must be true first |
+
+**The rules appear as a row and are not an agent.** They are deterministic code,
+which is why a verdict can be produced again years later — and putting them
+beside the three kinds of actor is what makes the boundary legible.
+
+**Counts are by kind, never by person.** Volume per named individual is
+deliberately withheld, and a screen listing people beside numbers is exactly
+where that line gets crossed by accident. The query groups on the agent kind and
+cannot produce a name.
+
+**The progression is the production signal.** It says what a compliance agent
+would have to demonstrate before deciding anything on a person's behalf, one
+capability at a time — and that the boundary is a function in code rather than a
+setting, so crossing it is a commit somebody signs.
+
+---
+
 ### 3b. Measurement — figures, then what they mean
 
 The screen answers two questions and nothing else: **what is this doing today**,
@@ -247,7 +277,7 @@ story about how the five-second requirement is met.
 | **Single review** | This one case, now | |
 | **Audit** | Does a determination still hold up, and what did I conclude | Reference, ordered by how often it is needed |
 | **Measurement** | What it cost and how long it took, and what that signals for production | |
-| **Agents** | Who and what may act here, and what each may do | |
+| **Agents** | How human, model and system divide one submission — and what a model would have to prove to do more | |
 | **Policy** | Which rules are in force, from when, approved by whom | |
 
 *Audit* is named for the act rather than the noun. "Record" could mean the audit

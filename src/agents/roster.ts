@@ -142,3 +142,50 @@ function systemEntries(): RosterEntry[] {
 export function agentRoster(): readonly RosterEntry[] {
   return [...humanEntries(), ...modelEntries(), ...systemEntries()]
 }
+
+/**
+ * How a model earns more work — the structure, not a promise.
+ *
+ * The register is not only a list of who is recognised; it is the mechanism a
+ * model would be **promoted through**. Entitlements are per agent, so a reader
+ * can be granted one capability at a time and measured on it, and the boundary
+ * that matters is a function in code rather than a setting.
+ *
+ * Stated on the screen because it is the question the agent concept exists to
+ * answer: given that a model reads today, what would have to be true before one
+ * decides anything?
+ */
+export interface Progression {
+  readonly stage: string
+  readonly may: string
+  readonly before: string
+}
+
+export const MODEL_PROGRESSION: readonly Progression[] = [
+  {
+    stage: 'Reads',
+    may: 'Perceive a label and report what it could not read',
+    before: 'Today. Every model here sits at this stage',
+  },
+  {
+    stage: 'Retrieves',
+    may: 'Produce the regulation a finding rests on, for a person to read',
+    before: 'Nothing — it is downstream of the verdict and cannot change one',
+  },
+  {
+    stage: 'Proposes',
+    may: 'Suggest findings alongside the rules, which still decide',
+    before: 'Divergence recorded and adjudicated; the rules remain the verdict',
+  },
+  {
+    stage: 'Decides, by category',
+    may: 'Settle a non-blocking finding of a proven kind',
+    before: 'A measured false-pass rate, an upper confidence bound, and continuous human sampling',
+  },
+  {
+    stage: 'Enacts a rule',
+    may: 'Never',
+    before:
+      'A model proposing a rule and a model enacting one are different acts; the second has no safety story',
+  },
+]

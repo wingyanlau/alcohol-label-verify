@@ -1227,16 +1227,71 @@ export const PAGE_HTML = `<!doctype html>
     var body = byId('agentsBody')
     body.textContent = ''
 
+    function table(head, rows) {
+      var t = document.createElement('table')
+      t.className = 'metrics'
+      var hr = document.createElement('tr')
+      head.forEach(function (h) { hr.appendChild(el('th', null, h)) })
+      t.appendChild(hr)
+      rows.forEach(function (cells) {
+        var tr = document.createElement('tr')
+        cells.forEach(function (c, i) { tr.appendChild(el('td', i === 0 ? 'name' : null, c)) })
+        t.appendChild(tr)
+      })
+      return t
+    }
+
+    // 1. The division of labour on a single submission. This is the point of
+    //    the page: three kinds of actor on one piece of work, with the boundary
+    //    between them stated rather than implied.
+    body.appendChild(el('h2', null, 'Who does what, on one submission'))
+    body.appendChild(table(['', 'Does', 'Cannot'], [
+      ['System', 'Opens the job, stages the filing, purges it when retention says so', 'Judge anything'],
+      ['Model', 'Reads the label and the record — two blind reads', 'See the expected values, or decide'],
+      ['Rules', 'Compare, verify the warning, select and apply the regulations', 'Call a model, or reach the network'],
+      ['Human', 'Decides the submission, audits a record, enacts a rule', '— this is the only kind that may'],
+    ]))
+    body.appendChild(el('p', 'note',
+      'The rules are code rather than an agent: deterministic, and the reason a verdict can be produced again years later.'))
+
+    // 2. Proof it is not a diagram. Counts by KIND, never by person.
+    if (d && d.activity && d.activity.length) {
+      var byKind = {}
+      d.activity.forEach(function (a) {
+        byKind[a.kind] = byKind[a.kind] || { n: 0, actions: [] }
+        byKind[a.kind].n += a.n
+        byKind[a.kind].actions.push(a.action + ' ×' + a.n)
+      })
+      body.appendChild(el('h2', null, 'What each kind has done here'))
+      body.appendChild(table(['', 'Acts', 'What'],
+        Object.keys(byKind).sort().map(function (k) {
+          return [k, String(byKind[k].n), byKind[k].actions.slice(0, 4).join(', ')]
+        })))
+      body.appendChild(el('p', 'note',
+        'By kind, never by person. Volume per named individual is deliberately not reported.'))
+    }
+
+    // 3. Who is recognised, and what each may do.
     var agents = (d && d.agents) || []
     ;['human', 'model', 'system'].forEach(function (kind) {
       var of = agents.filter(function (a) { return a.kind === kind })
       if (!of.length) return
-      var box = el('div')
-      box.appendChild(el('h2', null, KIND_TITLE[kind] + ' (' + of.length + ')'))
-      box.appendChild(el('p', 'note', KIND_NOTE[kind]))
-      of.forEach(function (a) { box.appendChild(agentRow(a)) })
-      body.appendChild(box)
+      body.appendChild(el('h2', null, KIND_TITLE[kind] + ' (' + of.length + ')'))
+      body.appendChild(table(['', 'Role', 'May', 'Decides'],
+        of.map(function (a) {
+          return [a.display, a.role, (a.entitlements || []).join('; '), a.mayDecide ? 'yes' : 'no']
+        })))
+      body.appendChild(el('p', 'note', KIND_NOTE[kind]))
     })
+
+    // 4. What the structure is for.
+    if (d && d.progression && d.progression.length) {
+      body.appendChild(el('h2', null, 'How a model earns more work'))
+      body.appendChild(table(['Stage', 'May', 'What has to be true first'],
+        d.progression.map(function (p) { return [p.stage, p.may, p.before] })))
+      body.appendChild(el('p', 'note',
+        'Entitlements are held per agent, so a reader is granted one capability at a time and measured on it. The boundary is a function in code, not a setting: letting a model past it is a commit somebody signs.'))
+    }
 
     if (d && d.note) body.appendChild(el('p', 'note', d.note))
   }

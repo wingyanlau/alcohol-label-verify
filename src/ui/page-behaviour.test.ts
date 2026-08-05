@@ -404,6 +404,15 @@ function boot(
         json: () =>
           Promise.resolve({
             note: 'Deliberately no counts of what anyone did (D47).',
+            activity: [
+              { kind: 'model', action: 'model.fingerprinted', n: 2 },
+              { kind: 'system', action: 'verdict.recorded', n: 25 },
+              { kind: 'human', action: 'decision.recorded', n: 3 },
+            ],
+            progression: [
+              { stage: 'Reads', may: 'Perceive a label', before: 'Today' },
+              { stage: 'Enacts a rule', may: 'Never', before: 'No safety story' },
+            ],
             agents: [
               {
                 kind: 'human',
@@ -944,16 +953,36 @@ describe('the agent register (§19)', () => {
   it('says of each agent whether it may decide', async () => {
     const { byId } = await openAgents()
     const words = byId.agentsBody?.words() ?? ''
-    expect(words).toContain('May decide')
-    expect(words).toContain('May not decide')
+    expect(words).toContain('Decides')
+    // Sarah Peterson is human and may; the reader is a model and may not.
+    expect(words).toMatch(/Sarah Peterson[^|]*yes/)
+    expect(words).toMatch(/gemini-3\.5-flash[^|]*no|workers-ai[^|]*no/)
   })
 
-  it('shows the identity exactly as the record carries it', async () => {
-    // So a line in the audit trail matches a row here without interpretation.
+  it('shows the division of labour rather than only the register', async () => {
+    // The page was a rendered table of who exists. What it is for is showing
+    // three kinds of actor on one piece of work, with the boundary stated.
     const { byId } = await openAgents()
-    expect(byId.agentsBody?.words()).toContain(
-      'model:workers-ai:@cf/meta/llama-4-scout-17b-16e-instruct',
-    )
+    const words = byId.agentsBody?.words() ?? ''
+    expect(words).toContain('Who does what, on one submission')
+    expect(words).toMatch(/two blind reads/)
+    expect(words).toMatch(/this is the only kind that may/)
+  })
+
+  it('shows what each kind has actually done, by kind and never by person', async () => {
+    // Volume per named individual is deliberately not reported, and a screen
+    // listing people beside counts is where that line gets crossed by accident.
+    const { byId } = await openAgents()
+    const words = byId.agentsBody?.words() ?? ''
+    expect(words).toContain('What each kind has done here')
+    expect(words).toMatch(/By kind, never by person/)
+  })
+
+  it('shows how a model would earn more work', async () => {
+    const { byId } = await openAgents()
+    const words = byId.agentsBody?.words() ?? ''
+    expect(words).toContain('How a model earns more work')
+    expect(words).toMatch(/Enacts a rule Never/)
   })
 
   it('shows no count of what anyone did', async () => {

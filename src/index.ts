@@ -9,7 +9,7 @@
  * §9.5 (configuration).
  */
 
-import { agentRoster } from './agents/roster.js'
+import { agentRoster, MODEL_PROGRESSION } from './agents/roster.js'
 import { type EventRow, eventSql, nextCursor, parseEventQuery, toEvent } from './audit/events.js'
 import { compareReadings } from './audit/reread.js'
 import { AuditRejected, checkAudit } from './audit/review.js'
@@ -1500,8 +1500,27 @@ export default {
     // do; this is that page. No database: the roster is what the deployment
     // recognises, not what has happened.
     if (pathname === '/agents' && request.method === 'GET') {
+      // What each kind has actually done here, from the chained record.
+      //
+      // BY KIND, never by person. Agreement and volume per agent kind are safe
+      // to report; measuring named employees is deferred, and a screen listing
+      // people beside counts is exactly where that line gets crossed by
+      // accident. The SQL groups on `actor_kind` and cannot produce a name.
+      const activity = env.DB
+        ? (
+            await env.DB.prepare(
+              `SELECT COALESCE(actor_kind, actor, 'unknown') kind, action, COUNT(*) n
+                 FROM audit_event GROUP BY kind, action ORDER BY n DESC`,
+            ).all<{ kind: string; action: string; n: number }>()
+          ).results
+        : []
+
       return json({
         agents: agentRoster(),
+        activity,
+        // The structure a model would be promoted through, which is the
+        // question the agent concept exists to answer.
+        progression: MODEL_PROGRESSION,
         // Stated rather than left as an absent column. A page listing agents is
         // exactly where a productivity number would arrive by accident, and its
         // absence here is a decision (D47).
