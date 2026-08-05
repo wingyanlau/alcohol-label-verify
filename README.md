@@ -1,25 +1,31 @@
 # alcohol-label-verify
 
-Checks alcohol beverage label artwork against its TTB application record, and
-verifies the statutory health warning.
+A prototype that checks an alcohol beverage label against the application it was
+filed with, and verifies the health warning required by 27 CFR 16.21.
 
-It produces **evidence for a compliance agent**. It does not approve or reject.
+An agent uploads a completed TTB F 5100.31. The system reads the label artwork
+and the application record as two separate, independent readings; compares them
+field by field under stated tolerances; checks the warning statement word for
+word; and applies the regulations that were in force on the filing date. It
+returns findings, each with its citation and the evidence behind it.
 
-**Live (staging):** https://alcohol-label-verify-staging.wing-lawrence.workers.dev
-— behind a shared credential, supplied with the link. That gate is a cost
-control, not a login: checking one label calls a metered API, and a public URL
-is a bill anyone can run up (D49).
+**The determination stays with the compliance agent.** This system assembles the
+evidence and records what was decided against what it recommended.
+
+The deployment is protected by a username and password. Reading one label calls
+a metered inference API, so an open URL is an unbounded bill — the credential is
+a cost control, not an identity check (D49).
 
 ---
 
 ## Try it in three minutes
 
-1. Open the URL. **Single review** is the landing screen.
+1. Open the deployment. **Single review** is the landing screen.
 2. Under *Demo examples*, download one — start with **Fully compliant**, then
    **Alcohol content genuinely differs**.
-3. Upload it. You get a verdict in a few seconds: every field with what the
-   label said beside what the application said, the health warning checked
-   clause by clause, and the regulations that were applied.
+3. Upload it. The result arrives in a few seconds: each field with what the
+   label said beside what the application said, the warning checked clause by
+   clause, and the regulations that were applied.
 4. **Batch** runs all 26 bundled submissions and streams results as they settle.
 5. **Policy** and **Agents** show what governs the system: the rules in force
    with their dates and approvers, and who or what may act.
