@@ -243,6 +243,28 @@ function boot(
           }),
       })
     }
+    if (url.includes('/audit/verify')) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({ status: 'ok', events: 306, brokenAt: null, head: 'a1b2c3d4e5f60718' }),
+      })
+    }
+    if (url.includes('/audit/replay')) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            checked: 25,
+            identical: 25,
+            differs: 0,
+            'not-comparable': 0,
+            'not-re-derivable': 0,
+            'record-altered': 0,
+            findings: [],
+          }),
+      })
+    }
     if (url.includes('/measurement')) {
       return Promise.resolve({
         ok: true,
@@ -910,5 +932,59 @@ describe('the measurement screen (§16)', () => {
     byId.modeMeasure?.click()
     await settle()
     expect(calls.filter((c) => c.includes('/measurement')).length).toBe(1)
+  })
+})
+
+describe('the record screen (NFR-13)', () => {
+  /*
+   * The audit chain and replay were reachable only as JSON, so the one
+   * capability that distinguishes this system from a wrapper around a model was
+   * invisible to anyone using it.
+   */
+  const openRecord = async (opts: Parameters<typeof boot>[0] = {}) => {
+    const { byId, settle, calls } = boot(opts)
+    await settle()
+    byId.modeRecord?.click()
+    await settle()
+    return { byId, calls }
+  }
+
+  it('answers both questions, which are different', async () => {
+    // The chain says whether the history was altered. Replay says whether the
+    // stored evidence still produces the stored verdict. Neither implies the
+    // other.
+    const { byId } = await openRecord()
+    const words = byId.recordBody?.words() ?? ''
+    expect(words).toContain('The history')
+    expect(words).toContain('Re-deriving every verdict')
+  })
+
+  it('reports the chain unaltered with its event count', async () => {
+    const { byId } = await openRecord()
+    expect(byId.recordBody?.words()).toMatch(/Unaltered — 306 events/)
+  })
+
+  it('says the replay invoked no model, which is the whole claim', async () => {
+    const { byId } = await openRecord()
+    expect(byId.recordBody?.words()).toMatch(/no model invoked/i)
+  })
+
+  it('refuses to let the claim overreach', async () => {
+    // It proves the judgement is reproducible. It does not prove the reading
+    // was right — and a page that blurred those two would be claiming the one
+    // thing this system cannot show.
+    const { byId } = await openRecord()
+    const words = byId.recordBody?.words() ?? ''
+    expect(words).toMatch(/does not prove the reading was right/i)
+    expect(words).toMatch(/NOT deterministic/)
+  })
+
+  it('does not fetch until the tab is opened', async () => {
+    const { byId, settle, calls } = boot()
+    await settle()
+    expect(calls.filter((c) => c.includes('/audit/'))).toEqual([])
+    byId.modeRecord?.click()
+    await settle()
+    expect(calls.filter((c) => c.includes('/audit/')).length).toBe(2)
   })
 })

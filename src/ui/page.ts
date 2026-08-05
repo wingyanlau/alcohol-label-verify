@@ -228,6 +228,7 @@ export const PAGE_HTML = `<!doctype html>
       <div class="refs" role="tablist" aria-label="How this system is governed">
         <button id="modePolicy" type="button" class="ref" role="tab" aria-selected="false">Policy</button>
         <button id="modeAgents" type="button" class="ref" role="tab" aria-selected="false">Agents</button>
+        <button id="modeRecord" type="button" class="ref" role="tab" aria-selected="false">Record</button>
         <button id="modeMeasure" type="button" class="ref" role="tab" aria-selected="false">Measurement</button>
       </div>
     </div>
@@ -252,6 +253,17 @@ export const PAGE_HTML = `<!doctype html>
     <p class="lede">Everyone and everything this deployment recognises, and what each may do.
       The model reads, the rules compare, the human decides — and the code refuses the rest.</p>
     <div id="agentsBody"></div>
+  </section>
+
+  <!-- The audit record, and whether it still holds (NFR-13).
+       The most consequential capability here was reachable only as JSON, so
+       the one thing that distinguishes this system was invisible to anyone
+       using it. -->
+  <section id="record" class="hidden">
+    <h1>Record</h1>
+    <p class="lede">Every verdict can be produced again from what was stored — without the model, the artwork,
+      or the run that made it. This page checks that, now, against every verdict this deployment holds.</p>
+    <div id="recordBody"></div>
   </section>
 
   <!-- What this deployment has done, and what it cost (§16, D52). Read only.
@@ -757,6 +769,7 @@ export const PAGE_HTML = `<!doctype html>
     { mode: 'batch', section: 'batchHome', tab: 'modeBatch' },
     { mode: 'policy', section: 'policy', tab: 'modePolicy' },
     { mode: 'agents', section: 'agents', tab: 'modeAgents' },
+    { mode: 'record', section: 'record', tab: 'modeRecord' },
     { mode: 'measure', section: 'measure', tab: 'modeMeasure' },
   ]
 
@@ -1141,6 +1154,127 @@ export const PAGE_HTML = `<!doctype html>
   }
 
   /**
+   * The audit record, checked rather than described (NFR-13).
+   *
+   * Two questions, and they are different. The chain answers *has the history
+   * been altered* — each event commits to the one before it, so a changed row
+   * cannot reproduce the digest that followed it. Replay answers *does the
+   * stored evidence still produce the stored verdict* — re-derived through the
+   * same comparison the live path uses, and **without invoking a model**, which
+   * is the sentence the whole page exists to earn.
+   *
+   * Both were reachable only as JSON until now, which meant the one capability
+   * that distinguishes this system was invisible to anyone using it.
+   */
+  var recordLoaded = false
+  function loadRecord() {
+    if (recordLoaded) return
+    recordLoaded = true
+    var body = byId('recordBody')
+    body.textContent = 'Checking…'
+    Promise.all([
+      fetch('/audit/verify').then(function (r) { return r.json() }).catch(function () { return null }),
+      // Deliberately more than the default 25: the interesting case is a
+      // verdict judged under a policy set that has since been superseded, and
+      // that only appears once there is history to look back through.
+      fetch('/audit/replay?limit=100').then(function (r) { return r.json() }).catch(function () { return null }),
+    ])
+      .then(function (both) { renderRecord(both[0], both[1]) })
+      .catch(function () {
+        recordLoaded = false
+        body.textContent = ''
+        body.appendChild(el('p', 'err', 'The record could not be checked. Please try again in a moment.'))
+      })
+  }
+
+  function statusRow(ok, headline, detail) {
+    var row = el('div', 'finding')
+    var line = el('div', 'fstatus ' + (ok === true ? 'ok' : ok === false ? 'bad' : 'muted'))
+    line.appendChild(el('span', null, (ok === true ? '✓' : ok === false ? '✗' : '—') + '  '))
+    line.appendChild(document.createTextNode(headline))
+    row.appendChild(line)
+    if (detail) row.appendChild(el('div', 'dev', detail))
+    return row
+  }
+
+  function renderRecord(chain, replay) {
+    var body = byId('recordBody')
+    body.textContent = ''
+
+    // 1. Has the history been altered?
+    var a = el('div')
+    a.appendChild(el('h2', null, 'The history'))
+    if (!chain) {
+      a.appendChild(el('p', 'note', 'The chain could not be read.'))
+    } else {
+      a.appendChild(statusRow(
+        chain.status === 'ok',
+        chain.status === 'ok'
+          ? 'Unaltered — ' + chain.events + ' events, each committing to the one before it'
+          : 'Broken at event ' + chain.brokenAt,
+        'Every recorded act — a job opening, a verdict, a decision, a rule taking force — is hashed together with the digest of the act before it. Change one and nothing after it can reproduce its own digest.'))
+      if (chain.head) {
+        var h = el('div', 'finding')
+        h.appendChild(el('div', 'freq', 'Head of the chain'))
+        h.appendChild(el('div', 'rule', String(chain.head)))
+        h.appendChild(el('div', 'dev', 'Written down elsewhere, this pins the history at this moment: anything appended later extends it, and anything altered before it cannot reproduce it.'))
+        a.appendChild(h)
+      }
+    }
+    body.appendChild(a)
+
+    // 2. Does the stored evidence still produce the stored verdict?
+    var b = el('div')
+    b.appendChild(el('h2', null, 'Re-deriving every verdict'))
+    if (!replay) {
+      b.appendChild(el('p', 'note', 'Replay could not be run.'))
+    } else if (!replay.checked) {
+      b.appendChild(el('p', 'note', 'No verdict has been recorded yet, so there is nothing to re-derive. This is empty because nothing has been checked, not because everything agreed.'))
+    } else {
+      var clean = (replay.differs || 0) === 0 && (replay['record-altered'] || 0) === 0
+      b.appendChild(statusRow(
+        clean,
+        clean
+          ? 'All ' + replay.checked + ' re-derive to the verdict that was stored'
+          : replay.differs + ' no longer re-derive to what was stored',
+        'Recomputed from the stored reading through the same comparison the live path uses — with no model invoked. What this proves is that the JUDGEMENT is reproducible. It does not prove the reading was right; that is a question about the model.'))
+
+      var counts = el('div', 'finding')
+      counts.appendChild(el('div', 'freq', 'Result'))
+      ;[['identical','re-derived exactly'],
+        ['differs','disagreed with what was stored'],
+        ['record-altered','the stored reading itself had changed'],
+        ['not-comparable','judged under rules this deployment can no longer rebuild'],
+        ['not-re-derivable','recorded before an input was kept, so it says so rather than guessing']]
+        .forEach(function (pair) {
+          var n = replay[pair[0]] || 0
+          counts.appendChild(el('div', 'dev', n + ' — ' + pair[1]))
+        })
+      b.appendChild(counts)
+
+      if (replay.findings && replay.findings.length) {
+        replay.findings.slice(0, 10).forEach(function (f) {
+          var row = el('div', 'finding')
+          row.appendChild(el('div', 'fstatus bad', '✗  ' + f.status))
+          row.appendChild(el('div', 'rule', String(f.submissionId || '')))
+          ;(f.differences || []).forEach(function (d) { row.appendChild(el('div', 'dev', d)) })
+          b.appendChild(row)
+        })
+      }
+    }
+    body.appendChild(b)
+
+    // 3. Why this is the claim worth making.
+    var c = el('div')
+    c.appendChild(el('h2', null, 'What is deterministic here, and what is not'))
+    c.appendChild(el('p', 'note',
+      'The model reading a label is NOT deterministic: asked twice, it may transcribe differently. That reading is captured verbatim as evidence. Everything after it — comparison, tolerance, the warning check, which rules apply, the outcome — is computed by code that takes no clock, no randomness and no network, so the same reading and the same rules give the same verdict every time.'))
+    c.appendChild(el('p', 'note',
+      'So the claim is not that the AI is deterministic. It is that what the AI said is on the record, and every conclusion drawn from it follows deterministically and can be produced again years later — which is what the six rules enacted on 5 August demonstrated: twenty-five verdicts judged under the previous policy set, all still re-deriving unchanged.'))
+    body.appendChild(c)
+  }
+
+  /**
    * What this deployment has done, and what it cost (§16, D52).
    *
    * Deliberately plain. Every figure carries the sample it was drawn from,
@@ -1325,6 +1459,7 @@ export const PAGE_HTML = `<!doctype html>
     })
     if (mode === 'policy') loadPolicy()
     if (mode === 'agents') loadAgents()
+    if (mode === 'record') loadRecord()
     if (mode === 'measure') loadMeasurement()
   }
 

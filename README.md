@@ -23,7 +23,10 @@ is a bill anyone can run up (D49).
 4. **Batch** runs all 26 bundled submissions and streams results as they settle.
 5. **Policy** and **Agents** show what governs the system: the rules in force
    with their dates and approvers, and who or what may act.
-6. **Measurement** reports what it cost and how long it took, against the
+6. **Record** re-derives every verdict this deployment holds, from what was
+   stored, with no model invoked — and checks the audit chain has not been
+   altered.
+7. **Measurement** reports what it cost and how long it took, against the
    5-second target the brief set.
 
 The demo examples are the real corpus — the same documents the batch runs, each
@@ -139,12 +142,16 @@ box.
 **Replay proves the verdict, not the reading.** A stored verdict re-derives
 exactly from the record without calling a model. That does not prove the reading
 was correct — a question about the model, which the corpus addresses and cannot
-settle.
+settle. The claim is not that generative AI is deterministic; it is that
+**perception is non-deterministic, judgement is deterministic, and the boundary
+between them is written down** — see
+[determinism-and-replay.md](docs/determinism-and-replay.md).
 
 **The recall gap is the honest headline.** What the system decided is fully
 recoverable; what it decided *by* is only partly so. The rules are now readable
 on screen, but a finding pins its regulation by digest rather than quoting it,
-and the nine enforced rules carry no source quote. Producing the passage a rule
+and the nine original rules carry no source quote — the six enacted on
+5 August do. Producing the passage a rule
 rests on — with the provisions that qualify it — is a retrieval problem, which is
 exactly what a model is good at and exactly what this system has refused to use
 one for. It assists *review of the rules* rather than deciding compliance, so it
@@ -160,7 +167,7 @@ and Browser Rendering.
 
 ```bash
 npm ci
-npm run quality-check     # lint, typecheck, 812 tests with coverage
+npm run quality-check     # lint, typecheck, 819 tests with coverage
 npm run dev               # local worker
 ```
 
@@ -199,6 +206,7 @@ Worked before the code, and the specification rather than background.
 |---|---|
 | [architecture.md](docs/architecture.md) | how it is built — context, containers, both request paths |
 | [personas-and-stories.md](docs/personas-and-stories.md) | who it is for, and what is built vs not |
+| [determinism-and-replay.md](docs/determinism-and-replay.md) | what is deterministic here and what is not — and the demonstration |
 | [value-case.md](docs/value-case.md) | what it costs, what it saves, what it refuses to claim |
 | [integration-and-delivery.md](docs/integration-and-delivery.md) | what a real integration needs, and in what order |
 | [engineering-practices.md](docs/engineering-practices.md) | TDD, CI/CD, security, observability — with the artefact for each claim |
