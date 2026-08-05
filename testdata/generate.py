@@ -854,7 +854,10 @@ def main() -> int:
     })
     print(f"  L26  {bad.name}")
 
-    # F01 — the same filing as L01, submitted as the form alone (D50).
+    # F01 — the same filing as L01, submitted without its record page (D50).
+    #
+    # Every case above is a real filing too; this one differs in what came WITH
+    # it. Naming it "a real filing" implied the others were not.
     #
     # Not a corpus case and never part of the batch: `SUBMISSION_FILES` in
     # src/batch/submissions.ts lists the 26, and this is not among them. It
@@ -873,7 +876,7 @@ def main() -> int:
         fw.write(fh)
     manifest.append({
         "id": "F01", "file": filed.name,
-        "title": "A real filing — the form on its own",
+        "title": "Submitted without its application record",
         "serves": "D50 — the filed-alone region map; demo only, not a batch item",
         "application": {
             # Only what page 1 actually carries. Nothing is filled in for the

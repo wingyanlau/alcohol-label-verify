@@ -693,7 +693,7 @@
     {
       "id": "F01",
       "file": "F01-filed-application-form-only.pdf",
-      "title": "A real filing \u2014 the form on its own",
+      "title": "Submitted without its application record",
       "serves": "D50 \u2014 the filed-alone region map; demo only, not a batch item",
       "application": {
         "brandName": "Old Tom Distillery",
@@ -709,7 +709,7 @@
         },
         "warningOk": true
       },
-      "note": "Derived from L01 by keeping page 1. Demonstrates what a genuine TTB F 5100.31 can and cannot be checked against: item 5 selects the governing rules and item 6 is compared, while the three fields the form has no box for are NOT_SUPPLIED \u2014 not assessed, and not a pass. Every regulation check still applies, because those read the label."
+      "note": "Derived from L01 by keeping page 1 \u2014 the same filing, submitted without its application record. Demonstrates what a TTB F 5100.31 can and cannot be checked against on its own: item 5 selects the governing rules and item 6 is compared, while the three fields the form has no box for are NOT_SUPPLIED \u2014 not assessed, and not a pass. Every regulation check still applies, because those read the label."
     }
   ]
 }

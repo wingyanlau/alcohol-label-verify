@@ -247,11 +247,13 @@ What is offered is the shape this system is for: the form with the labels
 affixed, and the application record carrying the fields the form has no box
 for.
 
-> **A real filing is checked on what it actually carries** (D50). The form has
-> no box for class/type, alcohol content or net contents — item 15 asks for
-> those only where they are embossed on the container and absent from the
-> labels — so those three report `NOT_SUPPLIED`: *not assessed*, which is true,
-> rather than a pass. What the form does carry is item 5, which selects the
+> **Somebody will upload their own form, and that works** (D50). Nothing stops
+> a visitor filling in a TTB F 5100.31 and submitting it without an application
+> record, so the question is what happens when they do — and the answer is that
+> it degrades honestly rather than failing. The form has no box for class/type,
+> alcohol content or net contents — item 15 asks for those only where they are
+> embossed on the container and absent from the labels — so those three report
+> `NOT_SUPPLIED`: *not assessed*, which is true, rather than a pass. What the form does carry is item 5, which selects the
 > governing regulation, and item 6. The regulation checks read the **label**,
 > so every one of them still applies. Nothing is defaulted in to fill the gap:
 > a default would be compared against the label, and agreement with an invented

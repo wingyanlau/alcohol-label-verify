@@ -106,14 +106,17 @@ submission — front label only — where reporting the warning missing is the
 
 | ID | Case | Expected | Serves |
 |---|---|---|---|
-| F01 | A real filing — the form on its own | `CLEAR` | D50 — the filed-alone region map; offered as a demo sample, never run in the batch |
+| F01 | Submitted without its application record | `CLEAR` | D50 — the filed-alone region map; offered as a demo sample, never run in the batch |
 
-`F01` is L01's page 1 and nothing else: the form as ttb.gov publishes it, with
-the labels affixed and the applicant's entries on it. It is **not** among the
-26 — `SUBMISSION_FILES` in `src/batch/submissions.ts` lists those, and this is
-not one of them — because it tests no comparison rule. It exists so the
-single-review screen can show what a genuine filing does without asking anyone
-to fill out a form.
+`F01` is L01's page 1 and nothing else — the same filing, submitted without its
+application record. **Every case above is a real filing too**; this one differs
+in what arrived with it, which is why it is not called "a real filing".
+
+It is **not** among the 26 — `SUBMISSION_FILES` in `src/batch/submissions.ts`
+lists those, and this is not one of them — because it tests no comparison rule.
+It is a fixture for the region map that reads a form arriving on its own (D50),
+which is what happens when somebody uploads a TTB form they filled in
+themselves.
 
 Its ground truth is the point: `brandName` is `MATCH`, and class/type, alcohol
 content and net contents are `NOT_SUPPLIED`, because **the paper form has no box
