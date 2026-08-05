@@ -60,6 +60,38 @@ can enact a rule. It found a real hole on its first run.
 
 ---
 
+## Why a matcher carries this much machinery
+
+Most of what an agent does is matching, and matching is the easy part. The hard
+part of a compliance *determination* is not comparing two strings — it is being
+able to defend the answer. A verdict that lands on a real filing has to be
+**explainable** (which rule, which values, which citation), **reproducible** (the
+same inputs give the same answer years later, in a dispute), and **attributable**
+(a named person decided, and the record says so). Remove those and this is a
+demo; keep them and it is evidence a compliance division could stand behind.
+
+So the hash-chained audit, the versioned reference data, the bitemporal policy
+archive and the agent-kind boundary are not gold-plating — they are the
+difference between matching labels and producing evidence for a legal
+determination. The matching itself is sub-millisecond; the machinery is what
+makes the matching *usable*.
+
+**The scope was drawn deliberately.** A prototype did not strictly need this
+depth, and building it cost the schedule — recorded plainly in
+[docs/exploration-session.md](docs/exploration-session.md). It was chosen because
+the interesting question is not *can a model read a label* (it can) but *what
+would it take to trust one on a federal determination* — which is answered by the
+parts usually skipped. What was left out is named, not overlooked: authentication,
+COLA integration and a runtime rule editor are absent by decision, each with its
+reasoning beside it.
+
+The same discipline reaches the interface. The core review screen is deliberately
+plain — one obvious action, large type, high contrast — for the least confident
+agent on a team half over 50; on a federal system that is a **Section 508**
+obligation before it is a design preference.
+
+---
+
 ## Architecture at a glance
 
 ```
@@ -181,6 +213,56 @@ exactly what a model is good at and exactly what this system has refused to use
 one for. It assists *review of the rules* rather than deciding compliance, so it
 sits on the right side of the principle. That is the direction this prototype
 points at and deliberately did not take.
+
+---
+
+## The path to production
+
+A prototype earns its keep by making the next decision cheaper. This one is built
+so the move to production is a set of substitutions at named seams, not a rewrite
+— and so the parts that are hard to get right are the parts already worked out.
+
+**Inference behind the firewall.** TTB's network blocks outbound ML endpoints —
+the constraint that half-broke the last vendor pilot. This prototype reaches a
+hosted model because it is standalone and off that network; production moves
+inference on-premise, or to a FedRAMP-authorised endpoint, behind the same
+`ExtractionProvider` seam with everything above it unchanged. Self-hosting was
+weighed and its trade-offs recorded (D10).
+
+**A record of authority.** The application data is assumed to arrive as
+structured data — yet the paper form carries only one of the four compared fields,
+found by building against it. Production reads the COLA record, which is the first
+integration question to put to TTB.
+
+**A verified identity.** The shared credential is a cost control, not a login,
+and is described as exactly that. Sign-in, in-app rule approval and correcting a
+filing are one missing prerequisite — a verified identity — wearing three hats,
+and are the first thing production adds; attribution then moves from *declared* to
+*verified*.
+
+**Retention as policy.** The system already treats retention as an obligation
+rather than a bucket setting — content purged on a stated schedule, the durable
+record kept. Production sets the window to TTB's own policy; the machinery is in
+place.
+
+**Measured accuracy.** No accuracy figure is claimed, because the corpus is
+synthetic. Production's first task is a labelled sample of real labels — and the
+deterministic rule engine is the test oracle for it, since every finding is a
+labelled example produced on real traffic at no extra cost.
+
+**The interface carries forward; the way in changes.** The review-and-decide
+experience — upload, the two readings side by side, the warning checked clause by
+clause, the determination recorded against the recommendation — is
+production-intended and reused nearly as-is. What is evaluation scaffolding, and
+is replaced: the guided landing page, the demo corpus, and the single flat
+navigation that lets a reviewer see every surface without signing in. In
+production the reference surfaces — Audit, Policy, Agents, Measurement — separate
+by role behind authentication, because each already serves a different user
+(auditor, policy owner, operator) that the prototype deliberately collapses into
+one tour.
+
+Full sequencing: [docs/integration-and-delivery.md](docs/integration-and-delivery.md),
+with the production target architecture in [design.md §15](docs/design.md).
 
 ---
 
