@@ -45,7 +45,7 @@ import { referenceIsUnverified, warningReference } from './domain/reference.js'
 import type { Env, WorkMessage } from './env.js'
 import { checkImageIntake } from './normalise/image.js'
 import { IntakeRejected } from './normalise/normaliser.js'
-import { archiveHealth, reconcileArchive, ruleSetAsAt } from './policy/archive.js'
+import { archiveHealth, listArchive, reconcileArchive, ruleSetAsAt } from './policy/archive.js'
 import { gatewayFrom } from './providers/gateway.js'
 import { PROMPT_VERSION, promptDigest } from './providers/prompt.js'
 import { createProvider, knownProviderNames, specFor } from './providers/registry.js'
@@ -1131,6 +1131,31 @@ export default {
         actor: 'deploy',
       })
       return json(report)
+    }
+
+    // The archive, for a person to read (ui-design §2.3, "Policy owner").
+    //
+    // Read-only, and that is a decision rather than a stage. D45 keeps the
+    // reviewed file as the source and the rows as derived; a button here that
+    // wrote a rule or an approval would make the rows authored, and the next
+    // reconciliation would supersede whatever it wrote. Approving stays a
+    // change to config/policy-set.json that somebody reads as a diff.
+    //
+    // It exists because you cannot review what you cannot read, and six rules
+    // are currently waiting on exactly that.
+    if (pathname === '/policy/rules' && request.method === 'GET') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+      const rules = await listArchive(env.DB)
+      return json({
+        policySetVersion: POLICY_SET.policySetVersion,
+        approvedBy: POLICY_SET.approvedBy,
+        inForce: rules.filter((r) => r.status === 'active' && r.retiredAt === null),
+        awaitingApproval: rules.filter((r) => r.status !== 'active' && r.retiredAt === null),
+        retired: rules.filter((r) => r.retiredAt !== null),
+        // Said rather than implied by an empty section: a reader seeing no
+        // drafts should know whether none were proposed or none were kept.
+        note: 'Read-only. A rule is enacted by approving it in config/policy-set.json, which is the reviewed source (D45).',
+      })
     }
 
     // What the archive holds, and whether it still matches what was reviewed.

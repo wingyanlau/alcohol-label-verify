@@ -109,6 +109,95 @@ export async function archiveHealth(
   }
 }
 
+/** One rule as a reviewer needs to see it (ui-design §2.3). */
+export interface ArchiveEntry {
+  readonly ruleId: string
+  readonly status: string
+  readonly severity: string
+  readonly requirement: string
+  readonly regulation: string | null
+  readonly productTypes: readonly string[]
+  /** Valid time: the submission dates this rule governs. */
+  readonly effectiveFrom: string | null
+  readonly effectiveTo: string | null
+  /** Transaction time: when this deployment held it. */
+  readonly recordedAt: string
+  readonly retiredAt: string | null
+  readonly approvedBy: string | null
+  readonly approvedAt: string | null
+  /** The words it was drawn from, where the rule records any. */
+  readonly quote: string | null
+  readonly sourceDocument: string | null
+  readonly proposedBy: string | null
+}
+
+/**
+ * The archive, as a person would read it.
+ *
+ * Read from the ROWS rather than the file, because the rows are what is
+ * actually enforced and the only place the two time windows exist. The file
+ * states intent; this states what is in force and since when.
+ *
+ * Everything, including retired rules: a reviewer asking why a verdict said
+ * what it did needs the rule that governed it then, not only the ones
+ * governing now (D27 — supersede, never delete).
+ */
+export async function listArchive(db: D1Database): Promise<ArchiveEntry[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT rule_id, status, severity, body, regulation_id, citation,
+              effective_from, effective_to, recorded_at, retired_at,
+              approved_by, approved_at, quote, source_document_id
+         FROM policy_rule
+        ORDER BY retired_at IS NOT NULL, status, rule_id, recorded_at DESC`,
+    )
+    .all<{
+      rule_id: string
+      status: string
+      severity: string
+      body: string
+      regulation_id: string | null
+      citation: string | null
+      effective_from: string | null
+      effective_to: string | null
+      recorded_at: string
+      retired_at: string | null
+      approved_by: string | null
+      approved_at: string | null
+      quote: string | null
+      source_document_id: string | null
+    }>()
+
+  return results.map((r) => {
+    // The requirement and the product types live in the stored body — the rule
+    // as applied, not as the file reads today.
+    let rule: PolicyRule | null = null
+    try {
+      rule = JSON.parse(r.body) as PolicyRule
+    } catch {
+      // A body that cannot be parsed is still a row worth listing: the reviewer
+      // should see that it exists and is unreadable, rather than not see it.
+    }
+    return {
+      ruleId: r.rule_id,
+      status: r.status,
+      severity: r.severity,
+      requirement: rule?.requirement ?? '(this rule could not be read)',
+      regulation: r.citation ?? r.regulation_id,
+      productTypes: rule?.appliesWhen?.productType ?? [],
+      effectiveFrom: r.effective_from,
+      effectiveTo: r.effective_to,
+      recordedAt: r.recorded_at,
+      retiredAt: r.retired_at,
+      approvedBy: r.approved_by,
+      approvedAt: r.approved_at,
+      quote: r.quote,
+      sourceDocument: r.source_document_id,
+      proposedBy: rule?.provenance?.model ?? rule?.provenance?.extractedBy ?? null,
+    }
+  })
+}
+
 /** What a reconciliation did, for the deploy to report and CI to assert on. */
 export interface ReconcileReport {
   readonly reconciliationId: string

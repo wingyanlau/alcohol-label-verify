@@ -195,6 +195,49 @@ function boot(opts: { running?: boolean; items?: Item[]; resetStops?: number | n
   const calls: string[] = []
   const fetchStub = (url: string, init?: { method?: string }) => {
     calls.push(`${init?.method ?? 'GET'} ${url}`)
+    if (url.includes('/policy/rules')) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            policySetVersion: 2,
+            approvedBy: 'IT Systems Administrator',
+            inForce: [
+              {
+                ruleId: 'DS-STANDARD-OF-FILL',
+                status: 'active',
+                requirement: 'Net contents must be an authorised standard of fill',
+                regulation: '27 CFR 5.203',
+                productTypes: ['Distilled spirits'],
+                effectiveFrom: '2025-01-10',
+                effectiveTo: null,
+                recordedAt: '2026-08-04T10:00:00.000Z',
+                retiredAt: null,
+                approvedBy: 'IT Systems Administrator',
+                quote: null,
+                proposedBy: null,
+              },
+            ],
+            awaitingApproval: [
+              {
+                ruleId: 'WINE-ALCOHOL-CONTENT-FORMAT',
+                status: 'draft',
+                requirement: 'Alcohol content is stated as a percentage of alcohol by volume',
+                regulation: '27 CFR 4.36',
+                productTypes: ['Wine'],
+                effectiveFrom: null,
+                effectiveTo: null,
+                recordedAt: '2026-08-04T10:00:00.000Z',
+                retiredAt: null,
+                approvedBy: null,
+                quote: 'Alcoholic content shall be stated in terms of percentage',
+                proposedBy: 'claude-opus-5',
+              },
+            ],
+            retired: [],
+          }),
+      })
+    }
     const body = url.includes('/batch/current')
       ? { jobId: JOB, running, counts: { queued: 0, running: 0, settled: items.length } }
       : url.includes('/batch/reset')
@@ -401,5 +444,62 @@ describe('reset leaves the page usable (the reported wedge)', () => {
     await settle()
     expect((byId.startBtn as El).disabled).toBe(false)
     expect(byId.worklist?.count('li')).toBe(0)
+  })
+})
+
+describe('the policy view (ui-design §2.3)', () => {
+  /*
+   * Read only, and that is a decision rather than a stage. D45 keeps the
+   * reviewed file as the source and the rows as derived; a button here that
+   * wrote a rule or an approval would make the rows authored, and the next
+   * reconciliation would supersede whatever it wrote.
+   *
+   * It exists because you cannot review what you cannot read, and six rules
+   * are waiting on exactly that.
+   */
+  const openPolicy = async () => {
+    const boot_ = boot()
+    await boot_.settle()
+    boot_.byId.modePolicy?.click()
+    await boot_.settle()
+    return boot_
+  }
+
+  it('shows what is in force and what is waiting on a person', async () => {
+    const { byId } = await openPolicy()
+    const words = byId.policyBody?.words() ?? ''
+    expect(words).toMatch(/In force \(1\)/)
+    expect(words).toMatch(/Awaiting approval \(1\)/)
+    expect(words).toContain('DS-STANDARD-OF-FILL')
+    expect(words).toContain('WINE-ALCOHOL-CONTENT-FORMAT')
+  })
+
+  it('says plainly when a rule has nobody answerable for it', async () => {
+    // The draft is unapproved, and that is the whole reason it is on the
+    // screen. Showing it identically to an enacted rule would hide the ask.
+    const { byId } = await openPolicy()
+    expect(byId.policyBody?.words()).toContain('NOT APPROVED')
+  })
+
+  it('shows both time windows, which are different questions', async () => {
+    // Which filings a rule covers, and since when this deployment held it.
+    const { byId } = await openPolicy()
+    const words = byId.policyBody?.words() ?? ''
+    expect(words).toMatch(/filings from 2025-01-10/)
+    expect(words).toMatch(/recorded 2026-08-04/)
+  })
+
+  it('says when a rule records no source quote rather than leaving a gap', async () => {
+    // The enacted rules carry none. An empty space reads as an oversight; the
+    // sentence says it is a known state.
+    const { byId } = await openPolicy()
+    expect(byId.policyBody?.words()).toContain('No source quote recorded')
+  })
+
+  it('offers nothing that would write', async () => {
+    // The property D45 depends on. If an approve button ever appears here, the
+    // reconciler and the screen are fighting over who authors policy.
+    const { byId } = await openPolicy()
+    expect(byId.policyBody?.count('button')).toBe(0)
   })
 })

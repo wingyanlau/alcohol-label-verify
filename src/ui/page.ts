@@ -190,8 +190,20 @@ export const PAGE_HTML = `<!doctype html>
     <div class="modes" role="tablist" aria-label="Mode">
       <button id="modeSingle" type="button" class="mode" role="tab" aria-selected="true">Single review</button>
       <button id="modeBatch" type="button" class="mode secondary" role="tab" aria-selected="false">Batch</button>
+      <button id="modePolicy" type="button" class="mode secondary" role="tab" aria-selected="false">Policy</button>
     </div>
   </div>
+
+  <!-- The policy archive, read only (ui-design §2.3).
+       A rule is enacted by approving it in config/policy-set.json, which is
+       the reviewed source (D45). Nothing here writes; a button that did would
+       make the rows authored, and the next reconciliation would supersede it. -->
+  <section id="policy" class="hidden">
+    <h1>Policy</h1>
+    <p class="lede">The rules this system applies, and where each came from. Read only —
+      a rule takes effect when it is approved in the reviewed policy file.</p>
+    <div id="policyBody"></div>
+  </section>
 
   <!-- Single review (§4). Two numbered panels, because the numbering describes
        the comparison the agent is performing rather than imposing steps. -->
@@ -619,7 +631,7 @@ export const PAGE_HTML = `<!doctype html>
         // A job in flight is the one case where the batch screen matters more
         // than the single-review form: everyone watching must see the same
         // thing, which is the whole point of adopting the job at all.
-        if (data.running) { setButton('running'); showMode(false) }
+        if (data.running) { setButton('running'); showMode('batch') }
         connect()
       })
       .catch(function () { /* no current job to adopt; the button stands */ })
@@ -632,7 +644,7 @@ export const PAGE_HTML = `<!doctype html>
   // still switch to batch if a job is already running, which is the one case
   // where the other screen matters more.
   singleInit()
-  showMode(true)
+  showMode('single')
 
   // ---- Detail view (ui-design §5-§7) --------------------------------------
 
@@ -870,11 +882,103 @@ export const PAGE_HTML = `<!doctype html>
 
   function byId(id) { return document.getElementById(id) }
 
-  function showMode(single) {
-    byId('single').classList.toggle('hidden', !single)
-    byId('batchHome').classList.toggle('hidden', single)
-    byId('modeSingle').setAttribute('aria-selected', String(single))
-    byId('modeBatch').setAttribute('aria-selected', String(!single))
+  // Three screens now, so the argument is a name rather than a boolean. It was
+  // showMode(true|false), which stopped being able to say which screen the
+  // moment there were more than two.
+  // The archive, rendered for a person deciding whether to approve something.
+  //
+  // Grouped by what a reviewer is doing rather than by rule id: what is in
+  // force, what is waiting on them, and what used to apply. The last group
+  // matters because a verdict from six months ago was judged by a rule that may
+  // no longer be in force, and D27 keeps it rather than deleting it.
+  var policyLoaded = false
+  function loadPolicy() {
+    if (policyLoaded) return
+    policyLoaded = true
+    var body = byId('policyBody')
+    body.textContent = 'Loading…'
+    fetch('/policy/rules')
+      .then(function (r) { if (!r.ok) throw new Error('policy unavailable'); return r.json() })
+      .then(function (d) { renderPolicy(d) })
+      .catch(function () {
+        policyLoaded = false
+        body.textContent = ''
+        body.appendChild(el('p', 'err', 'The policy could not be loaded. Please try again in a moment.'))
+      })
+  }
+
+  function renderPolicy(d) {
+    var body = byId('policyBody')
+    body.textContent = ''
+
+    var head = el('div', 'refline')
+    head.appendChild(document.createTextNode('Policy set version '))
+    head.appendChild(el('code', 'refcode', String(d.policySetVersion)))
+    head.appendChild(document.createTextNode('  ·  approved by ' + (d.approvedBy || 'nobody named')))
+    body.appendChild(head)
+
+    group(body, 'In force', d.inForce, 'These rules are applied to every submission they govern.')
+    group(body, 'Awaiting approval', d.awaitingApproval,
+      'Proposed, and not applied to anything. A rule takes effect when it is approved in the reviewed policy file.')
+    group(body, 'No longer in force', d.retired,
+      'Kept, not deleted — a verdict reached under one of these still needs the rule that produced it.')
+  }
+
+  function group(parent, title, rules, note) {
+    var box = el('div')
+    box.appendChild(el('h2', null, title + ' (' + (rules ? rules.length : 0) + ')'))
+    if (note) box.appendChild(el('p', 'note', note))
+    if (!rules || !rules.length) {
+      box.appendChild(el('p', 'note', 'None.'))
+      parent.appendChild(box)
+      return
+    }
+    rules.forEach(function (r) { box.appendChild(renderRule(r)) })
+    parent.appendChild(box)
+  }
+
+  function renderRule(r) {
+    var wrap = el('div', 'finding')
+    var head = el('div', 'fstatus ' + (r.status === 'active' ? 'ok' : r.retiredAt ? 'muted' : 'warn'))
+    head.textContent = (r.status === 'active' ? '✓  ' : r.retiredAt ? '—  ' : '?  ') + r.ruleId
+    wrap.appendChild(head)
+    wrap.appendChild(el('div', 'freq', r.requirement))
+
+    // What it governs, and when. Both windows, because "in force" is two
+    // different questions: which filings it covers, and since when we held it.
+    var when = 'applies to ' + ((r.productTypes || []).join(', ') || 'every product type')
+    when += r.effectiveFrom ? '  ·  filings from ' + r.effectiveFrom : '  ·  filings of any date'
+    if (r.effectiveTo) when += ' to ' + r.effectiveTo
+    when += '  ·  recorded ' + String(r.recordedAt).slice(0, 10)
+    if (r.retiredAt) when += ', retired ' + String(r.retiredAt).slice(0, 10)
+    wrap.appendChild(el('div', 'dev', when))
+
+    if (r.quote) {
+      var q = el('div', 'dev')
+      q.textContent = '“' + r.quote + '”'
+      wrap.appendChild(q)
+    } else {
+      wrap.appendChild(el('div', 'dev', 'No source quote recorded for this rule.'))
+    }
+
+    var foot = el('div', 'rule')
+    var bits = [r.regulation || 'no citation']
+    if (r.approvedBy) bits.push('approved by ' + r.approvedBy)
+    else bits.push('NOT APPROVED')
+    if (r.proposedBy) bits.push('proposed by ' + r.proposedBy)
+    foot.textContent = bits.join(' · ')
+    wrap.appendChild(foot)
+    return wrap
+  }
+
+  function showMode(mode) {
+    byId('single').classList.toggle('hidden', mode !== 'single')
+    byId('batchHome').classList.toggle('hidden', mode !== 'batch')
+    byId('policy').classList.toggle('hidden', mode !== 'policy')
+    byId('modeSingle').setAttribute('aria-selected', String(mode === 'single'))
+    byId('modeBatch').setAttribute('aria-selected', String(mode === 'batch'))
+    byId('modePolicy').setAttribute('aria-selected', String(mode === 'policy'))
+    if (mode === 'policy') loadPolicy()
   }
 
   function clearFieldError(id) {
@@ -941,8 +1045,9 @@ export const PAGE_HTML = `<!doctype html>
   }
 
   function singleInit() {
-    byId('modeSingle').addEventListener('click', function () { showMode(true) })
-    byId('modeBatch').addEventListener('click', function () { showMode(false) })
+    byId('modeSingle').addEventListener('click', function () { showMode('single') })
+    byId('modeBatch').addEventListener('click', function () { showMode('batch') })
+    byId('modePolicy').addEventListener('click', function () { showMode('policy') })
 
     byId('pickBtn').addEventListener('click', function () { byId('file').click() })
     byId('replaceBtn').addEventListener('click', function () { byId('file').click() })
