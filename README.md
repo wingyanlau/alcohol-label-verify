@@ -60,6 +60,41 @@ can enact a rule. It found a real hole on its first run.
 
 ---
 
+## Why the prototype does more than match
+
+Most of an agent's work is matching, and matching is straightforward. The harder
+part of a compliance determination is defending the answer. A verdict on a real
+filing needs three properties:
+
+- **Explainable** — which rule was applied, which values it compared, and which
+  regulation it cites.
+- **Reproducible** — the same inputs give the same answer years later, if the
+  decision is ever disputed.
+- **Attributable** — a named person made the determination, and the record shows
+  who.
+
+Without those, the tool is a demo. With them, it produces evidence a compliance
+division can rely on. That is what the hash-chained audit, the versioned
+reference data, the bitemporal policy archive, and the agent-kind boundary are
+for. The comparison itself takes under a millisecond; the rest of the system is
+what makes the comparison usable.
+
+**The scope was a deliberate choice.** A prototype did not need this much depth,
+and building it took longer than a minimal version would have (documented in
+[docs/exploration-session.md](docs/exploration-session.md)). The goal was to
+answer a harder question than "can a model read a label," which it can. The real
+question is what it would take to trust one on a federal determination, and the
+answer lies in the parts that are usually skipped. What was left out is stated,
+not hidden: authentication, COLA integration, and a runtime rule editor are all
+deferred on purpose, each with its reasoning recorded.
+
+Accessibility follows the same principle. The core review screen is intentionally
+plain — one clear action, large type, high contrast — so the least confident
+agent on a team that is half over 50 can use it. On a federal system, that is a
+**Section 508** requirement, not just a design preference.
+
+---
+
 ## Architecture at a glance
 
 ```
@@ -80,6 +115,46 @@ Full context, container and sequence diagrams: **[docs/architecture.md](docs/arc
 
 ---
 
+## How the code is organized
+
+The layout follows one rule: the verification logic is kept apart from the
+platform, so the rules can be tested offline and re-run years later.
+
+```
+src/
+  domain/            the pure verification core — comparison, warning check,
+                     aggregation, policy evaluation. No I/O, no clock, no vendor.
+  providers/         the inference seam — two vendor adapters (Workers AI,
+                     Gemini) behind one contract. The model reads here, nowhere else.
+  normalise/         filed PDF → two rasterised regions (label crop, record crop),
+                     via a headless browser + pdf.js, with byte-level intake guards.
+  batch/             job orchestration: intake, fan-out, pipeline, persistence,
+                     replay, retention.
+  job-coordinator.ts the Durable Object ledger — atomic claim, progress, abort.
+  policy/            the bitemporal policy archive, reconciled from the reviewed file.
+  audit/             the hash-chained event stream, replay, and re-reading.
+  agents/            who or what may act (human / model / system).
+  review/            the single-review path; shares every rule with batch.
+  metrics/           cost and latency, read from the record.
+  ui/                the landing page and the gated single-page app.
+  gate.ts            the shared-credential cost control.
+  index.ts           the Worker entry point — routes, persists, reports. No rules.
+
+config/              reviewed reference data: warning text, policy set, approved
+                     models, user register, class/type taxonomy.
+migrations/          D1 schema, with an append-only audit table.
+testdata/            the 26-submission corpus, with authored ground truth.
+docs/                the specification — worked before the code.
+```
+
+The dependency direction is one-way: the edges (`index.ts`, `ui/`, `batch/`)
+depend on `domain/`, and `domain/` depends on nothing platform-specific. That is
+what lets the whole rule set run under `npm test` with no account and no network,
+and it is enforced by coverage thresholds that apply to `src/domain/**` and
+nowhere else.
+
+---
+
 ## What is built, and what is not
 
 Twenty stories across four priorities — **[docs/personas-and-stories.md](docs/personas-and-stories.md)**
@@ -92,14 +167,14 @@ has each one with its evidence.
 | P3 — governance and audit | 4 | 0 | 0 |
 | Other | 0 | 1 | 3 |
 
-**The three deliberate omissions share one shape.** Sign-in, in-app rule
-approval, and correcting a filing are the same missing prerequisite — an
-authenticated identity — wearing three hats. Every *Must* requirement maps to a
-passing test; the matrix is `test-plan.md` §12.
+**The three deliberate omissions have one cause.** Sign-in, in-app rule approval,
+and correcting a filing all depend on the same missing prerequisite: an
+authenticated identity. Every *Must* requirement maps to a passing test; the
+matrix is in `test-plan.md` §12.
 
 ---
 
-## Measured, not estimated
+## Cost and latency, measured
 
 From a corpus run on 2026-08-05, reported by the system's own Measurement
 screen. Full analysis: **[docs/value-case.md](docs/value-case.md)**.
@@ -112,25 +187,24 @@ screen. Full analysis: **[docs/value-case.md](docs/value-case.md)**.
 | Verification, p95 | 11.30 s — and the tail is provider queueing, not work |
 | Comparison alone | **sub-millisecond**. All the time is inference; none is our code |
 
-**The tail is not what it looks like.** The slowest reads are not the degraded
-scans: two record reads one token apart took 15.2 s and 3.9 s. Same work, four
-times the latency. That points at a metered free tier, not at the design — and
-25 samples cannot settle a p95 either way, which the value case says rather than
-declaring the target failed.
+**The slow reads are not the degraded scans.** Two record reads one token apart
+took 15.2 s and 3.9 s — the same work at four times the latency. That points to a
+metered free tier rather than the design, and 25 samples cannot settle a p95
+either way. The value case says as much, rather than declaring the target failed.
 
-**What a person waits for is decoupled from what the pipeline does** — a
-structural rule, not an optimisation. The checking will get longer; the agent's
-wait is the time to load a prepared result, and new pipeline stages go on the
-asynchronous side. Stability matters more than speed here: a predictable three
-seconds is a better tool than one usually fast and occasionally fifteen.
+**What a person waits for is kept separate from what the pipeline does.** This is
+a structural choice. The checking will get longer over time, but the agent's wait
+is only the time to load a prepared result, and new pipeline stages run on the
+asynchronous side. A predictable three seconds is more useful here than a time
+that is usually fast and occasionally fifteen.
 
-**And these numbers gate an agent on only one of the two paths.** The
-five-second requirement came from a vendor pilot that took 30–40 seconds *while
-an agent sat waiting*. The answer is not a faster model; it is that batch checks
-a filing **as it arrives**, so an agent opens a worklist of prepared
-recommendations and never waits for inference at all. Single review is for the
-case in front of them right now, and there the target applies literally. This
-assumes filings are recorded on arrival — see the assumptions below.
+**These numbers matter on only one of the two paths.** The five-second
+requirement came from a vendor pilot that took 30–40 seconds *while an agent sat
+waiting*. The fix is not a faster model: batch checks a filing **as it arrives**,
+so an agent opens a worklist of prepared recommendations and never waits for
+inference. Single review is for the case in front of them right now, and there
+the target applies literally. This assumes filings are recorded on arrival — see
+the assumptions below.
 
 ---
 
@@ -171,16 +245,65 @@ perception is stable. Both are in the product; neither proves the reading was
 between them is written down** — see
 [determinism-and-replay.md](docs/determinism-and-replay.md).
 
-**The recall gap is the honest headline.** What the system decided is fully
-recoverable; what it decided *by* is only partly so. The rules are now readable
-on screen, but a finding pins its regulation by digest rather than quoting it,
-and the nine original rules carry no source quote — the six enacted on
-5 August do. Producing the passage a rule
-rests on — with the provisions that qualify it — is a retrieval problem, which is
-exactly what a model is good at and exactly what this system has refused to use
-one for. It assists *review of the rules* rather than deciding compliance, so it
-sits on the right side of the principle. That is the direction this prototype
-points at and deliberately did not take.
+**The clearest limitation is how much of the reasoning is recoverable.** What the
+system decided is fully recoverable; what it decided *by* is only partly so. The
+rules are now readable on screen, but a finding pins its regulation by digest
+rather than quoting it, and the nine original rules carry no source quote (the six
+enacted on 5 August do). Producing the passage a rule rests on, with the
+provisions that qualify it, is a retrieval problem: the kind of task a model is
+good at, and the one this system has deliberately not used a model for. It would
+assist *review of the rules* rather than decide compliance, so it stays on the
+right side of the principle. That is the direction this prototype points toward
+and deliberately did not take.
+
+---
+
+## The path to production
+
+The prototype is built so that moving to production means replacing components at
+defined seams, rather than rewriting the system. The parts that are hardest to
+get right are already in place. What would change:
+
+**Inference behind the firewall.** TTB's network blocks outbound connections to
+ML endpoints, which is what broke much of the last vendor pilot. This prototype
+uses a hosted model because it runs standalone, off that network. Production would
+move inference on-premise, or to a FedRAMP-authorised endpoint, behind the same
+`ExtractionProvider` seam, with the rest of the system unchanged. Self-hosting
+was considered, and its trade-offs are recorded (D10).
+
+**The application record.** The system assumes application data arrives as
+structured data, but the paper form carries only one of the four compared fields
+(found while building against it). Production would read the COLA record instead.
+This is the first integration question to raise with TTB.
+
+**Authenticated identity.** The shared credential is a cost control, not a login.
+Sign-in, in-app rule approval, and filing correction all depend on the same
+missing piece: a verified identity. It is the first thing production would add,
+and attribution would then move from declared to verified.
+
+**Retention policy.** The system already treats retention as a policy obligation
+rather than a storage setting: content is purged on a stated schedule, and the
+durable record is kept. Production would set the retention window to TTB's own
+policy. The mechanism is already built.
+
+**Measured accuracy.** No accuracy figure is claimed here, because the corpus is
+synthetic. Production's first task would be to test against a labelled sample of
+real labels. The deterministic rule engine can serve as the test oracle for that,
+since every finding it produces is a labelled example drawn from real traffic.
+
+**Reusing the interface.** The review-and-decide experience — upload, the two
+readings shown side by side, the warning checked clause by clause, and the
+determination recorded against the recommendation — is production-intended and
+would be reused largely as-is. The evaluation scaffolding would be replaced: the
+guided landing page, the demo corpus, and the single flat navigation that lets a
+reviewer see every screen without signing in. In production, the reference screens
+(Audit, Policy, Agents, Measurement) would be separated by role behind
+authentication, since each already serves a different user (auditor, policy owner,
+operator) that the prototype currently combines into one view.
+
+Full sequencing is in
+[docs/integration-and-delivery.md](docs/integration-and-delivery.md), and the
+production target architecture in [design.md §15](docs/design.md).
 
 ---
 
