@@ -115,6 +115,46 @@ Full context, container and sequence diagrams: **[docs/architecture.md](docs/arc
 
 ---
 
+## How the code is organized
+
+The layout follows one rule: the verification logic is kept apart from the
+platform, so the rules can be tested offline and re-run years later.
+
+```
+src/
+  domain/            the pure verification core — comparison, warning check,
+                     aggregation, policy evaluation. No I/O, no clock, no vendor.
+  providers/         the inference seam — two vendor adapters (Workers AI,
+                     Gemini) behind one contract. The model reads here, nowhere else.
+  normalise/         filed PDF → two rasterised regions (label crop, record crop),
+                     via a headless browser + pdf.js, with byte-level intake guards.
+  batch/             job orchestration: intake, fan-out, pipeline, persistence,
+                     replay, retention.
+  job-coordinator.ts the Durable Object ledger — atomic claim, progress, abort.
+  policy/            the bitemporal policy archive, reconciled from the reviewed file.
+  audit/             the hash-chained event stream, replay, and re-reading.
+  agents/            who or what may act (human / model / system).
+  review/            the single-review path; shares every rule with batch.
+  metrics/           cost and latency, read from the record.
+  ui/                the landing page and the gated single-page app.
+  gate.ts            the shared-credential cost control.
+  index.ts           the Worker entry point — routes, persists, reports. No rules.
+
+config/              reviewed reference data: warning text, policy set, approved
+                     models, user register, class/type taxonomy.
+migrations/          D1 schema, with an append-only audit table.
+testdata/            the 26-submission corpus, with authored ground truth.
+docs/                the specification — worked before the code.
+```
+
+The dependency direction is one-way: the edges (`index.ts`, `ui/`, `batch/`)
+depend on `domain/`, and `domain/` depends on nothing platform-specific. That is
+what lets the whole rule set run under `npm test` with no account and no network,
+and it is enforced by coverage thresholds that apply to `src/domain/**` and
+nowhere else.
+
+---
+
 ## What is built, and what is not
 
 Twenty stories across four priorities — **[docs/personas-and-stories.md](docs/personas-and-stories.md)**
