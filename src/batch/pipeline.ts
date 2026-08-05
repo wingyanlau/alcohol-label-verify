@@ -21,7 +21,6 @@
  */
 
 import { configuredLegibilityFloor } from '../domain/legibility.js'
-import type { ApplicationData } from '../domain/types.js'
 import { verifySubmission } from '../domain/verify.js'
 import type { Env, WorkMessage } from '../env.js'
 import { type IntakeLimits, IntakeRejected, type NormaliseResult } from '../normalise/normaliser.js'
@@ -37,7 +36,6 @@ import { sha256Hex } from './digest.js'
 import { labelImageKey } from './keys.js'
 import { emit } from './log.js'
 import { buildPersistPlan, persistResult } from './persist.js'
-import { applicationDataFrom } from './record.js'
 import { LABEL_RASTER, RECORD_RASTER } from './submissions.js'
 
 export interface ProcessOutcome {
@@ -78,18 +76,22 @@ function causeOf(error: unknown): string {
 }
 
 /**
- * The record as the applicant declared it, for a bundled submission.
+ * What the shipped manifest says about a bundled submission.
  *
- * Read from the shipped manifest — the same corpus artefact the rasters come
- * from — and reduced to the compared fields on the way in, so an authored
- * expected outcome cannot travel with it (see record.ts).
+ * **Only the legibility measurement.** It used to carry the applicant's
+ * declared record as well, which the batch used instead of reading the record
+ * page — halving the inference per submission, and making the batch and the
+ * single-review path two different checks of the same file. One trusted a
+ * value from a build artefact; the other read the pixels. Two paths that can
+ * disagree about the same submission are two systems, and only one of them was
+ * being demonstrated.
  *
- * Null for anything not in the corpus. An upload has no declared record to
- * read, so it keeps the second extraction until a real COLAs Online
- * integration supplies one.
+ * The legibility number stays because it cannot be read at all at runtime: it
+ * is measured from the raster at build time, and the extractor cannot be asked
+ * — shown an illegible warning it returns the statutory text from memory and
+ * reports success.
  */
 interface CorpusEntry {
-  readonly declared: ApplicationData | null
   /** Measured at build time from the shipped raster; see testdata/generate.py. */
   readonly warningLegibility: number | null
 }
@@ -100,17 +102,15 @@ async function loadCorpusEntry(env: Env, submissionId: string): Promise<CorpusEn
   if (!response.ok) return null
 
   const manifest = (await response.json()) as {
-    cases?: { id?: string; application?: unknown; warningLegibility?: unknown }[]
+    cases?: { id?: string; warningLegibility?: unknown }[]
   }
   const entry = manifest.cases?.find((c) => c.id === submissionId)
   if (entry === undefined) return null
 
-  const declared = entry.application
+  // The manifest also carries each case's authored expected outcome. Nothing
+  // here reads it, and nothing should: an expected verdict travelling into the
+  // pipeline would make the corpus grade itself.
   return {
-    declared:
-      typeof declared === 'object' && declared !== null
-        ? applicationDataFrom(declared as Record<string, unknown>)
-        : null,
     warningLegibility: typeof entry.warningLegibility === 'number' ? entry.warningLegibility : null,
   }
 }
@@ -249,13 +249,21 @@ export async function processItem(
 
     const normaliseMs = Date.now() - normaliseStarted
 
-    // The record is taken as data when the corpus declares it, which halves
-    // the inference per submission and removes the extraction that was
-    // observed inventing "Old Forester" for a compliant label. The label is
-    // untouched: it is still read from pixels, because that is what a consumer
-    // sees (rule 5). An upload has no declared record and keeps both calls.
+    // Every submission is read the same way, corpus or upload: two regions, two
+    // blind reads, nothing declared.
+    //
+    // The corpus record used to be taken as data from the manifest, which was
+    // half the inference and a real defence against an extraction once observed
+    // inventing "Old Forester" for a compliant label. It was dropped because it
+    // made this path and the single-review path two different checks of the
+    // same file — one trusting a build artefact, one reading pixels — and they
+    // could disagree about the same submission while both looked correct.
+    //
+    // If the record read starts fabricating again, the answer is to make that
+    // visible rather than to route around it: it is exactly the failure the
+    // extraction contract, the confidence floor and UNREADABLE exist to catch,
+    // and a corpus that never exercises them proves nothing about an upload.
     const corpus = await loadCorpusEntry(env, corpusIdOf(message))
-    const declared = corpus?.declared ?? null
     // Null when unset, which `validateConfig` already reports as a startup
     // problem. Here it means the measurement is not applied rather than
     // applied against a number nobody chose: silently inventing a threshold
@@ -292,10 +300,7 @@ export async function processItem(
                 },
               }),
         },
-        record:
-          declared === null
-            ? { image: normalised.record.image, mimeType: normalised.record.mimeType }
-            : { applicationData: declared },
+        record: { image: normalised.record.image, mimeType: normalised.record.mimeType },
       },
       // The clock is supplied here, outside the pure core (M1).
       // Both dates are taken once, before the call, so every rule in one
@@ -358,7 +363,7 @@ export async function processItem(
         // not say, and recorded as such rather than assumed equal.
         `served=${result.provenance.label.servedModelVersion ?? 'unreported'}`,
         `prompt=${result.provenance.label.promptVersion}`,
-        `record=${result.provenance.record ? 'extracted' : 'declared'}`,
+        `record=${result.provenance.record ? 'read' : 'declared'}`,
         // Why the legibility decision went the way it did. The decision itself
         // is on the verdict row, which is what makes replay possible; this is
         // the threshold it was judged against, so the record explains itself
