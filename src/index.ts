@@ -19,6 +19,7 @@ import {
   alreadyDecided,
   checkDecision,
   DecisionRejected,
+  decisionsForJob,
   isDisagreement,
   listDecisions,
   recordDecision,
@@ -942,6 +943,20 @@ export default {
         recommendedOutcome: detail.outcome,
         agreed: !isDisagreement({ decision: input.decision, recommendedOutcome: detail.outcome }),
       })
+    }
+
+    // Which rows in a job a person has already dealt with.
+    //
+    // Fetched separately from the coordinator's snapshot rather than folded
+    // into it: the coordinator holds the ledger of WORK, and a decision is not
+    // work — it happens afterwards, in D1, and often long afterwards. Merging
+    // them would put a durable record inside a Durable Object that does not own
+    // it.
+    const jobDecisions = pathname.match(/^\/batch\/([^/]+)\/decisions$/)
+    if (jobDecisions && request.method === 'GET') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+      const jobId = decodeURIComponent(jobDecisions[1] ?? '')
+      return json({ decided: await decisionsForJob(env.DB, jobId) })
     }
 
     // Single review — one label, checked now (UC-1, ui-design §4).

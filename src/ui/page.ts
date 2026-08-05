@@ -119,6 +119,11 @@ export const PAGE_HTML = `<!doctype html>
   .decision { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 14px; }
   .decision input, .decision textarea { width: 100%; margin-bottom: 8px; }
   .decision-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  /* A row somebody has already dealt with. Dimmed rather than hidden: it is
+     still part of the batch, and an agent may want to revisit it — the mark
+     exists to stop them opening it by accident, not to take it away. */
+  #worklist li.done { opacity: 0.62; }
+  .row-decided { grid-column: 2; font-size: 14px; color: var(--muted); margin-top: 2px; }
   .warning-seg { padding: 8px 0; }
   .warning-seg .dev { color: var(--muted); font-size: 15px; }
   /* The recommendation sits under the headline in the outcome banner. Normal
@@ -329,6 +334,10 @@ export const PAGE_HTML = `<!doctype html>
   var jobId = null
   var total = 0
   var rows = new Map()
+  // What a person has already decided, by submission. The coordinator does not
+  // know — a decision happens after the work, in D1 — so it is fetched
+  // alongside and merged for display only.
+  var decided = {}
   var lastFocused = null
   // The live stream, held so a reconnect can replace it rather than stack on
   // top of it — and so a replaced socket can tell it is no longer the one.
@@ -344,20 +353,29 @@ export const PAGE_HTML = `<!doctype html>
   // Outcome -> presentation. The internal vocabulary stops here (ui-design §12).
   function present(row) {
     if (row.state === 'FAILED' || row.state === 'REJECTED') {
-      return { icon: 'x', cls: 'warn', words: 'Could not process', rank: 1 }
+      return { icon: 'x', cls: 'warn', words: 'Could not process', rank: 4 }
     }
-    if (row.state === 'QUEUED') return { icon: '…', cls: 'muted', words: 'Waiting', rank: 6 }
-    if (row.state === 'RUNNING') return { icon: '•', cls: 'muted', words: 'Checking…', rank: 5 }
+    if (row.state === 'QUEUED') return { icon: '…', cls: 'muted', words: 'Waiting', rank: 7 }
+    if (row.state === 'RUNNING') return { icon: '•', cls: 'muted', words: 'Checking…', rank: 6 }
     switch (row.outcome) {
-      case 'DISCREPANCIES_FOUND': return { icon: '✗', cls: 'bad', words: 'Problems found', rank: 0 }
-      case 'INCOMPLETE': return { icon: '!', cls: 'warn', words: 'Could not finish the check', rank: 2 }
-      // Above the divider: a rule this system may not decide is work, not a
-      // clean pass (D40). Ranked below INCOMPLETE, which is a check that did
-      // not happen at all.
-      case 'CLEAR_CONFIRM_POLICY': return { icon: '?', cls: 'warn', words: 'Needs your judgement', rank: 3 }
-      case 'CLEAR_CONFIRM_FLAGGED': return { icon: '✓', cls: 'ok', words: 'Matches — confirm flagged', rank: 4 }
-      case 'CLEAR': return { icon: '✓', cls: 'ok', words: 'Everything matches', rank: 4 }
-      default: return { icon: '•', cls: 'muted', words: 'Checking…', rank: 5 }
+      // Settled first, trouble last.
+      //
+      // This is the reverse of how it read until now, and the reversal is
+      // deliberate rather than a drift: an agent working a batch clears the
+      // ones that need nothing, then spends the remaining time on the ones that
+      // do. Leading with problems put the longest work at the top of a list
+      // somebody was trying to get through.
+      //
+      // Nothing is hidden either way — both groups are on the same page, under
+      // a divider that says which is which.
+      case 'CLEAR': return { icon: '✓', cls: 'ok', words: 'Everything matches', rank: 0 }
+      case 'CLEAR_CONFIRM_FLAGGED': return { icon: '✓', cls: 'ok', words: 'Matches — confirm flagged', rank: 1 }
+      // Below the divider: a rule this system may not decide is work, not a
+      // clean pass (D40).
+      case 'CLEAR_CONFIRM_POLICY': return { icon: '?', cls: 'warn', words: 'Needs your judgement', rank: 2 }
+      case 'INCOMPLETE': return { icon: '!', cls: 'warn', words: 'Could not finish the check', rank: 3 }
+      case 'DISCREPANCIES_FOUND': return { icon: '✗', cls: 'bad', words: 'Problems found', rank: 5 }
+      default: return { icon: '•', cls: 'muted', words: 'Checking…', rank: 6 }
     }
   }
 
@@ -432,8 +450,8 @@ export const PAGE_HTML = `<!doctype html>
     items.forEach(function (r) {
       var p = present(r)
       // A single divider separates things needing attention from clean passes.
-      if (!dividerShown && p.rank >= 4) {
-        var d = el('li', 'divider', 'Matched')
+      if (!dividerShown && p.rank >= 2) {
+        var d = el('li', 'divider', 'Needs your attention')
         d.style.cursor = 'default'; d.removeAttribute('tabindex')
         worklist.appendChild(d); dividerShown = true
       }
@@ -446,6 +464,19 @@ export const PAGE_HTML = `<!doctype html>
       mid.appendChild(el('div', 'row-summary', r.summary || r.cause || p.words))
       li.appendChild(mid)
       li.appendChild(el('div', 'row-state', p.words))
+
+      // Whether a person has already dealt with this one. The point is not to
+      // show the decision — that is on the detail screen — but to save an agent
+      // opening a row they have already judged, which on a batch of 26 is the
+      // difference between finishing and starting again.
+      var seen = decided[r.itemId]
+      if (seen) {
+        var mark = el('div', 'row-decided')
+        mark.textContent = (seen.decision === 'APPROVED' ? '✓ ' : seen.decision === 'REJECTED' ? '✗ ' : '↩ ') +
+          seen.decision.charAt(0) + seen.decision.slice(1).toLowerCase() + ' by ' + seen.decidedBy
+        li.appendChild(mark)
+        li.classList.add('done')
+      }
       var open = function () { openDetail(r.itemId, r.sourceName) }
       li.addEventListener('click', open)
       li.addEventListener('keydown', function (e) {
@@ -486,6 +517,26 @@ export const PAGE_HTML = `<!doctype html>
     }
     renderCounts()
     renderWorklist()
+    loadDecided()
+  }
+
+  /**
+   * Which rows have already been dealt with.
+   *
+   * Best effort: a worklist that cannot say whether something was decided is
+   * still a usable worklist, so a failure here leaves the marks off rather than
+   * breaking the screen.
+   */
+  function loadDecided() {
+    if (!jobId) return
+    fetch('/batch/' + jobId + '/decisions')
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (d) {
+        if (!d || !d.decided) return
+        decided = d.decided
+        renderWorklist()
+      })
+      .catch(function () { /* leave the rows unmarked */ })
   }
 
   function connect() {
@@ -846,6 +897,8 @@ export const PAGE_HTML = `<!doctype html>
         note: byId('decisionNote').value.trim() || null
       }
       renderDetail(d)
+      // The worklist behind the sheet is now out of date about this row.
+      loadDecided()
     }).catch(function () {
       button.disabled = false
       err.textContent = 'That could not be recorded.'

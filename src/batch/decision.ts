@@ -306,3 +306,42 @@ export async function agreementByOutcome(
     .all<{ recommendedOutcome: string; decided: string; count: number }>()
   return results
 }
+
+/**
+ * Which submissions in a job a person has already dealt with.
+ *
+ * The worklist knows what the SYSTEM found; it has never known what a person
+ * then did, because decisions live in D1 and the coordinator's snapshot does
+ * not carry them. So an agent working a batch had no way to tell a row they had
+ * already judged from one they had not — and on a batch of 26 that is the
+ * difference between finishing and starting again.
+ *
+ * Keyed by submission, because that is what a row is.
+ */
+export async function decisionsForJob(
+  db: D1Database,
+  jobId: string,
+): Promise<Record<string, { decision: string; decidedBy: string; decidedAt: string }>> {
+  const { results } = await db
+    .prepare(
+      `SELECT d.submission_id, d.decision, d.decided_by, d.decided_at
+         FROM decision d
+         JOIN submission s ON s.id = d.submission_id
+        WHERE s.job_id = ?1
+        ORDER BY d.decided_at ASC`,
+    )
+    .bind(jobId)
+    .all<{ submission_id: string; decision: string; decided_by: string; decided_at: string }>()
+
+  const out: Record<string, { decision: string; decidedBy: string; decidedAt: string }> = {}
+  // Ascending, so a later decision on the same submission wins — which is what
+  // a corrected verdict being decided again should look like.
+  for (const r of results) {
+    out[r.submission_id] = {
+      decision: r.decision,
+      decidedBy: r.decided_by,
+      decidedAt: r.decided_at,
+    }
+  }
+  return out
+}

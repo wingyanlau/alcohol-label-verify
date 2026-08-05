@@ -195,6 +195,21 @@ function boot(opts: { running?: boolean; items?: Item[]; resetStops?: number | n
   const calls: string[] = []
   const fetchStub = (url: string, init?: { method?: string }) => {
     calls.push(`${init?.method ?? 'GET'} ${url}`)
+    if (url.includes('/decisions')) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            decided: {
+              'id-0': {
+                decision: 'APPROVED',
+                decidedBy: 'Jenny Alvarez',
+                decidedAt: '2026-08-04T20:00:00.000Z',
+              },
+            },
+          }),
+      })
+    }
     if (url.includes('/policy/rules')) {
       return Promise.resolve({
         ok: true,
@@ -538,5 +553,49 @@ describe('the policy view (ui-design §2.3)', () => {
     // reconciler and the screen are fighting over who authors policy.
     const { byId } = await openPolicy()
     expect(byId.policyBody?.count('button')).toBe(0)
+  })
+})
+
+describe('the worklist an agent works through', () => {
+  const mixed = () => {
+    const items = corpusItems()
+    items[1] = { ...items[1], outcome: 'DISCREPANCIES_FOUND' } as Item
+    items[2] = { ...items[2], outcome: 'CLEAR_CONFIRM_POLICY' } as Item
+    return items
+  }
+
+  it('puts what is settled first and what needs work last', async () => {
+    // Reversed deliberately. An agent clears the rows needing nothing, then
+    // spends the remaining time on the ones that do; leading with problems put
+    // the longest work at the top of a list somebody was trying to get through.
+    const { byId, settle } = boot({ items: mixed() })
+    await settle()
+    const words = byId.worklist?.words() ?? ''
+    expect(words.indexOf('Everything matches')).toBeLessThan(words.indexOf('Problems found'))
+  })
+
+  it('divides the two groups rather than blending them', async () => {
+    const { byId, settle } = boot({ items: mixed() })
+    await settle()
+    const words = byId.worklist?.words() ?? ''
+    expect(words).toContain('Needs your attention')
+    // The divider sits before the work, not before the clean passes.
+    expect(words.indexOf('Everything matches')).toBeLessThan(words.indexOf('Needs your attention'))
+  })
+
+  it('marks a row a person has already dealt with', async () => {
+    // The point is not to show the decision — that is on the detail screen —
+    // but to stop an agent reopening a row they have already judged.
+    const { byId, settle } = boot()
+    await settle()
+    expect(byId.worklist?.words()).toContain('Approved by Jenny Alvarez')
+  })
+
+  it('leaves undecided rows unmarked', async () => {
+    const { byId, settle } = boot()
+    await settle()
+    // Only one row was decided in the stub; the mark must not spread.
+    const marks = (byId.worklist?.words() ?? '').match(/Approved by/g) ?? []
+    expect(marks).toHaveLength(1)
   })
 })
