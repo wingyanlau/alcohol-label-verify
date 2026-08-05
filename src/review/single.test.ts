@@ -197,3 +197,135 @@ describe('the rules the screen shows (§18.4)', () => {
     expect(format?.state).toBe('SATISFIED')
   })
 })
+
+/**
+ * The filed form, checked as one PDF (UC-1, revised).
+ *
+ * The single path and the batch path now take the same input: the filled TTB
+ * F 5100.31 as a PDF, rasterised into a label region and a record region, and
+ * read blind. Typing the application data by hand was a second way in, and a
+ * second way in is a second thing to keep in agreement — the agent's typing
+ * against the filed form. Reading the record removes the transcription step
+ * that was never part of the job.
+ *
+ * What must NOT change is the blindness. Two reads, neither shown the other's
+ * answer: the record read never sees the label, the label read never sees the
+ * record, and no expected value exists before both have answered (D4, CT-10).
+ */
+describe('a filed form, checked as one PDF', () => {
+  const recordReading = (productType: string | null) =>
+    JSON.stringify({
+      fields: {
+        brandName: { value: 'Old Tom Distillery', confidence: 0.99 },
+        classType: { value: 'Kentucky Straight Bourbon Whiskey', confidence: 0.99 },
+        alcoholContent: { value: '45% Alc./Vol.', confidence: 0.99 },
+        netContents: { value: '750 mL', confidence: 0.99 },
+      },
+      productType,
+    })
+
+  /** Answers per region, so the two reads can be told apart in the assertions. */
+  function twoRegionProvider(productType: string | null) {
+    const asked: ExtractionRequest[] = []
+    const provider: ExtractionProvider = {
+      name: 'stub',
+      async extract(request) {
+        asked.push(request)
+        const body = request.region === 'label' ? reading : recordReading(productType)
+        const { parseExtractionResponse } = await import('../domain/extraction.js')
+        return {
+          extraction: parseExtractionResponse(JSON.parse(body), {
+            fields: request.fields,
+            includeWarning: request.includeWarning,
+            includeProductType: request.includeProductType === true,
+          }),
+          rawResponse: body,
+          provenance: {
+            provider: 'stub',
+            modelId: 'stub',
+            promptVersion: 'p@1',
+            samplingParameters: {},
+            latencyMs: 1,
+          },
+        }
+      },
+    }
+    return { provider, asked }
+  }
+
+  const runPdf = async (productType: string | null) => {
+    const { provider, asked } = twoRegionProvider(productType)
+    const out = await reviewOne(
+      {
+        kind: 'submission',
+        image: new ArrayBuffer(8),
+        mimeType: 'image/png',
+        record: { image: new ArrayBuffer(8), mimeType: 'image/png' },
+      },
+      {
+        provider,
+        submissionId: 's-2',
+        reference: 'ABCD-5678',
+        labelImageUrl: '/review/s-2/label.png',
+        sourceName: 'TTB-F-5100-31.pdf',
+        env: { LEGIBILITY_FLOOR: '30' },
+      },
+    )
+    return { ...out, asked }
+  }
+
+  it('reads both regions, and neither read is shown the other', async () => {
+    const { asked } = await runPdf('Distilled spirits')
+    expect(asked.map((r) => r.region).sort()).toEqual(['label', 'record'])
+    // CT-10 restated for this path: an extraction request has nowhere to put
+    // an expected value, so blindness holds by construction rather than by
+    // this assertion — which pins that the shape has not been widened.
+    const allowed = [
+      'fields',
+      'image',
+      'includeProductType',
+      'includeWarning',
+      'mimeType',
+      'region',
+    ]
+    for (const request of asked) {
+      expect(Object.keys(request).filter((k) => !allowed.includes(k))).toEqual([])
+    }
+    // And item 5 is asked of the record alone: no label states "Distilled
+    // spirits", so asking there would let the artwork choose the regulation.
+    expect(asked.find((r) => r.region === 'label')?.includeProductType).not.toBe(true)
+    expect(asked.find((r) => r.region === 'record')?.includeProductType).toBe(true)
+  })
+
+  it('compares the label against what the record said, not against typing', async () => {
+    // The label reading declares 40% where the record says 45%. Nobody typed
+    // either number; both were read, separately, and the discrepancy is
+    // between two readings of the filed submission.
+    const { view } = await runPdf('Distilled spirits')
+    const abv = view.fields.find((f) => f.field === 'alcoholContent')
+    expect(abv?.state).toBe('MISMATCH')
+    expect(abv?.expected).toBe('45% Alc./Vol.')
+    expect(abv?.observed).toBe('40% Alc./Vol.')
+  })
+
+  it('selects the rules from item 5, and shows what selected them', async () => {
+    const { view } = await runPdf('Distilled spirits')
+    expect(view.policy.productType).toBe('Distilled spirits')
+    expect(view.policy.selectedRuleIds).toContain('DS-BRAND-NAME-PRESENT')
+  })
+
+  it('checks nothing when item 5 could not be settled, and says so', async () => {
+    // The screen has to be able to say WHY no rule applied. Without the
+    // product type on the view, "no findings" and "nothing could be checked"
+    // look identical to an agent — and one of them means the label was never
+    // examined against any regulation.
+    const { view } = await runPdf(null)
+    expect(view.policy.productType).toBeNull()
+    expect(view.policy.selectedRuleIds).toEqual([])
+    expect(view.findings.map((f) => f.ruleId)).toEqual(['POLICY-SELECTION'])
+    // The outcome still reports the alcohol-content mismatch, which is right:
+    // a failed selection does not suppress a discrepancy between the two
+    // readings. It suppresses the regulation check, and the finding says so.
+    expect(view.outcome).toBe('DISCREPANCIES_FOUND')
+  })
+})

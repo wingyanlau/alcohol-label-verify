@@ -24,7 +24,7 @@
  */
 
 import type { Extraction, FieldName, ObservedField } from './types.js'
-import { FIELDS } from './types.js'
+import { FIELDS, FORM_PRODUCT_TYPES } from './types.js'
 
 /** Which region of a submission an extraction covers. */
 export type Region = 'label' | 'record'
@@ -45,6 +45,19 @@ export interface ExtractionRequest {
   readonly fields: readonly FieldName[]
   /** Whether to also transcribe the government warning statement. */
   readonly includeWarning: boolean
+  /**
+   * Whether to read item 5, TYPE OF PRODUCT — the record region only.
+   *
+   * Never asked of the label. No label states "Distilled spirits", so asking
+   * there would invite the model to infer it from the artwork — the bottle
+   * choosing the body of law it is judged by, which is D25's "never from the
+   * model" in its worst form.
+   *
+   * It is a tick among three boxes rather than a transcription, which is why it
+   * can be asked for at all: the answer is a choice from a known set, and
+   * anything outside that set is a bad read rather than an unusual product.
+   */
+  readonly includeProductType?: boolean
 }
 
 /** Provenance the provider must report back, for the audit record (§8.7.1). */
@@ -200,7 +213,11 @@ function readField(name: string, raw: unknown): ObservedField {
  */
 export function parseExtractionResponse(
   value: unknown,
-  opts: { readonly fields?: readonly FieldName[]; readonly includeWarning?: boolean } = {},
+  opts: {
+    readonly fields?: readonly FieldName[]
+    readonly includeWarning?: boolean
+    readonly includeProductType?: boolean
+  } = {},
 ): Extraction {
   const wanted = opts.fields ?? FIELDS
   if (!isRecord(value)) throw new ExtractionContractError('response is not an object')
@@ -230,5 +247,30 @@ export function parseExtractionResponse(
     }
   }
 
-  return { fields, warningStatement }
+  if (opts.includeProductType !== true) return { fields, warningStatement }
+  return { fields, warningStatement, productType: readProductType(value.productType) }
+}
+
+/**
+ * Item 5 as a classification, failing closed at every step.
+ *
+ * The model is asked which of three boxes is ticked, and this decides whether
+ * its answer is one of them. `null` — none ticked, two ticked, illegible, or a
+ * word that is not on the form — is a first-class answer, and selection then
+ * reports that nothing could be checked.
+ *
+ * The nearest match is deliberately not taken. "Beer" is very nearly "Malt
+ * beverages", and the difference between them is a body of regulation.
+ */
+function readProductType(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null
+  if (typeof raw !== 'string') {
+    throw new ExtractionContractError('productType must be a string or null')
+  }
+  rejectTemplateEcho('productType', raw)
+  const folded = raw.trim().toLowerCase()
+  // Canonicalised to the form's own spelling: the value is compared against a
+  // rule's `appliesWhen.productType` as a plain string, so the casing the model
+  // happened to use must not decide whether a rule fires.
+  return FORM_PRODUCT_TYPES.find((t) => t.toLowerCase() === folded) ?? null
 }

@@ -263,3 +263,80 @@ describe('CT-10 — blind extraction, enforced structurally (D4)', () => {
     }
   })
 })
+
+/**
+ * CT-12 — item 5, TYPE OF PRODUCT.
+ *
+ * Read from the application record and nowhere else. It is a **classification
+ * against three known boxes**, not a transcription, which is the only reason it
+ * can be asked of a model at all: the answer is a choice from a closed set, and
+ * anything outside that set is a bad read rather than an unusual product.
+ *
+ * Every case here fails closed, because a wrong product type is the most
+ * dangerous single misread in this system. It selects the body of regulation —
+ * read `Wine` on a spirits filing and every finding downstream looks perfectly
+ * ordinary while the wrong rules were applied. `null` costs a reviewer the
+ * sentence "nothing could be checked"; a guess costs them the truth.
+ */
+describe('CT-12 — the product type is classified, never guessed', () => {
+  const withProductType = (productType: unknown) => ({ ...wellFormed, productType })
+
+  const parse = (body: unknown) =>
+    parseExtractionResponse(body, { includeWarning: false, includeProductType: true })
+
+  it('CT-12a — one box ticked is read as that type', () => {
+    expect(parse(withProductType('Distilled spirits')).productType).toBe('Distilled spirits')
+  })
+
+  it('CT-12b — the three form options are all recognised', () => {
+    expect(parse(withProductType('Wine')).productType).toBe('Wine')
+    expect(parse(withProductType('Malt beverages')).productType).toBe('Malt beverages')
+  })
+
+  it('CT-12c — capitalisation follows the form, not the model', () => {
+    // The form prints the options in caps. Canonicalising here is what lets a
+    // selection input be compared to a rule's `appliesWhen` as a plain string.
+    expect(parse(withProductType('DISTILLED SPIRITS')).productType).toBe('Distilled spirits')
+    expect(parse(withProductType('  malt beverages ')).productType).toBe('Malt beverages')
+  })
+
+  it('CT-12d — null when the model reports no single tick', () => {
+    // None ticked, two ticked, or unreadable all arrive here as null: the
+    // prompt asks for exactly that rather than for a best effort.
+    expect(parse(withProductType(null)).productType).toBeNull()
+  })
+
+  it('CT-12e — a value outside the three is null, not the nearest match', () => {
+    // "Beer" is very nearly "Malt beverages" and must not become it. The
+    // system does not know what the model saw; it only knows this is not one
+    // of the three boxes on the form.
+    expect(parse(withProductType('Beer')).productType).toBeNull()
+    expect(parse(withProductType('Whiskey')).productType).toBeNull()
+    expect(parse(withProductType('Wine cooler')).productType).toBeNull()
+  })
+
+  it('CT-12f — a missing key is null, and does not fail the whole read', () => {
+    // The four compared fields were read perfectly. Throwing the reading away
+    // over a checkbox would turn a usable verdict into a dependency failure;
+    // reporting that nothing could be checked is the honest, cheaper answer.
+    expect(parse(wellFormed).productType).toBeNull()
+  })
+
+  it('CT-12g — a non-string is refused rather than coerced', () => {
+    expect(() => parse(withProductType(3))).toThrow(ExtractionContractError)
+    expect(() => parse(withProductType({ value: 'Wine' }))).toThrow(ExtractionContractError)
+  })
+
+  it('CT-12h — the prompt template echoed back is not a reading (CT-11)', () => {
+    expect(() =>
+      parse(withProductType('<Wine | Distilled spirits | Malt beverages, or null>')),
+    ).toThrow(ExtractionContractError)
+  })
+
+  it('CT-12i — not asked for means absent, not unresolved', () => {
+    // A label read never carries the key at all. "Was not asked" and "was
+    // asked and could not be settled" are different facts about a reading.
+    const label = parseExtractionResponse(wellFormed)
+    expect(label.productType).toBeUndefined()
+  })
+})

@@ -20,6 +20,7 @@ import type { FieldName, Outcome } from '../domain/types.js'
 import { FIELD_LABELS, FIELDS } from '../domain/types.js'
 import { isDecision, isDisagreement } from './decision.js'
 import { referenceCodeFor } from './reference-code.js'
+import { productTypeFrom } from './replay-load.js'
 
 export interface DetailField {
   readonly field: string
@@ -84,6 +85,14 @@ export interface SubmissionDetail {
     readonly policySetVersion: number | null
     readonly selectedRuleIds: readonly string[]
     readonly submittedOn: string | null
+    /**
+     * Item 5 — the product type the rules were selected on.
+     *
+     * On the detail because "no rules applied" and "no rule could be selected"
+     * are different facts that look identical without it, and one of them means
+     * the label was never examined against any regulation.
+     */
+    readonly productType: string | null
   }
   /** The agent's decision, once one has been recorded (§18.5). */
   readonly decision: {
@@ -140,6 +149,7 @@ interface VerdictRecord {
   policy_set_version: number | null
   selected_rule_ids: string | null
   submitted_on: string | null
+  selection_inputs: string | null
 }
 interface FindingRecord {
   rule_id: string
@@ -217,7 +227,8 @@ export async function loadSubmissionDetail(
 
   const verdict = await db
     .prepare(
-      `SELECT id, outcome, policy_set_version, selected_rule_ids, submitted_on
+      `SELECT id, outcome, policy_set_version, selected_rule_ids, submitted_on,
+              selection_inputs
          FROM verdict
         WHERE submission_id = ? AND superseded_by IS NULL
         ORDER BY created_at DESC LIMIT 1`,
@@ -239,7 +250,7 @@ export async function loadSubmissionDetail(
       recommendation: null,
       cause: submission.failure_cause,
       findings: [],
-      policy: { policySetVersion: null, selectedRuleIds: [], submittedOn: null },
+      policy: { policySetVersion: null, selectedRuleIds: [], submittedOn: null, productType: null },
       decision: null,
       verdictId: null,
       fields: [],
@@ -356,6 +367,11 @@ export async function loadSubmissionDetail(
       policySetVersion: verdict.policy_set_version,
       selectedRuleIds: parseRuleIds(verdict.selected_rule_ids),
       submittedOn: verdict.submitted_on,
+      // What selection actually ran on (D26). Read back from the bound inputs
+      // rather than from a field verdict, because product type is not one of
+      // FIELDS and no field row carries it — the same reason replay has to
+      // read it from here.
+      productType: productTypeFrom(verdict.selection_inputs),
     },
     decision:
       decisionRow === null

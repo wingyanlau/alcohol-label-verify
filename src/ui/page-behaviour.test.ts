@@ -139,7 +139,14 @@ const corpusItems = (): Item[] => {
  * `running` and `resetAnswer` are the two things that decide every branch under
  * test, so they are the only knobs.
  */
-function boot(opts: { running?: boolean; items?: Item[]; resetStops?: number | null } = {}) {
+function boot(
+  opts: {
+    running?: boolean
+    items?: Item[]
+    resetStops?: number | null
+    samplesFail?: boolean
+  } = {},
+) {
   const items = opts.items ?? corpusItems()
   const running = opts.running ?? false
   const script = /<script>([\s\S]*?)<\/script>/.exec(PAGE_HTML)?.[1] ?? ''
@@ -207,6 +214,31 @@ function boot(opts: { running?: boolean; items?: Item[]; resetStops?: number | n
                 decidedAt: '2026-08-04T20:00:00.000Z',
               },
             },
+          }),
+      })
+    }
+    if (url.includes('/samples')) {
+      if (opts.samplesFail) return Promise.resolve({ ok: false, json: () => Promise.resolve({}) })
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            samples: [
+              {
+                id: 'L01',
+                title: 'Fully compliant',
+                expected: 'CLEAR',
+                shows: 'Everything agrees.',
+                url: '/samples/L01',
+              },
+              {
+                id: 'L04',
+                title: 'Alcohol content genuinely differs',
+                expected: 'DISCREPANCIES_FOUND',
+                shows: 'The record says 45% and the label says 40%.',
+                url: '/samples/L04',
+              },
+            ],
           }),
       })
     }
@@ -339,53 +371,29 @@ describe('the worklist lists what the coordinator sent', () => {
 
 describe('clearing the single-review form', () => {
   /*
-   * An agent checks one label, then the next. Without this the only ways to
-   * start again were to edit five fields by hand or reload the page, and the
-   * field most likely to be missed is product type — the one that decides
-   * which regulations the next label is judged against.
+   * An agent checks one submission, then the next. The form used to hold five
+   * typed fields and the artwork; it now holds one PDF, and the thing that must
+   * not survive a clear is that PDF — a file left attached under a screen that
+   * looks empty is the one state that would put the same submission through a
+   * second review under a new reference.
    */
-  const filled = (byId: Record<string, El>) => {
-    for (const id of ['brandName', 'classType', 'alcoholContent', 'netContents', 'productType']) {
-      const field = byId[id]
-      if (field) field.value = 'something'
-    }
+  const attachedAndAnswered = (byId: Record<string, El>) => {
+    // The state an attached file leaves the panel in, so the assertion is about
+    // the flip rather than about where it already was.
+    byId.picked?.classList.remove('hidden')
+    byId.drop?.classList.add('hidden')
     const result = byId.singleResult
     if (result) result.textContent = 'a previous verdict'
   }
 
-  it('empties every application field', async () => {
+  it('removes the attached submission', async () => {
     const { byId, settle } = boot()
     await settle()
-    filled(byId)
-    byId.clearBtn?.click()
-    for (const id of ['brandName', 'classType', 'alcoholContent', 'netContents']) {
-      expect(byId[id]?.value, id).toBe('')
-    }
-  })
-
-  it('clears the product type rather than carrying it into the next label', async () => {
-    // The one field that would otherwise persist unnoticed, and the one that
-    // selects the rule set (D25).
-    const { byId, settle } = boot()
-    await settle()
-    filled(byId)
-    byId.clearBtn?.click()
-    expect(byId.productType?.value).toBe('')
-  })
-
-  it('removes the attached artwork', async () => {
-    const { byId, settle } = boot()
-    await settle()
-    filled(byId)
-    // Put the panel into the state an attached file leaves it in, so the
-    // assertion is about the flip rather than about where it already was.
-    byId.picked?.classList.remove('hidden')
-    byId.drop?.classList.add('hidden')
+    attachedAndAnswered(byId)
     expect(byId.picked?.classList.contains('hidden')).toBe(false)
 
     byId.clearBtn?.click()
 
-    // The thumbnail is gone and the picker is back.
     expect(byId.picked?.classList.contains('hidden')).toBe(true)
     expect(byId.drop?.classList.contains('hidden')).toBe(false)
     expect(byId.file?.value).toBe('')
@@ -394,7 +402,7 @@ describe('clearing the single-review form', () => {
   it('takes the previous verdict off the screen', async () => {
     const { byId, settle } = boot()
     await settle()
-    filled(byId)
+    attachedAndAnswered(byId)
     byId.clearBtn?.click()
     expect(byId.singleResult?.textContent).toBe('')
   })
@@ -597,5 +605,39 @@ describe('the worklist an agent works through', () => {
     // Only one row was decided in the stub; the mark must not spread.
     const marks = (byId.worklist?.words() ?? '').match(/Approved by/g) ?? []
     expect(marks).toHaveLength(1)
+  })
+})
+
+describe('the sample submissions on the review screen', () => {
+  /*
+   * They exist so somebody with no TTB filing to hand can still use the screen
+   * — a reviewer looking at the deployment. Without them the single-review path
+   * is a file picker that refuses every file the visitor owns.
+   */
+  it('offers each sample as a download', async () => {
+    const { byId, settle } = boot()
+    await settle()
+    expect(byId.sampleList?.count('a')).toBe(2)
+  })
+
+  it('says what each one will show, not just its name', async () => {
+    const { byId, settle } = boot()
+    await settle()
+    const text = byId.sampleList?.words() ?? ''
+    expect(text).toContain('Fully compliant')
+    expect(text).toContain('The record says 45% and the label says 40%.')
+  })
+
+  it('leaves the screen usable when samples cannot be loaded', async () => {
+    // A convenience, and its absence is not the agent's problem. An error over
+    // a form that works perfectly well would report a problem they do not have.
+    const { byId, settle } = boot({ samplesFail: true })
+    await settle()
+    expect(byId.sampleList?.count('a')).toBe(0)
+    expect(byId.checkBtn?.disabled).toBe(false)
+    // No message written anywhere: the agent is never told about a failure
+    // that costs them nothing.
+    expect(byId.fileErr?.textContent).toBe('')
+    expect(byId.sampleList?.words()).toBe('')
   })
 })

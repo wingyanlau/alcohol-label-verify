@@ -708,6 +708,51 @@ manufactured value from being indistinguishable from an observed one.
 **Batch contract:** accepts a set of items; emits results progressively as each
 resolves, rather than one response at completion (FR-13, NFR-2).
 
+#### 8.3.3 Item 5 — the one thing read as a classification (D48)
+
+Every other value the extractor produces is a **transcription**: the words as
+printed, whatever they turn out to be. Product type is not. It is a choice among
+the three boxes the form itself offers — WINE, DISTILLED SPIRITS, MALT
+BEVERAGES — and that is the only reason a model may be asked for it at all: the
+answer comes from a closed set, so anything outside that set is a bad read
+rather than an unusual product.
+
+**It is asked of the record region and never of the label.** No label states
+"Distilled spirits". Asking the artwork would invite the model to infer the
+governing body of regulation from the design of the bottle, which is D25's
+*never from the model* in its worst form.
+
+**It fails closed at every step.**
+
+| What the record shows | Result |
+|---|---|
+| Exactly one of the three, recognised | That type |
+| None stated | No product type |
+| Two or more stated | No product type — a contradictory form is not a majority vote |
+| Stated but not one of the three | No product type — never the nearest match |
+| Illegible | No product type |
+| The field absent from the response | No product type, and the reading is still used |
+
+A missing product type is not a failure of the item. The four compared fields
+were read; throwing that away over a checkbox would turn a usable verdict into a
+dependency failure. The submission is checked, no rule is selected, and the
+result says plainly that nothing was checked against any regulation.
+
+**Why this asymmetry is deliberate.** A wrong product type is the most dangerous
+single misread in the system. It selects which regulations apply, so reading
+`Wine` on a spirits filing applies the wrong body of law and produces findings
+that are individually well-formed, plausible, and wrong — with nothing anywhere
+in the output to reveal it. `Beer` is very nearly `Malt beverages`, and the
+difference between them is a regulation. Null costs a reviewer one sentence; a
+guess costs them the truth.
+
+**What the screen must therefore show.** The product type selection ran on,
+beside the findings — because *no rule applied* and *no rule could be selected*
+are different facts that look identical without it, and only one of them is a
+pass. It is carried on the verdict's bound selection inputs (D26), which is
+what makes it recoverable at replay and on the results panel years later.
+
+
 ### 8.4 Verification Logic
 
 #### 8.4.1 Field verdict states
@@ -2041,6 +2086,7 @@ plainly in the README, which is the correct handling of a known limitation.
 | D45 | `config/policy-set.json` stays the **reviewed source** and seeds the D1 rows; the rows are derived, append-only, and never hand-authored (§18.8.3) | Rows as the only archive (D43 as first written); or the file as the only archive | The two answer different questions — the file *what do we intend the rules to be*, the rows *what did we actually apply and between when*. Rows alone lose review by pull request, which is the one place a wrong rule is caught before it is enforced against every submission; a file alone has no auditable history. Seeding becomes the transaction that emits the policy events, and it is idempotent, so the deploy records the change rather than being the change | Easy — it is the reconciler that carries the cost, and it is derived |
 | D46 | **Who or what acted is one concept — an agent — with a kind (`human` / `model` / `system`) and a fully qualified identity** (§19) | Leaving `actor`, `extractedBy`, `model_id` and `decided_by` as four unrelated fields | They are four representations of one idea that cannot be joined, so the record can say a model read a label and a person approved it and still not answer *what has this agent done*. The reason to build it is not headcount: it turns the governing principle — the model reads, the human decides — from prose enforced in one place into an invariant assertable over the whole record, continuously and against production data. `system` is a third kind rather than a tidy-up: `job.opened` is the system executing, not anyone deciding, and folding it into either other kind attributes work to a party that did not do it | Moderate — `audit_event` is append-only, so a rebuild in the shape of 0005 |
 | D47 | **The workforce metric is deliberately deferred** (§19.6). Agreement *by agent kind* is safe to build; per-person measurement is not | Building attribution and volume metrics alongside the agent concept | Three reasons that survive the schema change. Throughput is not effectiveness — the measure that means anything is agreement, which the record already holds. The costs of disagreement are asymmetric (a false pass admits a non-compliant label; a false flag costs five minutes), and a metric averaging them would recommend moving precisely the wrong work to the model, with a confident-looking number. And measuring named employees is a labour-relations question before a technical one — `ui-design.md` §2.3 records a likely formal notification obligation, and building it first presents the agency a fait accompli instead of a decision | Easy to revisit — the data would exist; only the measure is withheld |
+| D48 | **Item 5, type of product, is read from the application record** — a closed classification against the three boxes the form offers, failing closed to *no product type* on anything else (§8.3.3). The single-review screen takes the filed PDF and no typed fields | Keeping the typed dropdown, and leaving a record read from an image with no product type at all | Product type selects the body of regulation. Typed, it was a value that could be mistyped into a discrepancy nobody could explain — and on the image path it was absent entirely, so every submission read from a PDF applied *no rule* and reported that nothing could be checked. Reading it removes a transcription step that was never part of the job. It fails closed because a wrong product type is the most dangerous single misread here: the findings that follow all look perfectly ordinary against the wrong rules, and nothing in the output reveals it. `Beer` does not become `Malt beverages` | Moderate — a prompt change, a parse rule, one screen rebuilt |
 
 ---
 

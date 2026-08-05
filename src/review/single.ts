@@ -2,16 +2,21 @@
  * Single review — one label, checked now (UC-1, ui-design §4).
  *
  * The interactive path the design specified first and the batch path
- * overtook. An agent types what the application says, attaches the artwork,
- * and gets a verdict in a few seconds.
+ * overtook. An agent uploads the filed TTB F 5100.31 and gets a verdict in a
+ * few seconds — the same input the batch takes, one submission at a time.
+ *
+ * It used to ask them to type the five application values beside the artwork.
+ * They were copying those off the form in their hand, and each one was a value
+ * that could be mistyped into a discrepancy nobody could explain (D48).
  *
  * ---------------------------------------------------------------------------
  * WHAT IT SHARES, AND WHY THAT IS THE POINT
  *
  * It shares everything that decides anything: the same `verifySubmission`, the
- * same comparison rules, the same warning reference, the same provider seam.
- * The only difference is where the pixels come from — an uploaded image rather
- * than a region cropped out of a rasterised PDF.
+ * same comparison rules, the same warning reference, the same provider seam —
+ * and now the same rasteriser and region map as well, because both paths call
+ * `rasteriseSubmission`. The pixels are cropped out of the filed PDF the same
+ * way here as in a batch of three hundred.
  *
  * A second verification path would be a second place for the rules to live,
  * and the two would diverge quietly: someone would fix a comparison in one and
@@ -19,10 +24,11 @@
  * next. So this module does intake, orchestration and shaping — and no
  * judgement whatsoever.
  *
- * D4 still holds. The application data goes to the comparison, never to the
- * extractor: `verifySubmission` is handed `{ applicationData }` for the record
- * region, which means no model call is made with it and there is nothing for a
- * reading to anchor to.
+ * D4 still holds, and holds harder. Nothing shows either read what the other
+ * found: the record region and the label region are extracted separately and
+ * concurrently, no expected value exists until both have answered, and an
+ * `ExtractionRequest` has nowhere to put one. Where the agent types the record
+ * instead, that data goes to the comparison and never to a model call at all.
  */
 
 import { OUTCOME_HEADLINE, OUTCOME_RECOMMENDATION } from '../domain/aggregate.js'
@@ -36,12 +42,34 @@ import type { VerifyResult } from '../domain/verify.js'
 import { verifySubmission } from '../domain/verify.js'
 import { ruleSetAsAt } from '../policy/archive.js'
 
-/** What the agent typed, before anything has been checked. */
-export interface ReviewRequest {
-  readonly application: ApplicationData
-  readonly image: ArrayBuffer
-  readonly mimeType: string
-}
+/**
+ * One submission to check, in either of the two forms an agent can supply.
+ *
+ * `submission` is the ordinary path and the same input the batch takes: the
+ * filed TTB F 5100.31, rasterised into a label region and a record region,
+ * both read blind. Nothing is typed, so nothing can be mistyped, and the
+ * comparison is between two readings of the filing rather than between a
+ * reading and a transcription.
+ *
+ * `typed` remains for a label with no filed form to hand. It is the same
+ * verification with the record half supplied as data instead of pixels — which
+ * is exactly what the batch does for a corpus item that declares its record.
+ */
+export type ReviewRequest =
+  | {
+      readonly kind?: 'typed'
+      readonly application: ApplicationData
+      readonly image: ArrayBuffer
+      readonly mimeType: string
+    }
+  | {
+      readonly kind: 'submission'
+      /** The label region, as rasterised. Pixels, never a text layer (rule 5). */
+      readonly image: ArrayBuffer
+      readonly mimeType: string
+      /** The record region, read blind — including item 5 (D25). */
+      readonly record: { readonly image: ArrayBuffer; readonly mimeType: string }
+    }
 
 /**
  * Refused before any model is called.
@@ -123,6 +151,8 @@ export interface ReviewResult {
     readonly policySetVersion: number
     readonly selectedRuleIds: readonly string[]
     readonly submittedOn: string
+    /** What selection ran on — item 5, read from the record or typed (D25). */
+    readonly productType: string | null
   }
   readonly warning: {
     readonly evaluated: boolean
@@ -184,7 +214,14 @@ export async function reviewOne(
   const result = await verifySubmission(
     {
       label: { image: request.image, mimeType: request.mimeType },
-      record: { applicationData: request.application },
+      // The record half. Read from pixels when the form was filed as a PDF,
+      // taken as data when the agent typed it — the same seam the batch path
+      // uses for a corpus item that declares its record, so neither branch is
+      // a second way of verifying anything.
+      record:
+        request.kind === 'submission'
+          ? { image: request.record.image, mimeType: request.record.mimeType }
+          : { applicationData: request.application },
     },
     // The clock comes from the edge; the domain reads none (M1). The filing
     // date is today's because this path IS the filing — an agent is checking a
@@ -244,6 +281,10 @@ export async function reviewOne(
       policySetVersion: result.policy.policySetVersion,
       selectedRuleIds: result.policy.selectedRuleIds,
       submittedOn: result.policy.submittedOn,
+      // Item 5, as read or as typed. On screen because "no rule applied" and
+      // "no rule could be selected" look identical without it, and one of them
+      // means the label was never examined against any regulation at all.
+      productType: result.application.productType ?? null,
     },
     warning: {
       evaluated: true,

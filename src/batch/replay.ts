@@ -66,6 +66,7 @@ export function createReplayProvider(recorded: readonly RecordedExtraction[]): E
         extraction: parseExtractionResponse(extractJson(row.rawResponse), {
           fields: request.fields,
           includeWarning: request.includeWarning,
+          includeProductType: request.includeProductType === true,
         }),
         rawResponse: row.rawResponse,
         provenance: {

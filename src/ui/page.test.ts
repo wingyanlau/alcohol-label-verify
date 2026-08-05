@@ -11,26 +11,37 @@ import { describe, expect, it } from 'vitest'
 import { GOVERNED_PRODUCT_TYPES } from '../domain/findings.js'
 import { PAGE_HTML } from './page.js'
 
-describe('the product type field (D25)', () => {
-  it('offers exactly the types the policy set governs', () => {
-    // Product type decides which rules are applied. A form missing a type the
-    // archive governs means those rules never fire — and nothing anywhere
-    // reports that they did not.
-    expect(GOVERNED_PRODUCT_TYPES.length).toBeGreaterThan(0)
+describe('the product type, now read rather than declared (D25)', () => {
+  /*
+   * The screen used to ask an agent to pick the product type from a dropdown.
+   * It is item 5 of the form they were holding, so the form is read instead —
+   * and the dropdown had to go with it, because the two would be a question
+   * whose answer the system already had, with no way to tell which one selected
+   * the rules.
+   */
+  it('does not ask a person to declare it', () => {
+    expect(PAGE_HTML).not.toContain('<select id="productType"')
     for (const type of GOVERNED_PRODUCT_TYPES) {
-      expect(PAGE_HTML, type).toContain(`<option value="${type}">${type}</option>`)
+      expect(PAGE_HTML, type).not.toContain(`<option value="${type}">`)
     }
   })
 
-  it('lets an agent leave it unstated rather than guess', () => {
-    // Guessing a product type would select a body of regulation the applicant
-    // never claimed. "Not stated" is honest, and the verdict then says nothing
-    // could be checked.
-    expect(PAGE_HTML).toContain('<option value="">Not stated</option>')
+  it('reports what selected the rules, on the result', () => {
+    // Named on screen because "no rules applied" and "no rule could be
+    // selected" look identical without it — and the second means the label was
+    // never examined against any regulation at all.
+    expect(PAGE_HTML).toContain('read from item 5 of the application')
   })
 
-  it('submits it with the rest of the application', () => {
-    expect(PAGE_HTML).toContain("form.append('productType'")
+  it('says plainly when nothing could be selected', () => {
+    expect(PAGE_HTML).toContain('No product type could be read from item 5')
+    expect(PAGE_HTML).toContain('has been checked against any regulation')
+  })
+
+  it('sends the filed PDF, not typed fields', () => {
+    expect(PAGE_HTML).toContain("form.append('submission'")
+    expect(PAGE_HTML).not.toContain("form.append('productType'")
+    expect(PAGE_HTML).not.toContain("form.append('brandName'")
   })
 })
 

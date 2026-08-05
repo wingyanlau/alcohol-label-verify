@@ -115,40 +115,35 @@ Everything needed for one review fits on one screen at legible size.
 
 ### 4.1 Regions
 
+> **Revised.** This screen used to hold two panels: five typed application
+> fields beside a label upload. It now takes one file — the filed
+> TTB F 5100.31 as a PDF, the same input the batch takes. The panels below the
+> diagram record what changed and why.
+
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│  A  TTB Label Check                                 Single │ Batch     │
+│  A  TTB Label Check                          Single │ Batch │ Policy   │
 ├────────────────────────────────────────────────────────────────────────┤
 │                                                                        │
-│  ┌── B ──────────────────────────┐  ┌── C ──────────────────────────┐  │
-│  │  1. The application says       │  │  2. The label                 │  │
-│  │                                │  │                               │  │
-│  │  Brand name  (required)        │  │   ┌─────────────────────────┐ │  │
-│  │  ┌──────────────────────────┐  │  │   │                         │ │  │
-│  │  │                          │  │  │   │  Drop the label image   │ │  │
-│  │  └──────────────────────────┘  │  │   │        here             │ │  │
-│  │                                │  │   │                         │ │  │
-│  │  Class / type                  │  │   │  ┌──────────────────┐   │ │  │
-│  │  ┌──────────────────────────┐  │  │   │  │  Choose a file   │   │ │  │
-│  │  │                          │  │  │   │  └──────────────────┘   │ │  │
-│  │  └──────────────────────────┘  │  │   │                         │ │  │
-│  │  e.g. Kentucky Straight…       │  │   │  JPEG or PNG, up to 10MB│ │  │
-│  │                                │  │   └─────────────────────────┘ │  │
-│  │  Alcohol content               │  │                               │  │
-│  │  ┌────────────────────┐        │  │                               │  │
-│  │  │               │ %  │        │  │                               │  │
-│  │  └────────────────────┘        │  │                               │  │
-│  │                                │  │                               │  │
-│  │  Net contents                  │  │                               │  │
-│  │  ┌──────────────────────────┐  │  │                               │  │
-│  │  │                          │  │  │                               │  │
-│  │  └──────────────────────────┘  │  │                               │  │
-│  │  e.g. 750 mL                   │  │                               │  │
-│  └───────────────────────────────┘  └───────────────────────────────┘  │
+│  ┌── B ───────────────────────────────────────────────────────────┐    │
+│  │  The filed application                                          │    │
+│  │                                                                 │    │
+│  │  The completed TTB F 5100.31 as a PDF — the label artwork and    │    │
+│  │  the application record, exactly as filed. Both pages are read   │    │
+│  │  separately: neither reading is shown the other.                 │    │
+│  │                                                                 │    │
+│  │   ┌───────────────────────────────────────────────────────┐     │    │
+│  │   │        Drop the filed application here                │     │    │
+│  │   │             ┌──────────────────┐                      │     │    │
+│  │   │             │  Choose a file   │                      │     │    │
+│  │   │             └──────────────────┘                      │     │    │
+│  │   │             PDF, up to 10 MB                          │     │    │
+│  │   └───────────────────────────────────────────────────────┘     │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
 │                                                                        │
-│           ┌── D ──────────────────────────────────────┐                │
-│           │            Check this label                │                │
-│           └───────────────────────────────────────────┘                │
+│   ┌── C ────────────────────────┐  ┌── D ──────────────┐               │
+│   │   Check this submission     │  │  Clear this form  │               │
+│   └─────────────────────────────┘  └───────────────────┘               │
 │                                                                        │
 └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -156,99 +151,120 @@ Everything needed for one review fits on one screen at legible size.
 | Region | Contains | Notes |
 |---|---|---|
 | A | Product name, mode switch | No other chrome. No logo lockup, no user menu |
-| B | Application data form | Numbered "1." — names the agent's actual task order |
-| C | Label upload | Numbered "2." |
-| D | Primary action | Always visible without scrolling at 1280×800 and above |
+| B | The filed submission | One upload. No typed fields |
+| C | Primary action | Always visible without scrolling at 1280×800 and above |
+| D | Clear | Secondary, and deliberately smaller |
 
-**Why two numbered panels.** "1. The application says" / "2. The label" describes
-the comparison the agent is performing, in the layout itself. Numbering
-establishes order without imposing steps.
+**Why the typed panel is gone.** The agent was copying five values off the form
+in front of them into five boxes. That is a transcription step, and it was never
+part of the job — the filed PDF already states every one of them. Each typed
+value was also a value that could be mistyped, and a mistyped expectation
+produces a discrepancy against a compliant label with nothing on screen able to
+explain it. The system now reads what was filed.
 
-### 4.2 Application data fields
+**And it makes the two paths one path.** A submission checked alone and the same
+submission checked inside a batch of three hundred now go through the same
+intake guards, the same rasteriser, the same region map and the same two blind
+reads — because they call the same function (`rasteriseSubmission`), not because
+two functions happen to agree today.
 
-| Field | Input | Required | Hint |
-|---|---|---|---|
-| Product type | Select, defaulting to *Not stated* | No | `Decides which rules apply. Without it, none can be checked.` |
-| Brand name | Single-line text | **Yes** | — |
-| Class / type | Single-line text | No | `e.g. Kentucky Straight Bourbon Whiskey` |
-| Alcohol content | Text with a `%` suffix adornment | No | — |
-| Net contents | Single-line text | No | `e.g. 750 mL` |
+### 4.2 What is read, and from where
 
-**Product type comes first, and it is not a field compared against the label.**
-It is item 5 on TTB F 5100.31 and the input rule selection runs on (D25) — no
-label states "Distilled spirits", so comparing it would flag every compliant
-one. Its options are generated from the policy set rather than typed into the
-markup: a hand-kept list drifts in the silent direction, where a newly governed
-type is missing from the form, nobody selects it, and its rules never fire.
+| Region of the PDF | Read for | Never read for |
+|---|---|---|
+| Label artwork (page 1, affix box) | Brand name, class/type, alcohol content, net contents, the health warning | Product type |
+| Application record | The same four fields, and **item 5, type of product** | The health warning |
 
-**A select, not a text field, and it may be left unstated.** Free text would
-let a typo select nothing while looking answered. Leaving it unstated is
-honest, and the result then says plainly that no rule could be applied — it
-does not quietly report a pass.
+**Two reads, and neither is shown the other** (D4, CT-10). No expected value
+exists until both have answered, so there is nothing for either reading to
+anchor to. This is the property that makes a *match* mean something: a model
+shown what it is meant to find tends to find it, and every such error is a
+non-compliant label passing review.
 
-**Labels sit above inputs, never inside them.** Placeholder-as-label disappears on
-focus. It is a documented accessibility failure and precisely the thing that
-strands a hesitant user mid-form.
+**Item 5 is asked of the record and never of the label** (D25). No label states
+"Distilled spirits". Asking the artwork would let the bottle choose the body of
+regulation it is judged by.
 
-**Alcohol content is a text field, not `<input type="number">`.** Number inputs
-reject a pasted `45% Alc./Vol.`, add spinner controls nobody wants, and behave
-inconsistently with locale decimal separators. The `%` is a visual suffix inside
-the field's border, not part of the value. The parser accepts `45`, `45%`,
-`45.0`, or a pasted fragment.
+**Product type is classified, not transcribed.** Three known options — the
+boxes the form itself offers — and the read fails closed at every step: exactly
+one stated and recognised, or nothing. None, several, illegible, or a word not
+on the form all produce *no product type*, and the result then says plainly that
+nothing could be checked. The nearest match is never taken; "Beer" does not
+become "Malt beverages", because the difference between them is a body of
+regulation and a wrong one produces findings that all look perfectly ordinary.
 
-**Only brand name is required.** Everything else absent is a legitimate outcome —
-`NOT_SUPPLIED` is a first-class verdict state (§8.4.1), not a validation failure.
-Requiring more would force agents to invent values, and an invented value produces
-a false discrepancy.
-
-> **Noted, not scoped.** The warning-statement check needs no application data at
-> all. A "check the warning only" mode would be useful and nearly free. §9.2 of
-> the design document currently requires brand name, so this stays out.
-
-### 4.3 Label upload
+### 4.3 The upload
 
 | State | Presentation |
 |---|---|
-| Empty | Dashed region, instruction text, **and** a `Choose a file` button. Accepted formats and size limit stated at rest |
+| Empty | Dashed region, instruction text, **and** a `Choose a file` button. Accepted format and size limit stated at rest |
 | Dragging over | Region highlights; border becomes solid |
-| Selected | Thumbnail preview, filename, file size, `Replace` and `Remove` |
+| Selected | Filename, file size, `Replace` and `Remove` |
 | Rejected | Returns to empty with the reason stated beneath (§10) |
 
-**Drag-and-drop is always paired with a file-picker button.** Drag-and-drop alone
-is unusable for several groups and unfamiliar to part of this audience. The button
-is not a fallback; it is the primary affordance, with the drop zone as a
-convenience.
+**Drag-and-drop is always paired with a file-picker button.** Drag-and-drop
+alone is unusable for several groups and unfamiliar to part of this audience.
+The button is not a fallback; it is the primary affordance, with the drop zone
+as a convenience.
 
-**A thumbnail appears before submission.** The agent must be able to confirm the
-right file is attached without submitting — the most common upload error is the
-wrong file, and discovering that after a five-second wait is a wasted review.
+**Filename and size before submission, and no thumbnail.** The agent must be
+able to confirm the right file is attached without submitting — the most common
+upload error is the wrong file. The thumbnail went with the image upload: a PDF
+does not render in an `img`, and its first page is the form rather than the
+label.
 
 **Constraints are stated before they are violated** (P6). Format and size are
 visible at rest, not revealed by an error.
 
+**Beneath the upload: sample submissions.** *No filing to hand?* — a short list
+of real corpus documents to download and upload. Without them the single-review
+path is a file picker that refuses every file its visitor owns, which is the
+state anyone evaluating the deployment arrives in.
+
+- They are **the corpus files**, not mock-ups: the same documents the batch runs
+  on, each with authored ground truth for what it should produce
+  (`testdata/README.md`). A fabricated sample would demonstrate the interface
+  rather than the system
+- Their titles and expected outcomes are read from the corpus manifest, never
+  restated on the screen. A second copy of ground truth drifts, and the screen
+  is the one that would look authoritative when it did
+- Six, spanning a clean pass, a genuine discrepancy, a tolerance that must *not*
+  fire, an unreadable field, and the adversarial case. A demonstration made only
+  of passes says nothing about judgement; one made only of failures reads as a
+  broken system
+- Each line says what the reader will see happen, in those words — not which
+  test case it serves
+- **Their absence is silent.** Samples are a convenience, and an error banner
+  over a form that works perfectly well reports a problem the agent does not
+  have
+
+**A PDF this system cannot crop is refused as a form problem, not a service
+problem.** "Please try again in a moment" is wrong advice for a file that will
+be rejected identically every time; it sends the agent back to a dependency
+instead of to the file they uploaded.
+
 ### 4.4 Primary action
 
-- Label: **Check this label**
+- Label: **Check this submission**
 - The largest interactive element on the screen
 - **Never disabled**
 - Full-width on narrow viewports; centred and generously sized otherwise
 
-**The button is never disabled**, even with an empty form. A disabled button is
-unfocusable, announces nothing to assistive technology, and gives a hesitant user
-no explanation for why clicking does nothing. Pressing it with an incomplete form
-runs validation and moves focus to the problem, which *tells the agent what to
-do*. That is both the accessible pattern and the kinder one.
+**The button is never disabled**, even with nothing attached. A disabled button
+is unfocusable, announces nothing to assistive technology, and gives a hesitant
+user no explanation for why clicking does nothing. Pressing it with nothing
+attached runs validation and moves focus to the problem, which *tells the agent
+what to do*. That is both the accessible pattern and the kinder one.
 
 **Beside it: Clear this form** — secondary styling, and smaller. UC-1 is a
-repeated act: an agent checks one label, then the next. Without this the only
-ways to start again were to edit five fields by hand or reload the page.
+repeated act: an agent checks one submission, then the next.
 
-- It empties all five application fields, removes the attached artwork, clears
-  any field errors, and takes the previous verdict off the screen
-- **Product type is cleared with the rest.** It is the one field that would
-  otherwise carry over unnoticed, and it is the field that decides which
-  regulations the next label is judged against (D25)
-- Focus returns to the top of the form, so the next entry starts where the eye
+- It removes the attached PDF, clears any error, and takes the previous verdict
+  off the screen
+- **The attached file goes with it.** A PDF left attached under a screen that
+  looks empty is the one state that would put the same submission through a
+  second review under a new reference
+- Focus returns to the picker, so the next submission starts where the eye
   already is
 - **It asks no confirmation, because nothing is lost.** Every review is
   persisted with its own reference code the moment it completes (M4), so this
@@ -256,11 +272,11 @@ ways to start again were to edit five fields by hand or reload the page.
   previous result looks it up by reference (§11)
 - It is present from the start rather than appearing once a result exists: a
   control that materialises only when you are finished is one nobody knows
-  about while they are typing into the wrong form
+  about while they are working
 
 It is deliberately *not* the same size as the primary action. Matching it would
-present "start again" as an equal choice to "check this label", which is not
-what an agent came to the screen to do.
+present "start again" as an equal choice to "check this submission", which is
+not what an agent came to the screen to do.
 
 ### 4.5 Validation
 
@@ -270,7 +286,7 @@ Validating as a user leaves a field punishes slow and uncertain typists — it f
 an incomplete entry as an error before they have finished thinking. For this
 audience that is actively hostile.
 
-On submit, if brand name is empty or no image is attached:
+On submit, if no file is attached:
 
 1. Focus moves to the first problem
 2. An inline message appears beneath that control
@@ -287,7 +303,7 @@ user starts clicking again.
 
 ```
               ┌──────────────────────────────────────┐
-              │   Reading the label…                 │
+              │   Reading the submission…                 │
               │   ▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░         │
               └──────────────────────────────────────┘
 
@@ -297,7 +313,7 @@ user starts clicking again.
 | Rule | Reason |
 |---|---|
 | The button is **replaced**, not disabled | A greyed button invites a second click; a progress element does not |
-| Copy is plain: *"Reading the label…"* | Never *"Invoking extraction"* (P7) |
+| Copy is plain: *"Reading the submission…"* | Never *"Invoking extraction"* (P7) |
 | Form inputs become read-only, not hidden | The agent can still see what they submitted |
 | After ~8s: *"Still working — this is taking longer than usual."* | Honest, and prevents the assumption of a hang |
 | Progress is indeterminate, not a countdown | A countdown that overruns is worse than none |
@@ -359,7 +375,7 @@ afterthought.*
 | Panel 1 heading | 1. The application says |
 | Panel 2 heading | 2. The label |
 | Field labels | Product type · Brand name · Class / type · Alcohol content · Net contents |
-| Buttons | Check this label · Clear this form |
+| Buttons | Check this submission · Clear this form |
 | Required marker | (required) — on brand name only |
 | Class hint | e.g. Kentucky Straight Bourbon Whiskey |
 | Net contents hint | e.g. 750 mL |
@@ -367,8 +383,8 @@ afterthought.*
 | File button | Choose a file |
 | Constraint line | JPEG or PNG, up to 10 MB |
 | Selected file actions | Replace · Remove |
-| Primary action | Check this label |
-| Working | Reading the label… |
+| Primary action | Check this submission |
+| Working | Reading the submission… |
 | Working, sub | This usually takes a few seconds. |
 | Working, extended | Still working — this is taking longer than usual. |
 | Missing brand name | Please enter the brand name from the application. |

@@ -86,6 +86,7 @@ function stubProvider(byRegion: { label: unknown; record: unknown }) {
         extraction: parseExtractionResponse(body, {
           fields: request.fields,
           includeWarning: request.includeWarning,
+          includeProductType: request.includeProductType === true,
         }),
         rawResponse: JSON.stringify(body),
         provenance: {
@@ -145,23 +146,80 @@ describe('the pipeline produces a verdict', () => {
   })
 
   /*
-   * A limitation, asserted rather than described.
+   * Item 5 read from the record, and the fail-closed cases around it.
    *
-   * Every rule in the set is conditioned on product type, and product type is
-   * item 5 on the form — not one of `FIELDS`, so a record read from an image
-   * does not carry it. That path therefore applies no regulation at all, and
-   * the honest report is that nothing was checked, not that nothing was wrong.
+   * This replaces a test that pinned the opposite limitation — that a record
+   * read from an image carried no product type, so no regulation applied. The
+   * extractor is now taught to read item 5, which was the condition that test
+   * named for changing it.
    *
-   * The batch path is unaffected: it supplies application data structurally,
-   * product type included. If the extractor is ever taught to read item 5,
-   * this test is the one that should change.
+   * What has NOT changed is what happens when the read is not a single
+   * unambiguous tick. Product type selects the body of regulation, so a wrong
+   * one produces findings that all look perfectly ordinary against the wrong
+   * rules. Every uncertain case below lands on "nothing was checked".
    */
-  it('says nothing was checked when the record was read from an image', async () => {
-    const { provider } = stubProvider({ label: labelReading(), record: recordReading })
+  it('reads item 5 from the record and applies the rules it selects', async () => {
+    const { provider } = stubProvider({
+      label: labelReading(),
+      record: { ...recordReading, productType: 'DISTILLED SPIRITS' },
+    })
     const r = await verifySubmission(images, { provider, now: clock(), submittedOn: FILED })
+    expect(r.application.productType).toBe('Distilled spirits')
+    expect(r.policy.selectedRuleIds).toContain('DS-BRAND-NAME-PRESENT')
+    expect(r.outcome).toBe('CLEAR')
+  })
+
+  it('asks the record for item 5 and never asks the label (D25)', async () => {
+    // Structural, not behavioural. No label states "Distilled spirits", so
+    // asking there would invite the model to infer the governing regulation
+    // from the artwork — the bottle choosing the law it is judged by.
+    const { provider, seen } = stubProvider({
+      label: labelReading(),
+      record: { ...recordReading, productType: 'Distilled spirits' },
+    })
+    await verifySubmission(images, { provider, now: clock(), submittedOn: FILED })
+    const asked = Object.fromEntries(seen.map((r) => [r.region, r.includeProductType === true]))
+    expect(asked).toEqual({ label: false, record: true })
+  })
+
+  it('says nothing was checked when no single box was ticked', async () => {
+    const { provider } = stubProvider({
+      label: labelReading(),
+      record: { ...recordReading, productType: null },
+    })
+    const r = await verifySubmission(images, { provider, now: clock(), submittedOn: FILED })
+    expect(r.application.productType).toBeNull()
     expect(r.outcome).toBe('CLEAR_CONFIRM_POLICY')
     expect(r.policy.selectedRuleIds).toEqual([])
     expect(r.findings.map((f) => f.ruleId)).toEqual(['POLICY-SELECTION'])
+  })
+
+  it('does not fall back to the nearest product type', async () => {
+    // "Beer" is very nearly "Malt beverages". Applying the malt rules to a
+    // filing that did not say so would be a whole regulation chosen by a
+    // near-miss, and the findings would give no sign of it.
+    const { provider } = stubProvider({
+      label: labelReading(),
+      record: { ...recordReading, productType: 'Beer' },
+    })
+    const r = await verifySubmission(images, { provider, now: clock(), submittedOn: FILED })
+    expect(r.application.productType).toBeNull()
+    expect(r.policy.selectedRuleIds).toEqual([])
+  })
+
+  it('a different type selects a different body of rules', async () => {
+    // The point of reading item 5 at all, stated as a contrast. The same label
+    // artwork, declared as wine, is judged by the wine rules in force — and by
+    // none of the distilled-spirits ones. That substitution is invisible in the
+    // findings, which is why the read has to fail closed rather than guess.
+    const { provider } = stubProvider({
+      label: labelReading(),
+      record: { ...recordReading, productType: 'Wine' },
+    })
+    const r = await verifySubmission(images, { provider, now: clock(), submittedOn: FILED })
+    expect(r.application.productType).toBe('Wine')
+    expect(r.policy.selectedRuleIds).toContain('WINE-STANDARD-OF-FILL')
+    expect(r.policy.selectedRuleIds.some((id) => id.startsWith('DS-'))).toBe(false)
   })
 
   it('a genuine mismatch is localised to the offending field', async () => {

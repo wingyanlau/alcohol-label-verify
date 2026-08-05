@@ -148,6 +148,18 @@ export type ApplicationData = Readonly<Record<FieldName, string | null>> & {
   readonly productType?: string | null
 }
 
+/**
+ * The three boxes at item 5 of TTB F 5100.31, spelled as this system spells them.
+ *
+ * A fact about the **form**, not about the rule set. `GOVERNED_PRODUCT_TYPES`
+ * (findings.ts) is the narrower list of types some active rule covers, and the
+ * two must not be conflated: a form may legitimately declare `Wine` while no
+ * wine rule has yet been approved. Reading it as `Wine` and then reporting that
+ * no rule governs it is correct; refusing to read it because no rule governs it
+ * would hide a filing the system cannot check.
+ */
+export const FORM_PRODUCT_TYPES: readonly string[] = ['Wine', 'Distilled spirits', 'Malt beverages']
+
 /** One field as read from the label by the extraction layer. */
 export interface ObservedField {
   /** Raw text exactly as it appears, or `null` if not found. */
@@ -169,4 +181,19 @@ export interface Extraction {
   readonly fields: Readonly<Record<FieldName, ObservedField>>
   /** The warning statement exactly as it appears, or `null` if not found. */
   readonly warningStatement: string | null
+  /**
+   * Item 5, TYPE OF PRODUCT, as read from the application record.
+   *
+   * Not a `FIELDS` member and never compared against the label: no label states
+   * "Distilled spirits". It is the **selection input** — which body of
+   * regulation governs this submission (D25) — and it is read from the record
+   * region only.
+   *
+   * `null` where it was not asked for, could not be read, or was not a single
+   * unambiguous choice. Null is load-bearing: selection then reports that
+   * nothing could be checked, rather than guessing a rule set. A wrong product
+   * type is the most dangerous single misread in this system, because every
+   * finding downstream would look perfectly ordinary.
+   */
+  readonly productType?: string | null
 }

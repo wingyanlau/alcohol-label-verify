@@ -109,9 +109,41 @@ pip install pypdf
 python3 generate.py
 ```
 
-Also needs Google Chrome for headless rendering. `f510031.pdf` is downloaded from
-ttb.gov on first run. The corpus is deterministic — the same script produces the
-same submissions, so it regenerates rather than living as opaque binaries.
+Also needs Google Chrome for headless rendering. The corpus is deterministic —
+the same script produces the same submissions, so it regenerates rather than
+living as opaque binaries.
+
+## The blank form (`f510031.pdf`)
+
+**Committed, not downloaded.** It used to be fetched from ttb.gov on first run
+and kept out of the repository as a build artefact. It is neither.
+
+| | |
+|---|---|
+| Document | TTB F 5100.31 (04/2023) — Application for and Certification/Exemption of Label/Bottle Approval |
+| OMB control number | 1513-0020 |
+| Retrieved from | <https://www.ttb.gov/system/files/images/pdfs/forms/f510031.pdf> |
+| SHA-256 | `4d59b3bfe287ce7f36e072d9e7c918e551856b3ae2e3b968d5617c521db5c0ba` |
+| Rights | A work of the United States federal government. Not subject to copyright |
+
+**Why it is in the repository.** Two things in this codebase are *derived from
+this exact file* and cannot be checked without it:
+
+- `src/normalise/regions.ts` — the crop coordinates are the form's own AcroForm
+  field rectangles, read off this document rather than measured by eye.
+- Every submission in `submissions/` — page 1 of each is this file's page 1 with
+  values merged onto it.
+
+A form the agency revises, moves or withdraws would take both with it, and the
+first sign would be a corpus that no longer regenerates or a crop that silently
+slid off the affix box. Pinning the bytes is cheap; re-deriving those
+coordinates from memory is not.
+
+**The digest identifies the file, not the revision.** Two downloads of the same
+04/2023 form can differ byte-for-byte — a copy re-saved by a browser carries a
+different producer and creation date while printing identically. The revision
+line at the foot of page 1 (`TTB F 5100.31 (04/2023)`) is what says which form
+this is; the digest says which copy.
 
 ## Notes
 

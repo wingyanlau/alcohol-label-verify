@@ -15,19 +15,14 @@
  * pixel of this page.
  */
 
-import { GOVERNED_PRODUCT_TYPES } from '../domain/findings.js'
-
-/**
- * The product type options, taken from the policy set rather than typed here.
+/*
+ * The product-type dropdown, and the list that fed it, are gone.
  *
- * Product type is the input rule selection runs on (D25), so a form offering a
- * type the archive does not govern — or omitting one it does — decides which
- * regulations get applied. That is too much for a hard-coded list to be
- * quietly responsible for.
+ * Product type is the input rule selection runs on (D25), and the form an agent
+ * was copying it from is the one they now upload. Asking for it as well would
+ * be a question whose answer the system already has, with nothing to say which
+ * of the two selected the rules when they disagreed.
  */
-const PRODUCT_TYPE_OPTIONS = GOVERNED_PRODUCT_TYPES.map(
-  (type) => `<option value="${type}">${type}</option>`,
-).join('\n            ')
 
 export const PAGE_HTML = `<!doctype html>
 <html lang="en">
@@ -50,6 +45,15 @@ export const PAGE_HTML = `<!doctype html>
   h2 { font-size: 20px; margin: 28px 0 12px; }
   p.lede { color: var(--muted); margin: 0 0 24px; max-width: 68ch; }
   .note { color: var(--muted); font-size: 15px; max-width: 68ch; }
+  .samples { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--rule, #dcdcdc); }
+  .samples h3 { font-size: 15px; margin: 0 0 4px; }
+  .samplelist { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+  .sample { display: flex; gap: 12px; align-items: baseline; }
+  .sample a { font-weight: 600; white-space: nowrap; }
+  .sample .what { color: var(--muted); font-size: 14px; max-width: 60ch; }
+  /* Not an error — nothing failed. It is the absence of a check, which reads
+     as a pass unless it is given weight of its own. */
+  .warn-note { color: var(--warn-ink, #8a5a00); font-size: 15px; max-width: 68ch; font-weight: 600; }
   button {
     font: inherit; cursor: pointer; border: 1px solid var(--ink); background: var(--ink);
     color: #fff; padding: 12px 20px; border-radius: 6px;
@@ -210,84 +214,57 @@ export const PAGE_HTML = `<!doctype html>
     <div id="policyBody"></div>
   </section>
 
-  <!-- Single review (§4). Two numbered panels, because the numbering describes
-       the comparison the agent is performing rather than imposing steps. -->
+  <!-- Single review (§4). One submission, checked now — and the same input the
+       batch takes. The agent used to type the application data beside the
+       artwork; the form they were copying from is the filed PDF, so the screen
+       now reads it instead. A transcription step was never part of the job, and
+       every value typed was a value that could be mistyped into a discrepancy
+       nobody could explain. -->
   <section id="single">
-    <div class="layout2">
-      <div class="panel">
-        <h2>1. The application says</h2>
-        <div class="fieldrow">
-          <label for="brandName">Brand name <span class="req">(required)</span></label>
-          <input id="brandName" name="brandName" type="text" autocomplete="off">
-          <p class="inline-err hidden" id="brandNameErr"></p>
-        </div>
-        <div class="fieldrow">
-          <!-- First, because it decides which rules the rest is judged by
-               (D25). Item 5 on TTB F 5100.31, and not a field compared against
-               the label: no label states "Distilled spirits". -->
-          <label for="productType">Product type</label>
-          <select id="productType" name="productType">
-            <option value="">Not stated</option>
-            ${PRODUCT_TYPE_OPTIONS}
-          </select>
-          <p class="hint">Decides which rules apply. Without it, none can be checked.</p>
-        </div>
-        <div class="fieldrow">
-          <label for="classType">Class / type</label>
-          <input id="classType" name="classType" type="text" autocomplete="off">
-          <p class="hint">e.g. Kentucky Straight Bourbon Whiskey</p>
-        </div>
-        <div class="fieldrow">
-          <!-- Text, not type=number: a number input rejects a pasted
-               "45% Alc./Vol.", adds spinners nobody wants, and disagrees with
-               itself across locale decimal separators (§4.2). -->
-          <label for="alcoholContent">Alcohol content</label>
-          <div class="suffixed">
-            <input id="alcoholContent" name="alcoholContent" type="text" autocomplete="off">
-            <span class="suffix">%</span>
+    <div class="panel">
+      <h2>The filed application</h2>
+      <p class="hint">The completed TTB F 5100.31 as a PDF — the label artwork and the application record, exactly as filed. Both pages are read separately: neither reading is shown the other.</p>
+      <!-- Drag-and-drop is never the only affordance: the button is the
+           primary one, the drop zone a convenience (§4.3). -->
+      <div id="drop" class="drop">
+        <p class="dropmsg">Drop the filed application here</p>
+        <button id="pickBtn" type="button" class="secondary">Choose a file</button>
+        <p class="constraint">PDF, up to 10 MB</p>
+        <input id="file" type="file" accept="application/pdf" class="hidden">
+      </div>
+      <div id="picked" class="picked hidden">
+        <div>
+          <div id="pickedName" class="row-name"></div>
+          <div id="pickedSize" class="row-summary"></div>
+          <div class="pickactions">
+            <button id="replaceBtn" type="button" class="secondary">Replace</button>
+            <button id="removeBtn" type="button" class="secondary">Remove</button>
           </div>
-        </div>
-        <div class="fieldrow">
-          <label for="netContents">Net contents</label>
-          <input id="netContents" name="netContents" type="text" autocomplete="off">
-          <p class="hint">e.g. 750 mL</p>
         </div>
       </div>
+      <p class="inline-err hidden" id="fileErr"></p>
 
-      <div class="panel">
-        <h2>2. The label</h2>
-        <!-- Drag-and-drop is never the only affordance: the button is the
-             primary one, the drop zone a convenience (§4.3). -->
-        <div id="drop" class="drop">
-          <p class="dropmsg">Drop the label image here</p>
-          <button id="pickBtn" type="button" class="secondary">Choose a file</button>
-          <p class="constraint">JPEG or PNG, up to 10 MB</p>
-          <input id="file" type="file" accept="image/png,image/jpeg" class="hidden">
-        </div>
-        <div id="picked" class="picked hidden">
-          <img id="thumb" alt="The label you attached">
-          <div>
-            <div id="pickedName" class="row-name"></div>
-            <div id="pickedSize" class="row-summary"></div>
-            <div class="pickactions">
-              <button id="replaceBtn" type="button" class="secondary">Replace</button>
-              <button id="removeBtn" type="button" class="secondary">Remove</button>
-            </div>
-          </div>
-        </div>
-        <p class="inline-err hidden" id="fileErr"></p>
+      <!-- For somebody with no TTB filing to hand — a reviewer looking at this
+           deployment, or anyone who wants to see what a discrepancy looks like
+           before trusting a screen that reports one. These are the corpus
+           files, not mock-ups: the same documents the batch runs on, each with
+           authored ground truth for what it should produce. -->
+      <div class="samples">
+        <h3>No filing to hand?</h3>
+        <p class="hint">Download one of these and upload it above. They are real submissions from the test corpus — the same ones the batch runs.</p>
+        <div id="sampleList" class="samplelist"></div>
       </div>
     </div>
 
     <!-- Never disabled (§4.4). A disabled button is unfocusable, announces
          nothing, and gives a hesitant person no reason for the silence.
-         Pressing it with an incomplete form runs validation and moves focus to
+         Pressing it with nothing attached runs validation and moves focus to
          the problem, which tells them what to do. -->
     <div class="primary-row">
-      <button id="checkBtn" type="button">Check this label</button>
+      <button id="checkBtn" type="button">Check this submission</button>
       <!-- Secondary, and always present rather than appearing after a result:
            a control that materialises only once you are finished is one nobody
-           knows exists while they are typing into the wrong form. -->
+           knows exists while they are working. -->
       <button id="clearBtn" type="button" class="secondary">Clear this form</button>
       <p id="working" class="note hidden" role="status" aria-live="polite"></p>
     </div>
@@ -745,9 +722,26 @@ export const PAGE_HTML = `<!doctype html>
     return { icon: '✓', cls: 'ok', words: 'Met' }
   }
 
-  function renderFindings(findings) {
+  function renderFindings(findings, policy) {
     var box = el('div')
     box.appendChild(el('h2', null, 'Rules applied'))
+
+    // What selected them, before what they said.
+    //
+    // Product type decides which body of regulation this submission is judged
+    // by, and it is read from item 5 rather than stated by anyone here. An
+    // agent looking at a clean result has no other way to tell the difference
+    // between "checked against the spirits rules and passed" and "no rules
+    // could be selected, so nothing was checked" — and the second is not a
+    // pass.
+    if (policy) {
+      if (policy.productType) {
+        box.appendChild(el('p', 'note', 'Judged as ' + policy.productType + ', read from item 5 of the application.'))
+      } else {
+        box.appendChild(el('p', 'warn-note', 'No product type could be read from item 5, so no rules could be selected. Nothing here has been checked against any regulation.'))
+      }
+    }
+
     if (!findings || !findings.length) {
       box.appendChild(el('p', 'note', 'No rules were applied to this submission.'))
       return box
@@ -1080,14 +1074,15 @@ export const PAGE_HTML = `<!doctype html>
     if (err) { err.textContent = message; err.classList.remove('hidden') }
   }
 
+  // The name and size BEFORE submission: the commonest upload mistake is the
+  // wrong file, and finding that out after a five-second wait is a wasted
+  // review. No thumbnail — a PDF does not render in an img element, and the
+  // first page is not the label anyway.
   function attach(file) {
     if (!file) return
     attached = file
     byId('pickedName').textContent = file.name
     byId('pickedSize').textContent = (file.size / 1048576).toFixed(1) + ' MB'
-    // A thumbnail BEFORE submission: the commonest upload mistake is the wrong
-    // file, and finding that out after a five-second wait is a wasted review.
-    byId('thumb').src = URL.createObjectURL(file)
     byId('drop').classList.add('hidden')
     byId('picked').classList.remove('hidden')
     clearFieldError('file')
@@ -1101,7 +1096,7 @@ export const PAGE_HTML = `<!doctype html>
   }
 
   /**
-   * Empty the form so the next label can be checked.
+   * Empty the screen so the next submission can be checked.
    *
    * Nothing is lost by pressing this. Every review is persisted with its own
    * reference code the moment it completes (M4), so clearing the screen
@@ -1109,21 +1104,52 @@ export const PAGE_HTML = `<!doctype html>
    * confirmation. An agent who needs the previous result back looks it up by
    * reference.
    *
-   * Product type is cleared to "not stated" along with the rest. Leaving it set
-   * would be the one field that silently carried over, and it is the field that
-   * decides which regulations the next label is judged by.
+   * The attached file goes with it. A PDF left attached under a fresh-looking
+   * screen is the one state that could put the previous submission through a
+   * second review under a new reference.
    */
   function clearSingleForm() {
-    ;['brandName', 'classType', 'alcoholContent', 'netContents', 'productType'].forEach(
-      function (id) { byId(id).value = '' },
-    )
     detach()
-    clearFieldError('brandName'); clearFieldError('file')
+    clearFieldError('file')
     byId('singleResult').textContent = ''
     byId('working').classList.add('hidden')
-    // Back to the top of the form, so the next entry starts where the eye
-    // already is rather than wherever the last click left it.
-    byId('productType').focus()
+    // Back to the picker, so the next submission starts where the eye already
+    // is rather than wherever the last click left it.
+    byId('pickBtn').focus()
+  }
+
+  /**
+   * The samples, fetched rather than baked into the page.
+   *
+   * Their titles and expected outcomes are authored ground truth held in the
+   * corpus manifest. Rendering them from a copy in this file would be a second
+   * statement of what each submission is, and the screen would be the one that
+   * looked authoritative when the two disagreed.
+   *
+   * A failure here is silent by design: samples are a convenience, and an error
+   * banner over a form that works perfectly well without them would report a
+   * problem the agent does not have.
+   */
+  function loadSamples() {
+    fetch('/samples')
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (d) {
+        if (!d || !d.samples || !d.samples.length) return
+        var list = byId('sampleList')
+        list.textContent = ''
+        d.samples.forEach(function (s) {
+          var row = el('div', 'sample')
+          var link = el('a', null, s.title)
+          link.href = s.url
+          // Named for what it is rather than for its id, so a downloaded file
+          // is still identifiable in a folder a week later.
+          link.setAttribute('download', '')
+          row.appendChild(link)
+          row.appendChild(el('span', 'what', s.shows))
+          list.appendChild(row)
+        })
+      })
+      .catch(function () { /* Samples are a convenience. Their absence is not an error. */ })
   }
 
   function singleInit() {
@@ -1149,32 +1175,28 @@ export const PAGE_HTML = `<!doctype html>
 
     byId('checkBtn').addEventListener('click', runSingle)
     byId('clearBtn').addEventListener('click', clearSingleForm)
+    loadSamples()
   }
 
   function runSingle() {
-    clearFieldError('brandName'); clearFieldError('file')
+    clearFieldError('file')
     byId('singleResult').textContent = ''
 
-    // Validation on submit only, never on blur: flagging an incomplete entry
-    // before someone has finished thinking is hostile to a slow typist (§4.5).
-    var brand = byId('brandName').value.trim()
-    if (!brand) return showFieldError('brandName', 'Please enter the brand name from the application.')
-    if (!attached) return showFieldError('file', 'Please add an image of the label.')
+    // Validation on submit only (§4.5). One thing can be missing now, and the
+    // message names it.
+    if (!attached) return showFieldError('file', 'Please add the filed application as a PDF.')
 
     var working = byId('working')
-    working.textContent = 'Reading the label…'
+    // Says what is happening, which is more than reading: the pages are
+    // rendered first, and rendering is the slow step.
+    working.textContent = 'Reading the submission…'
     working.classList.remove('hidden')
     var extended = setTimeout(function () {
       working.textContent = 'Still working — this is taking longer than usual.'
     }, 8000)
 
     var form = new FormData()
-    form.append('label', attached)
-    form.append('brandName', brand)
-    form.append('productType', byId('productType').value)
-    form.append('classType', byId('classType').value.trim())
-    form.append('alcoholContent', byId('alcoholContent').value.trim())
-    form.append('netContents', byId('netContents').value.trim())
+    form.append('submission', attached)
 
     fetch('/review', { method: 'POST', body: form })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b } }) })
@@ -1183,7 +1205,6 @@ export const PAGE_HTML = `<!doctype html>
         working.classList.add('hidden')
         if (!res.ok) {
           if (res.body && res.body.field === 'image') return showFieldError('file', res.body.reason)
-          if (res.body && res.body.field === 'brandName') return showFieldError('brandName', res.body.reason)
           var e = el('p', 'err', (res.body && res.body.reason) || 'Something went wrong. Nothing was saved.')
           byId('singleResult').appendChild(e)
           return
@@ -1241,7 +1262,7 @@ export const PAGE_HTML = `<!doctype html>
     left.appendChild(el('h2', null, 'Fields'))
     d.fields.forEach(function (f) { left.appendChild(renderField(f)) })
     left.appendChild(renderWarning(d.warning))
-    left.appendChild(renderFindings(d.findings))
+    left.appendChild(renderFindings(d.findings, d.policy))
     left.appendChild(renderDecision(d))
     layout.appendChild(left)
 

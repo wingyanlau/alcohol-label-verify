@@ -46,11 +46,14 @@ import { referenceIsUnverified, warningReference } from './domain/reference.js'
 import { registeredUsers, roleLabelFor, userMay } from './domain/users.js'
 import type { Env, WorkMessage } from './env.js'
 import { checkImageIntake } from './normalise/image.js'
-import { IntakeRejected } from './normalise/normaliser.js'
+import { IntakeRejected, type NormaliseResult } from './normalise/normaliser.js'
+import { rasteriseSubmission } from './normalise/rasterise.js'
+import { UnknownFormError } from './normalise/regions.js'
 import { archiveHealth, listArchive, reconcileArchive, ruleSetAsAt } from './policy/archive.js'
 import { gatewayFrom } from './providers/gateway.js'
 import { PROMPT_VERSION, promptDigest } from './providers/prompt.js'
 import { createProvider, knownProviderNames, specFor } from './providers/registry.js'
+import { sampleCatalogue, sampleFileFor } from './review/samples.js'
 import { checkReviewRequest, ReviewRejected, reviewOne } from './review/single.js'
 import { PAGE_HTML } from './ui/page.js'
 
@@ -221,6 +224,25 @@ function gatewayStatus(env: Env): { routed: boolean; id: string | null; reason?:
     return { routed: false, id: gateway.id, reason: 'AI_GATEWAY_ACCOUNT is not set' }
   }
   return { routed: true, id: gateway.id }
+}
+
+/**
+ * The corpus manifest, or null where it cannot be read.
+ *
+ * Loaded per request rather than cached: it ships with the worker, so a read is
+ * a local asset fetch, and a cache would be a second copy of ground truth with
+ * a lifetime nobody reasons about.
+ */
+async function loadCorpusManifest(env: Env): Promise<{
+  cases: { id: string; file: string; title: string; expected: { outcome: string } }[]
+} | null> {
+  if (!env.ASSETS) return null
+  const response = await env.ASSETS.fetch(new Request('https://assets.local/manifest.json'))
+  if (!response.ok) return null
+  const parsed = (await response.json()) as {
+    cases?: { id: string; file: string; title: string; expected: { outcome: string } }[]
+  }
+  return Array.isArray(parsed.cases) ? { cases: parsed.cases } : null
 }
 
 const json = (body: unknown, status = 200) =>
@@ -969,11 +991,62 @@ export default {
     // audit record, and a second entry point that quietly produced none would
     // make that claim false while looking finished — and would lose replay,
     // retention and reference lookup, all of which key off the record.
+    // Sample submissions, for somebody with no TTB filing to hand.
+    //
+    // The corpus files themselves, not mock-ups: they are what the batch runs
+    // on, and each has authored ground truth saying what it should produce. A
+    // fabricated sample would demonstrate the interface rather than the system.
+    if (pathname === '/samples' && request.method === 'GET') {
+      if (!env.ASSETS) return json({ error: 'unavailable', reason: 'no ASSETS binding' }, 503)
+      const manifest = await loadCorpusManifest(env)
+      if (manifest === null) return json({ error: 'unavailable', reason: 'no manifest' }, 503)
+      return json({
+        samples: sampleCatalogue(manifest).map((s) => ({
+          id: s.id,
+          title: s.title,
+          expected: s.expected,
+          shows: s.shows,
+          url: `/samples/${s.id}`,
+        })),
+      })
+    }
+
+    const sampleFile = pathname.match(/^\/samples\/([^/]+)$/)
+    if (sampleFile && request.method === 'GET') {
+      if (!env.ASSETS) return json({ error: 'unavailable', reason: 'no ASSETS binding' }, 503)
+      const manifest = await loadCorpusManifest(env)
+      if (manifest === null) return json({ error: 'unavailable', reason: 'no manifest' }, 503)
+      // Whitelisted, never sanitised: this value builds an asset path, and an
+      // id taken on trust is a path taken on trust.
+      const file = sampleFileFor(decodeURIComponent(sampleFile[1] ?? ''), manifest)
+      if (file === null) return json({ error: 'not_found' }, 404)
+      const asset = await env.ASSETS.fetch(new Request(`https://assets.local/submissions/${file}`))
+      if (!asset.ok) return json({ error: 'not_found' }, 404)
+      return new Response(asset.body, {
+        headers: {
+          'content-type': 'application/pdf',
+          // Downloaded rather than displayed: the next step is to upload it,
+          // and a PDF opening in a viewer tab is one the agent then has to go
+          // and find on disk anyway.
+          'content-disposition': `attachment; filename="${file}"`,
+          'cache-control': 'no-store',
+        },
+      })
+    }
+
     if (pathname === '/review' && request.method === 'POST') {
       if (!env.DB || !env.STAGING) return json({ error: 'unavailable' }, 503)
 
       try {
         const form = await request.formData()
+
+        // The filed form as one PDF — the ordinary path, and the same input the
+        // batch takes. Rasterised here into the two regions and read blind, so
+        // a submission checked alone and the same submission checked in a batch
+        // of three hundred go through identical code.
+        const filed = form.get('submission')
+        const submissionPdf = filed instanceof File ? await filed.arrayBuffer() : null
+
         const file = form.get('label')
         const image = file instanceof File ? await file.arrayBuffer() : null
         // Not stated is null, not the empty string. The two would be different
@@ -988,27 +1061,61 @@ export default {
           productType: productType === '' ? null : productType,
         }
 
-        // Re-enforced server-side, always. Client validation exists for
-        // responsiveness and never for correctness (§4.5, §9.3).
-        checkReviewRequest({ application, image })
-        checkImageIntake(image as ArrayBuffer, { maxBytes: Number(env.MAX_UPLOAD_BYTES) })
+        let regions: NormaliseResult | null = null
+        if (submissionPdf !== null) {
+          if (!env.BROWSER) return json({ error: 'unavailable', reason: 'no BROWSER binding' }, 503)
+          // `rasteriseSubmission` runs the intake guards itself, on bytes,
+          // before anything decodes them — the same guards, in the same order,
+          // as a batch item.
+          regions = await rasteriseSubmission(submissionPdf, {
+            browser: env.BROWSER,
+            limits: {
+              maxBytes: Number(env.MAX_UPLOAD_BYTES),
+              maxPageCount: Number(env.MAX_PAGE_COUNT),
+              maxPixels: Number(env.MAX_PIXELS),
+            },
+            dpi: Number(env.RASTER_DPI),
+          })
+        } else {
+          // Re-enforced server-side, always. Client validation exists for
+          // responsiveness and never for correctness (§4.5, §9.3).
+          checkReviewRequest({ application, image })
+          checkImageIntake(image as ArrayBuffer, { maxBytes: Number(env.MAX_UPLOAD_BYTES) })
+        }
 
         const submissionId = crypto.randomUUID()
         const jobId = crypto.randomUUID()
         const reference = await referenceCodeFor(submissionId)
         const now = new Date().toISOString()
-        const sourceName = file instanceof File && file.name ? file.name : 'label image'
-        const mimeType = file instanceof File && file.type ? file.type : 'image/png'
+        const uploaded = submissionPdf === null ? file : filed
+        const sourceName =
+          uploaded instanceof File && uploaded.name
+            ? uploaded.name
+            : submissionPdf === null
+              ? 'label image'
+              : 'submission.pdf'
+        const mimeType =
+          regions?.label.mimeType ?? (file instanceof File && file.type ? file.type : 'image/png')
+
+        // The label pixels: cropped out of the filed PDF, or uploaded directly.
+        const labelImage = regions?.label.image ?? (image as ArrayBuffer)
 
         // The artwork, kept for the results panel and purged by the same sweep
         // as everything else — a single review is a job of one, so retention
         // needs no special case.
-        await env.STAGING.put(labelImageKey(jobId, submissionId), image as ArrayBuffer, {
+        await env.STAGING.put(labelImageKey(jobId, submissionId), labelImage, {
           httpMetadata: { contentType: mimeType },
         })
 
         const { view, result } = await reviewOne(
-          { application, image: image as ArrayBuffer, mimeType },
+          regions === null
+            ? { application, image: labelImage, mimeType }
+            : {
+                kind: 'submission',
+                image: regions.label.image,
+                mimeType: regions.label.mimeType,
+                record: { image: regions.record.image, mimeType: regions.record.mimeType },
+              },
           {
             provider: createProvider(env),
             submissionId,
@@ -1040,8 +1147,12 @@ export default {
             submissionId,
             jobId,
             sourceName,
-            await sha256Hex(image as ArrayBuffer),
-            (image as ArrayBuffer).byteLength,
+            // Digested over what the agent actually supplied — the filed PDF,
+            // or the artwork where there was no PDF. Digesting a crop this
+            // system produced would identify its own rendering rather than the
+            // submission, and the record is a record of what was filed.
+            await sha256Hex(submissionPdf ?? (image as ArrayBuffer)),
+            (submissionPdf ?? (image as ArrayBuffer)).byteLength,
             now,
             reference,
           )
@@ -1058,12 +1169,17 @@ export default {
             verdictId: crypto.randomUUID(),
             submissionId,
             labelExtractionId: crypto.randomUUID(),
-            recordExtractionId: null,
+            // A read of the record is an extraction like any other and gets its
+            // own row. Null where the agent typed the record instead: there was
+            // no reading, and inventing an id would put an empty extraction in
+            // the record that a replay would then look for.
+            recordExtractionId: regions === null ? null : crypto.randomUUID(),
           },
-          // No rasterisation happened: the agent supplied the pixels. Recorded
-          // as null rather than as a DPI nobody chose, because an UNREADABLE
-          // here is not an artefact of a resolution this system picked.
-          null,
+          // The resolution the regions were rendered at, so an UNREADABLE can
+          // be read as "at this DPI" rather than as a property of the artwork.
+          // Null where the agent supplied the pixels: no rasterisation
+          // happened, and a DPI nobody chose would be worse than none.
+          regions === null ? null : Number(env.RASTER_DPI),
         )
         await persistResult(env.DB, plan, 'COMPLETED', now)
         await appendAudit(env.DB, {
@@ -1080,7 +1196,7 @@ export default {
             `provider=${result.provenance.label.provider}`,
             `model=${result.provenance.label.modelId}`,
             `prompt=${result.provenance.label.promptVersion}`,
-            `record=declared`,
+            `record=${regions === null ? 'declared' : 'read'}`,
             `labelDigest=${await sha256Hex(result.rawResponses.label)}`,
             `reference=${result.warning.referenceDataVersion}`,
             `legible=${result.warning.legible}`,
@@ -1095,6 +1211,22 @@ export default {
         }
         if (error instanceof IntakeRejected) {
           return json({ error: error.reason, field: 'image', reason: error.message }, 400)
+        }
+        // A PDF this system cannot crop. Distinct from a service failure on
+        // purpose: "try again in a moment" is wrong advice for a file that will
+        // be rejected identically every time, and it sends the agent back to a
+        // dependency instead of to the form they uploaded.
+        if (error instanceof UnknownFormError) {
+          return json(
+            {
+              error: 'unknown_form',
+              field: 'image',
+              reason:
+                'This does not look like a completed TTB F 5100.31. Please upload the ' +
+                'filed application form as a PDF.',
+            },
+            400,
+          )
         }
         return json(
           {

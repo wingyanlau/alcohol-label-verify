@@ -24,13 +24,8 @@ import { configuredLegibilityFloor } from '../domain/legibility.js'
 import type { ApplicationData } from '../domain/types.js'
 import { verifySubmission } from '../domain/verify.js'
 import type { Env, WorkMessage } from '../env.js'
-import { createBrowserNormaliser } from '../normalise/browser-normaliser.js'
-import {
-  checkIntake,
-  type IntakeLimits,
-  IntakeRejected,
-  type NormaliseResult,
-} from '../normalise/normaliser.js'
+import { type IntakeLimits, IntakeRejected, type NormaliseResult } from '../normalise/normaliser.js'
+import { rasteriseSubmission } from '../normalise/rasterise.js'
 import { TTB_F5100_31_2023, UnknownFormError } from '../normalise/regions.js'
 import { ruleSetAsAt } from '../policy/archive.js'
 import { createProvider } from '../providers/registry.js'
@@ -43,7 +38,6 @@ import { labelImageKey } from './keys.js'
 import { emit } from './log.js'
 import { buildPersistPlan, persistResult } from './persist.js'
 import { applicationDataFrom } from './record.js'
-import { withRateLimitRetry } from './retry.js'
 import { LABEL_RASTER, RECORD_RASTER } from './submissions.js'
 
 export interface ProcessOutcome {
@@ -229,9 +223,6 @@ export async function processItem(
     }
     const bytes = await object.arrayBuffer()
 
-    // Cheap structural guards before anything expensive renders (§11).
-    checkIntake(bytes, intakeLimits(env))
-
     // A bundled submission ships its regions already rendered, so the browser
     // is not launched at all. The corpus is fixed: rasterising it on every run
     // re-derives pixels that were rendered at build time, and each derivation
@@ -250,13 +241,11 @@ export async function processItem(
       // keeps its turn while waiting: releasing the message would release the
       // slot to the next submission, which is what made failure a function of
       // queue position rather than of the artwork.
-      (await withRateLimitRetry(
-        () => createBrowserNormaliser({ browser, limits: intakeLimits(env) }).normalise(bytes, dpi),
-        // Rasterisation is refused on rate by Browser Rendering, whose wording
-        // the inference provider does not know. Classified here, in the only
-        // place that knows both dependencies exist.
-        { classify: (e) => (/\b429\b|rate limit/i.test(String(e)) ? 'rate-limited' : 'transient') },
-      ))
+      // The same function the single-review path calls, guards included. Two
+      // copies of these five lines would decide the limits, the DPI and the
+      // rate-limit behaviour twice, and would drift in the direction nobody
+      // watches.
+      (await rasteriseSubmission(bytes, { browser, limits: intakeLimits(env), dpi }))
 
     const normaliseMs = Date.now() - normaliseStarted
 

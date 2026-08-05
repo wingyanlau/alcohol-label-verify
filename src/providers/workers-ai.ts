@@ -184,6 +184,7 @@ export function createWorkersAiProvider(opts: WorkersAiOptions): Provider {
       const extraction = parseExtractionResponse(extractJson(raw), {
         fields: request.fields,
         includeWarning: request.includeWarning,
+        includeProductType: request.includeProductType === true,
       })
 
       return {

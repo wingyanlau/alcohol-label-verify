@@ -25,7 +25,8 @@ Ground truth in manifest.json is authored, never derived from a model
 (test-plan §18.1).
 
 Usage:    python3 generate.py
-Requires: Google Chrome, pypdf, and f510031.pdf (downloaded automatically).
+Requires: Google Chrome and pypdf. f510031.pdf is committed beside this
+   script (see README); it is re-downloaded only if that copy is missing.
 """
 
 from __future__ import annotations

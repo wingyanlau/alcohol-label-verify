@@ -187,6 +187,16 @@ Validate extraction responses at the §8.3 boundary. A malformed response is a
 | CT-08 | Empty response | rejected |
 | CT-09 | Prose instead of structured data | rejected — never parsed defensively downstream |
 | CT-10 | Response echoes an expected value not supplied to it | **cannot occur** — asserts the extractor call site receives no application data (§8.3.1) |
+| CT-11 | Response returns the prompt's own placeholder as a value | rejected — the model answered without reading the image |
+| CT-12a | Record states exactly one of the three product types | that type |
+| CT-12b | All three form options recognised | Wine / Distilled spirits / Malt beverages |
+| CT-12c | Type stated in different capitalisation | canonicalised to the form's spelling |
+| CT-12d | Record states no single type | no product type — nothing is selected, and the result says so |
+| CT-12e | A value outside the three (`Beer`, `Whiskey`) | no product type — **never the nearest match** (§8.3.3) |
+| CT-12f | Product type key absent from the response | no product type, and the rest of the reading is still used |
+| CT-12g | Product type is not a string | rejected |
+| CT-12h | Product type echoes the prompt's placeholder | rejected (CT-11) |
+| CT-12i | Product type not asked for (the label region) | absent — distinct from asked-and-unsettled |
 
 **CT-10 is a structural test**, not a behavioural one: it asserts the extraction
 call site has no access to application data. It fails at compile time or by

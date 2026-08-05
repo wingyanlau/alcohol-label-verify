@@ -159,10 +159,18 @@ export interface VerifyOptions {
   readonly asOf?: string | undefined
 }
 
-/** Turn a record-region extraction into application data. */
+/**
+ * Turn a record-region extraction into application data.
+ *
+ * `productType` comes across as read — including as `null`, which is the whole
+ * point of reading it this way. It is the selection input, not a compared
+ * field, and an unresolved one means no rule set is chosen rather than a
+ * plausible one being assumed.
+ */
 function toApplicationData(extraction: Extraction): ApplicationData {
   const out = {} as Record<keyof ApplicationData, string | null>
   for (const field of FIELDS) out[field] = extraction.fields[field].raw
+  out.productType = extraction.productType ?? null
   return out
 }
 
@@ -201,6 +209,8 @@ export async function verifySubmission(
           mimeType: (input.record as RegionImage).mimeType,
           fields: FIELDS,
           includeWarning: false,
+          // Item 5 is asked for here and nowhere else (D25).
+          includeProductType: true,
         })
       : Promise.resolve(null),
   ])

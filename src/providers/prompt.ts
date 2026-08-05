@@ -18,7 +18,7 @@ import { FIELD_LABELS } from '../domain/types.js'
  * Recorded per extraction (§8.7.1): a verdict is only re-derivable if the
  * prompt that produced its reading is identifiable.
  */
-export const PROMPT_VERSION = 'label-extract@1'
+export const PROMPT_VERSION = 'label-extract@2'
 
 /**
  * The instruction.
@@ -33,22 +33,35 @@ export const PROMPT_VERSION = 'label-extract@1'
  *     FR-6 turns on whether the header is in capitals.
  */
 /**
+ * Every instruction this deployment can send, as one text.
+ *
+ * **Both regions, deliberately.** This was taken over the label form alone,
+ * and the record form could then be rewritten with the digest unmoved — which
+ * is exactly what happened when the record prompt learned to read item 5. A
+ * digest that covers half the instruction certifies the wrong half silently,
+ * which is worse than not having one.
+ */
+export function digestedPromptText(): string {
+  const base = {
+    image: new ArrayBuffer(0),
+    mimeType: 'image/png',
+    fields: ['brandName', 'classType', 'alcoholContent', 'netContents'],
+  } as const
+  return [
+    buildPrompt({ ...base, region: 'label', includeWarning: true }),
+    buildPrompt({ ...base, region: 'record', includeWarning: false, includeProductType: true }),
+  ].join('\n--- record ---\n')
+}
+
+/**
  * The digest of the instruction as it actually stands.
  *
  * PROMPT_VERSION is a label someone remembers to change; this is the text. A
  * prompt edited without a version bump would leave every audit record citing a
  * version that no longer describes what was sent, and nothing would show it.
- * Taken over the label-region form, which is the one that carries the warning.
  */
 export async function promptDigest(): Promise<string> {
-  const text = buildPrompt({
-    region: 'label',
-    image: new ArrayBuffer(0),
-    mimeType: 'image/png',
-    fields: ['brandName', 'classType', 'alcoholContent', 'netContents'],
-    includeWarning: true,
-  })
-  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(digestedPromptText()))
   return [...new Uint8Array(hash)]
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
@@ -75,7 +88,11 @@ Return JSON of exactly this shape:
 {
   "fields": {
     "<field>": { "value": "<text exactly as printed>", "confidence": 0.0-1.0 }
-  }${request.includeWarning ? ',\n  "warningStatement": "<the government warning, verbatim>"' : ''}
+  }${request.includeWarning ? ',\n  "warningStatement": "<the government warning, verbatim>"' : ''}${
+    request.includeProductType
+      ? ',\n  "productType": "<Wine | Distilled spirits | Malt beverages, or null>"'
+      : ''
+  }
 }
 
 Rules:
@@ -87,6 +104,17 @@ Rules:
 ${
   request.includeWarning
     ? '- Transcribe the government warning VERBATIM, preserving capitalisation exactly.\n  If there is no warning statement, use null.\n'
+    : ''
+}${
+  request.includeProductType
+    ? `- TYPE OF PRODUCT. The record states this either as one ticked box at
+  item 5 — WINE, DISTILLED SPIRITS, MALT BEVERAGES — or as a printed
+  value on a record page. Report the ONE it states, spelled exactly as
+  "Wine", "Distilled spirits" or "Malt beverages".
+  If it states none of them, or more than one, or you cannot tell which,
+  return null. Do not infer it from the brand, the class, the alcohol
+  content or anything else — a guess here selects the wrong body of
+  regulation, and every check that follows would look correct.\n`
     : ''
 }- Return JSON only. No commentary.`
 }

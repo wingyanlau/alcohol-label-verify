@@ -11,4 +11,3 @@ coverage/
 # generated build artefacts
 docs/review/*.pdf
 testdata/.build/
-testdata/f510031.pdf

@@ -415,8 +415,12 @@ export function applicationFrom(
  * should report what it could and could not reproduce rather than throwing on
  * the way in. A null here yields "nothing could be checked", which is the
  * honest reading of a binding nobody can parse.
+ *
+ * Exported because the results panel needs the same answer. Two readers of the
+ * same column would be two chances to disagree about which regulation a verdict
+ * was judged under — and the screen would be the one that looked authoritative.
  */
-function productTypeFrom(selectionInputs: string | null): string | null {
+export function productTypeFrom(selectionInputs: string | null): string | null {
   if (selectionInputs === null) return null
   try {
     const parsed: unknown = JSON.parse(selectionInputs)
