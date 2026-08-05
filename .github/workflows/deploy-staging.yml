@@ -333,21 +333,30 @@ jobs:
           set -euo pipefail
           url="https://alcohol-label-verify-staging.wing-lawrence.workers.dev"
 
+          # The digest of the set THIS commit ships. A reconciliation reporting
+          # any other digest was answered by a worker still serving the previous
+          # version — which happens during propagation, answers 200, and says
+          # truthfully that the archive already agrees, because against its own
+          # bundle it does. Retrying on the status code alone cannot see that.
+          want=$(jq -r '.contentDigest' config/policy-set.json)
+          echo "expecting policy set digest $want"
+
           for attempt in $(seq 1 10); do
             code=$(curl -sS $GATE_AUTH --max-time 60 -X POST "$url/policy/reconcile" \
                      -o /tmp/reconcile.json -w '%{http_code}') || true
-            if [ "$code" = "200" ] && jq -e 'has("actions")' /tmp/reconcile.json >/dev/null 2>&1; then
-              jq '{actions, summary, events}' /tmp/reconcile.json
+            got=$(jq -r '.contentDigest // empty' /tmp/reconcile.json 2>/dev/null || true)
+            if [ "$code" = "200" ] && [ "$got" = "$want" ]; then
+              jq '{policySetVersion, contentDigest, actions, summary, events}' /tmp/reconcile.json
               exit 0
             fi
-            echo "attempt $attempt: http $code — $(head -c 200 /tmp/reconcile.json)"
+            echo "attempt $attempt: http $code, digest '${got:-none}' — waiting for $want"
             sleep 6
           done
 
           # Named, not inferred. A reconciliation that could not run leaves the
           # deployment enforcing rules nobody reviewed, and the next step
           # refuses that — but the cause belongs here.
-          echo "::error::reconciliation did not report a result after 10 attempts"
+          echo "::error::no reconciliation from the version just deployed after 10 attempts"
           cat /tmp/reconcile.json
           exit 1
 

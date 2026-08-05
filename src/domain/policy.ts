@@ -168,6 +168,16 @@ export interface RuleApproval {
 
 export interface PolicySet {
   readonly policySetVersion: number
+  /**
+   * A digest of the governing content — regulations, source documents, rules.
+   *
+   * Present in the file since the set was written and unmodelled until a deploy
+   * needed to prove *which* set it had applied. A worker answering a
+   * reconciliation request during propagation may be the previous version, and
+   * it answers 200 with a perfectly valid report saying the archive already
+   * agrees — because against the bundle it is running, it does.
+   */
+  readonly contentDigest: string
   readonly approvedBy: string
   readonly approvedAt: string
   readonly regulations: readonly Regulation[]

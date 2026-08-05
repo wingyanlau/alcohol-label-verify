@@ -1337,7 +1337,22 @@ export default {
         // is one, the deployment otherwise (§19.3).
         actor: 'deploy',
       })
-      return json(report)
+      // Which set this actually reconciled against.
+      //
+      // A caller cannot otherwise tell. During propagation Cloudflare may still
+      // route to the previous worker, whose bundled policy set is the old one —
+      // and it answers 200 with a truthful report saying the archive already
+      // agrees, because against *its* bundle it does. The deploy then proceeds
+      // with the archive still holding the rules nobody meant to keep.
+      //
+      // Naming the version and digest lets CI assert it reached the deployment
+      // it just shipped, which is the same rule the version check follows one
+      // step earlier and for the same reason.
+      return json({
+        ...report,
+        policySetVersion: POLICY_SET.policySetVersion,
+        contentDigest: POLICY_SET.contentDigest,
+      })
     }
 
     // Who this deployment recognises, for a form to offer rather than a box to
