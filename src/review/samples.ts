@@ -26,18 +26,28 @@
 /**
  * The curated few.
  *
- * Seven rather than twenty-six: a list nobody reads to the end demonstrates
+ * Six rather than twenty-six: a list nobody reads to the end demonstrates
  * nothing. Chosen so the set spans a clean pass, a genuine discrepancy, a
  * tolerance that must NOT fire, an unreadable field, and the adversarial case —
  * because a demonstration made only of passes says nothing about judgement, and
  * one made only of failures reads as a broken system.
  *
- * `F01` is the odd one and earns its place: it is a filing shaped like a real
- * one — the TTB form on its own, with no separate record page (D50). It is here
- * so nobody has to fill out a form to see what that case does, which is what
- * this screen asked of them before.
+ * ---------------------------------------------------------------------------
+ * F01 IS DELIBERATELY NOT HERE
+ *
+ * It was, for one revision. `F01` is the TTB form filed on its own, and it is a
+ * fair test of the region map that reads such a filing (D50) — but it is a poor
+ * demonstration of the system, because three of the four comparison fields have
+ * no source on the paper form and come back unassessed. Shown to somebody
+ * forming a first impression, that reads as a tool that could not read the
+ * document.
+ *
+ * The complete submission is the two-page shape every sample below has: the
+ * form, and the application record carrying the fields the form has no box for.
+ * That is the input this system is for. `F01` stays in the corpus as a fixture
+ * with authored ground truth; it is not an advertisement.
  */
-export const SAMPLE_IDS: readonly string[] = ['L01', 'L04', 'L14', 'L06', 'L24', 'L13', 'F01']
+export const SAMPLE_IDS: readonly string[] = ['L01', 'L04', 'L14', 'L06', 'L24', 'L13']
 
 /**
  * What a person will see, in the words of what happens.
@@ -52,7 +62,6 @@ const SHOWS: Readonly<Record<string, string>> = {
   L06: 'The warning reads "Government Warning:" in title case. It looks fine at a glance and is a documented rejection.',
   L24: 'One field cannot be read, and another genuinely mismatches. What could not be read outranks what was wrong with it.',
   L13: 'The label carries text telling the reader to ignore its instructions, alongside a real mismatch. The mismatch must still be reported.',
-  F01: 'The TTB form on its own, as a real filing arrives. The form has no box for class/type, alcohol content or net contents, so those are reported as not assessed rather than guessed — and every regulation check still runs, because those read the label.',
 }
 
 export interface SampleEntry {

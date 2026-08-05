@@ -234,12 +234,18 @@ download and upload. Without them the single-review path is a file picker that
 refuses every file its visitor owns, which is the state anyone evaluating the
 deployment arrives in.
 
-**The last one is a real filing** — the TTB F 5100.31 on its own, with no
-separate record page (D50). It is there so nobody has to fill out a form to see
-that case, which is what the screen asked of them for one revision: a link to
-the blank form and an invitation to complete it. Twenty minutes of data entry
-to see one verdict is not an invitation, and the likeliest outcome was somebody
-uploading the *blank* form and getting a verdict saying nothing could be read.
+**Every one is a complete submission**, and two things were tried here first.
+An invitation to fill in the blank form and upload it — twenty minutes of data
+entry to see one verdict, whose likeliest outcome was somebody uploading the
+*blank* form and getting a verdict saying nothing could be read. Then `F01`,
+the form filed on its own, offered as a seventh sample: a fair test of the
+region map that reads such a filing (D50), and a poor demonstration, because
+three of the four comparisons come back unassessed and that reads as a tool
+which could not read the document. It remains in the corpus as a fixture.
+
+What is offered is the shape this system is for: the form with the labels
+affixed, and the application record carrying the fields the form has no box
+for.
 
 > **A real filing is checked on what it actually carries** (D50). The form has
 > no box for class/type, alcohol content or net contents — item 15 asks for

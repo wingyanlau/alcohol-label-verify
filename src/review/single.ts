@@ -169,6 +169,15 @@ export interface ReviewResult {
     readonly referenceUnverified: boolean
   }
   readonly labelImageUrl: string
+  /**
+   * The submission as filed, when one was uploaded.
+   *
+   * The crop shows what the model was given; this shows what the applicant
+   * sent. A verdict that disagrees with the document — or a crop that caught
+   * the wrong region — is visible only by looking at both. `null` on the typed
+   * path, where there is no filed document and a link to one would be a lie.
+   */
+  readonly sourceUrl: string | null
   readonly contentPurgedAt: null
   readonly timings: { extractMs: number; compareMs: number; totalMs: number }
 }
@@ -186,6 +195,8 @@ export async function reviewOne(
     submissionId: string
     reference: string
     labelImageUrl: string
+    /** Where the uploaded PDF can be fetched, when the caller kept one. */
+    sourceUrl?: string | undefined
     sourceName: string
     env: { LEGIBILITY_FLOOR?: string }
     /**
@@ -304,6 +315,7 @@ export async function reviewOne(
       referenceUnverified: referenceIsUnverified(ref),
     },
     labelImageUrl: opts.labelImageUrl,
+    sourceUrl: opts.sourceUrl ?? null,
     contentPurgedAt: null,
     timings: result.timings,
   }

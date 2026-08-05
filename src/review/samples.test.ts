@@ -88,38 +88,42 @@ describe('serving a sample file', () => {
   })
 })
 
-describe('the real-filing sample (D50)', () => {
+describe('the real filing is a fixture, not a sample (D50)', () => {
   /*
-   * The screen used to say "or feel free to submit a filled application" and
-   * link the blank form. That asked a visitor to do twenty minutes of data
-   * entry to see one case, and most would have uploaded the blank form instead
-   * and got a verdict saying nothing could be read.
+   * F01 — the TTB form filed on its own — was offered here for one revision.
+   * It is a fair test of the region map that reads such a filing, and a poor
+   * demonstration of the system: the paper form has no box for class/type,
+   * alcohol content or net contents, so three of the four comparisons come back
+   * unassessed. To somebody forming a first impression that reads as a tool
+   * that could not read the document.
+   *
+   * It stays in the corpus with authored ground truth, and off the screen.
    */
-  const filed = catalogue.find((s) => s.id === 'F01')
-
-  it('is offered', () => {
-    expect(filed).toBeDefined()
+  it('is not offered as a demo', () => {
+    expect(catalogue.map((s) => s.id)).not.toContain('F01')
+    expect(sampleFileFor('F01', manifest)).toBeNull()
   })
 
-  it('is the form alone, with no separate record page', () => {
-    const entry = manifest.cases.find((c) => c.id === 'F01')
-    expect(entry?.file).toMatch(/form-only/)
-  })
-
-  it('expects the three fields the form has no box for to go unassessed', () => {
-    // The ground truth states it, so a change that started defaulting them —
-    // and producing MATCH against an invented expectation — fails here.
+  it('is still in the corpus, with what it can and cannot be checked against', () => {
     const entry = manifest.cases.find((c) => c.id === 'F01') as
       | { expected: { fields: Record<string, string> } }
       | undefined
+    expect(entry, 'F01 must remain as a fixture').toBeDefined()
+    // The guard that matters: if a future change starts defaulting the three
+    // fields the form has no box for, this is what fails. A default would be
+    // compared against the label, and agreement with an invented expectation is
+    // a false MATCH.
     expect(entry?.expected.fields.classType).toBe('NOT_SUPPLIED')
     expect(entry?.expected.fields.alcoholContent).toBe('NOT_SUPPLIED')
     expect(entry?.expected.fields.netContents).toBe('NOT_SUPPLIED')
-    // And the one the form DOES carry is compared.
     expect(entry?.expected.fields.brandName).toBe('MATCH')
   })
 
-  it('says what is not assessed rather than leaving it to be discovered', () => {
-    expect(filed?.shows).toMatch(/not assessed/i)
+  it('every offered sample is a complete submission', () => {
+    // Two pages: the form, and the record carrying what the form has no box
+    // for. That is the input this system is for.
+    for (const sample of catalogue) {
+      expect(sample.id, sample.id).toMatch(/^L\d\d$/)
+    }
   })
 })

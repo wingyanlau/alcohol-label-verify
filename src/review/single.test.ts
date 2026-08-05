@@ -329,3 +329,46 @@ describe('a filed form, checked as one PDF', () => {
     expect(view.outcome).toBe('DISCREPANCIES_FOUND')
   })
 })
+
+describe('the document the verdict was reached on', () => {
+  /*
+   * Reported from staging: the results panel showed the label crop and nothing
+   * else. The crop is what the model was given; it is not what was filed, and
+   * an agent adjudicating a discrepancy needs the document — a verdict that
+   * disagrees with the form, or a crop that caught the wrong region, is visible
+   * only by looking at both.
+   *
+   * The batch path has shown the submission since it was built. Single review
+   * did not, because it never kept the upload.
+   */
+  const withSource = async (source?: string) =>
+    (
+      await reviewOne(
+        {
+          kind: 'submission',
+          image: new ArrayBuffer(8),
+          mimeType: 'image/png',
+          record: { image: new ArrayBuffer(8), mimeType: 'image/png' },
+        },
+        {
+          provider,
+          submissionId: 's-3',
+          reference: 'ABCD-9012',
+          labelImageUrl: '/review/s-3/label.png',
+          ...(source === undefined ? {} : { sourceUrl: source }),
+          sourceName: 'TTB-F-5100-31.pdf',
+          env: { LEGIBILITY_FLOOR: '30' },
+        },
+      )
+    ).view
+
+  it('carries the submission alongside the crop', async () => {
+    expect((await withSource('/review/s-3/source.pdf')).sourceUrl).toBe('/review/s-3/source.pdf')
+  })
+
+  it('says there is none rather than inventing a link', async () => {
+    // The typed path has no filed document, and a panel pointing at one that
+    // does not exist is worse than a panel that is honestly absent.
+    expect((await withSource()).sourceUrl).toBeNull()
+  })
+})

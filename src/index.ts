@@ -1127,6 +1127,21 @@ export default {
           httpMetadata: { contentType: mimeType },
         })
 
+        // And the submission as filed, on the same terms.
+        //
+        // The crop is what the model was given; this is what the applicant
+        // sent, and an agent adjudicating a discrepancy needs both — a verdict
+        // that disagrees with the document, or a crop that caught the wrong
+        // region, is visible only by looking at them together. The batch path
+        // has shown this since it was built; single review never kept the file
+        // to show. Stored under the same key the batch uses, so the existing
+        // route serves it and the retention sweep already deletes it.
+        if (submissionPdf !== null) {
+          await env.STAGING.put(contentKey(jobId, submissionId), submissionPdf, {
+            httpMetadata: { contentType: 'application/pdf' },
+          })
+        }
+
         const { view, result } = await reviewOne(
           regions === null
             ? { application, image: labelImage, mimeType }
@@ -1141,6 +1156,12 @@ export default {
             submissionId,
             reference,
             labelImageUrl: `/batch/${jobId}/submission/${submissionId}/label.png`,
+            // Only where a document was actually kept. The typed path has none,
+            // and a panel pointing at a file that does not exist is worse than
+            // one that is honestly absent.
+            ...(submissionPdf === null
+              ? {}
+              : { sourceUrl: `/batch/${jobId}/submission/${submissionId}/source.pdf` }),
             sourceName,
             env,
             // The archive, so this verdict binds rules that can be rebuilt
@@ -1161,7 +1182,7 @@ export default {
           `INSERT INTO submission
              (id, job_id, source_name, content_digest, byte_size, content_key, state,
               created_at, reference_code)
-           VALUES (?, ?, ?, ?, ?, NULL, 'COMPLETED', ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, 'COMPLETED', ?, ?)`,
         )
           .bind(
             submissionId,
@@ -1173,6 +1194,11 @@ export default {
             // submission, and the record is a record of what was filed.
             await sha256Hex(submissionPdf ?? (image as ArrayBuffer)),
             (submissionPdf ?? (image as ArrayBuffer)).byteLength,
+            // Recorded so the retention sweep can find it. It was NULL, which
+            // meant a single review's upload was kept until the bucket was
+            // emptied by hand — a retention policy the deployment states and
+            // did not apply (D32).
+            submissionPdf === null ? null : contentKey(jobId, submissionId),
             now,
             reference,
           )
