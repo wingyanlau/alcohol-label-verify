@@ -60,35 +60,38 @@ can enact a rule. It found a real hole on its first run.
 
 ---
 
-## Why a matcher carries this much machinery
+## Why the prototype does more than match
 
-Most of what an agent does is matching, and matching is the easy part. The hard
-part of a compliance *determination* is not comparing two strings — it is being
-able to defend the answer. A verdict that lands on a real filing has to be
-**explainable** (which rule, which values, which citation), **reproducible** (the
-same inputs give the same answer years later, in a dispute), and **attributable**
-(a named person decided, and the record says so). Remove those and this is a
-demo; keep them and it is evidence a compliance division could stand behind.
+Most of an agent's work is matching, and matching is straightforward. The harder
+part of a compliance determination is defending the answer. A verdict on a real
+filing needs three properties:
 
-So the hash-chained audit, the versioned reference data, the bitemporal policy
-archive and the agent-kind boundary are not gold-plating — they are the
-difference between matching labels and producing evidence for a legal
-determination. The matching itself is sub-millisecond; the machinery is what
-makes the matching *usable*.
+- **Explainable** — which rule was applied, which values it compared, and which
+  regulation it cites.
+- **Reproducible** — the same inputs give the same answer years later, if the
+  decision is ever disputed.
+- **Attributable** — a named person made the determination, and the record shows
+  who.
 
-**The scope was drawn deliberately.** A prototype did not strictly need this
-depth, and building it cost the schedule — recorded plainly in
-[docs/exploration-session.md](docs/exploration-session.md). It was chosen because
-the interesting question is not *can a model read a label* (it can) but *what
-would it take to trust one on a federal determination* — which is answered by the
-parts usually skipped. What was left out is named, not overlooked: authentication,
-COLA integration and a runtime rule editor are absent by decision, each with its
-reasoning beside it.
+Without those, the tool is a demo. With them, it produces evidence a compliance
+division can rely on. That is what the hash-chained audit, the versioned
+reference data, the bitemporal policy archive, and the agent-kind boundary are
+for. The comparison itself takes under a millisecond; the rest of the system is
+what makes the comparison usable.
 
-The same discipline reaches the interface. The core review screen is deliberately
-plain — one obvious action, large type, high contrast — for the least confident
-agent on a team half over 50; on a federal system that is a **Section 508**
-obligation before it is a design preference.
+**The scope was a deliberate choice.** A prototype did not need this much depth,
+and building it took longer than a minimal version would have (documented in
+[docs/exploration-session.md](docs/exploration-session.md)). The goal was to
+answer a harder question than "can a model read a label," which it can. The real
+question is what it would take to trust one on a federal determination, and the
+answer lies in the parts that are usually skipped. What was left out is stated,
+not hidden: authentication, COLA integration, and a runtime rule editor are all
+deferred on purpose, each with its reasoning recorded.
+
+Accessibility follows the same principle. The core review screen is intentionally
+plain — one clear action, large type, high contrast — so the least confident
+agent on a team that is half over 50 can use it. On a federal system, that is a
+**Section 508** requirement, not just a design preference.
 
 ---
 
@@ -218,51 +221,50 @@ points at and deliberately did not take.
 
 ## The path to production
 
-A prototype earns its keep by making the next decision cheaper. This one is built
-so the move to production is a set of substitutions at named seams, not a rewrite
-— and so the parts that are hard to get right are the parts already worked out.
+The prototype is built so that moving to production means replacing components at
+defined seams, rather than rewriting the system. The parts that are hardest to
+get right are already in place. What would change:
 
-**Inference behind the firewall.** TTB's network blocks outbound ML endpoints —
-the constraint that half-broke the last vendor pilot. This prototype reaches a
-hosted model because it is standalone and off that network; production moves
-inference on-premise, or to a FedRAMP-authorised endpoint, behind the same
-`ExtractionProvider` seam with everything above it unchanged. Self-hosting was
-weighed and its trade-offs recorded (D10).
+**Inference behind the firewall.** TTB's network blocks outbound connections to
+ML endpoints, which is what broke much of the last vendor pilot. This prototype
+uses a hosted model because it runs standalone, off that network. Production would
+move inference on-premise, or to a FedRAMP-authorised endpoint, behind the same
+`ExtractionProvider` seam, with the rest of the system unchanged. Self-hosting
+was considered, and its trade-offs are recorded (D10).
 
-**A record of authority.** The application data is assumed to arrive as
-structured data — yet the paper form carries only one of the four compared fields,
-found by building against it. Production reads the COLA record, which is the first
-integration question to put to TTB.
+**The application record.** The system assumes application data arrives as
+structured data, but the paper form carries only one of the four compared fields
+(found while building against it). Production would read the COLA record instead.
+This is the first integration question to raise with TTB.
 
-**A verified identity.** The shared credential is a cost control, not a login,
-and is described as exactly that. Sign-in, in-app rule approval and correcting a
-filing are one missing prerequisite — a verified identity — wearing three hats,
-and are the first thing production adds; attribution then moves from *declared* to
-*verified*.
+**Authenticated identity.** The shared credential is a cost control, not a login.
+Sign-in, in-app rule approval, and filing correction all depend on the same
+missing piece: a verified identity. It is the first thing production would add,
+and attribution would then move from declared to verified.
 
-**Retention as policy.** The system already treats retention as an obligation
-rather than a bucket setting — content purged on a stated schedule, the durable
-record kept. Production sets the window to TTB's own policy; the machinery is in
-place.
+**Retention policy.** The system already treats retention as a policy obligation
+rather than a storage setting: content is purged on a stated schedule, and the
+durable record is kept. Production would set the retention window to TTB's own
+policy. The mechanism is already built.
 
-**Measured accuracy.** No accuracy figure is claimed, because the corpus is
-synthetic. Production's first task is a labelled sample of real labels — and the
-deterministic rule engine is the test oracle for it, since every finding is a
-labelled example produced on real traffic at no extra cost.
+**Measured accuracy.** No accuracy figure is claimed here, because the corpus is
+synthetic. Production's first task would be to test against a labelled sample of
+real labels. The deterministic rule engine can serve as the test oracle for that,
+since every finding it produces is a labelled example drawn from real traffic.
 
-**The interface carries forward; the way in changes.** The review-and-decide
-experience — upload, the two readings side by side, the warning checked clause by
-clause, the determination recorded against the recommendation — is
-production-intended and reused nearly as-is. What is evaluation scaffolding, and
-is replaced: the guided landing page, the demo corpus, and the single flat
-navigation that lets a reviewer see every surface without signing in. In
-production the reference surfaces — Audit, Policy, Agents, Measurement — separate
-by role behind authentication, because each already serves a different user
-(auditor, policy owner, operator) that the prototype deliberately collapses into
-one tour.
+**Reusing the interface.** The review-and-decide experience — upload, the two
+readings shown side by side, the warning checked clause by clause, and the
+determination recorded against the recommendation — is production-intended and
+would be reused largely as-is. The evaluation scaffolding would be replaced: the
+guided landing page, the demo corpus, and the single flat navigation that lets a
+reviewer see every screen without signing in. In production, the reference screens
+(Audit, Policy, Agents, Measurement) would be separated by role behind
+authentication, since each already serves a different user (auditor, policy owner,
+operator) that the prototype currently combines into one view.
 
-Full sequencing: [docs/integration-and-delivery.md](docs/integration-and-delivery.md),
-with the production target architecture in [design.md §15](docs/design.md).
+Full sequencing is in
+[docs/integration-and-delivery.md](docs/integration-and-delivery.md), and the
+production target architecture in [design.md §15](docs/design.md).
 
 ---
 
