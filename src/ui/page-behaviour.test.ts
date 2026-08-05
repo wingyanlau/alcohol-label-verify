@@ -956,7 +956,7 @@ describe('the agent register (§19)', () => {
     )
   })
 
-  it('shows no count of what anyone did (D47)', async () => {
+  it('shows no count of what anyone did', async () => {
     // A roster is exactly where a productivity number arrives by accident, and
     // its absence is a decision rather than an omission.
     const { byId } = await openAgents()
@@ -995,15 +995,16 @@ describe('the measurement screen (§16)', () => {
     // of it.
     const { byId } = await openMeasure()
     const words = byId.measureBody?.words() ?? ''
-    expect(words).toMatch(/five-second target, on single review: met/)
-    expect(words).toMatch(/judged on single review alone/)
+    expect(words).toMatch(/Target 5\.00 s p95, single review — met/)
+    expect(words).toMatch(/Batch runs ahead of the agent/)
   })
 
   it('separates the path where somebody waits from the one where nobody does', async () => {
     const { byId } = await openMeasure()
     const words = byId.measureBody?.words() ?? ''
-    expect(words).toContain('Single review — an agent is waiting')
-    expect(words).toContain('Batch — nobody is waiting')
+    expect(words).toContain('Single review')
+    expect(words).toContain('Batch')
+    expect(words).toContain('Response time')
   })
 
   it('shows every figure with the sample it was drawn from', async () => {
@@ -1011,27 +1012,40 @@ describe('the measurement screen (§16)', () => {
     // and a number without its denominator is the kind that gets quoted.
     const { byId } = await openMeasure()
     const words = byId.measureBody?.words() ?? ''
-    expect(words).toMatch(/over 2 reviews/)
-    expect(words).toMatch(/over 4 reads/)
+    // Every row carries its n, so a p95 over two readings is visibly that.
+    expect(words).toMatch(/p50 p95 slowest n/)
   })
 
   it('separates the label read from the record read', async () => {
     const { byId } = await openMeasure()
     const words = byId.measureBody?.words() ?? ''
-    expect(words).toContain('The label artwork')
-    expect(words).toContain('The application record')
+    expect(words).toContain('Reads')
+    expect(words).toContain('Label')
+    expect(words).toContain('Record')
   })
 
   it('says how many reads actually reported a cost', async () => {
     // 8 reads, 4 counted. A total shown flat against "8 reads" would read as
     // the cost of all eight.
     const { byId } = await openMeasure()
-    expect(byId.measureBody?.words()).toMatch(/4 of them counted/)
+    expect(byId.measureBody?.words()).toMatch(/4 of 4/)
   })
 
   it('links the gateway rather than copying its numbers in', async () => {
     const { byId } = await openMeasure()
-    expect(byId.measureBody?.count('a')).toBe(1)
+    // One gateway link, plus the three event-stream examples beside it.
+    expect(byId.measureBody?.count('a')).toBe(4)
+  })
+
+  it('points integration tooling at the event stream', async () => {
+    // The question a stack asks on arrival is "how do I plug this in?", and
+    // both answers — the stream and the vendor's own analytics — belong in the
+    // same place rather than scattered.
+    const { byId } = await openMeasure()
+    const words = byId.measureBody?.words() ?? ''
+    expect(words).toContain('Integration')
+    expect(words).toMatch(/verify the stream rather than trust/i)
+    expect(words).toMatch(/Runtime logs belong to the platform/i)
   })
 
   it('does not fetch until the tab is opened', async () => {

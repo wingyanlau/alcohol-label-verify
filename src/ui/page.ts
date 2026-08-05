@@ -1530,97 +1530,116 @@ export const PAGE_HTML = `<!doctype html>
     var body = byId('measureBody')
     body.textContent = ''
 
-    // The stated criterion first, and its verdict in words. §16: a criterion
-    // without a measurement is an intention rather than a claim.
+    function table(head, rows) {
+      var t = document.createElement('table')
+      t.className = 'metrics'
+      var hr = document.createElement('tr')
+      head.forEach(function (h) { hr.appendChild(el('th', null, h)) })
+      t.appendChild(hr)
+      rows.forEach(function (cells) {
+        var tr = document.createElement('tr')
+        cells.forEach(function (c, i) { tr.appendChild(el('td', i === 0 ? 'name' : 'n', c)) })
+        t.appendChild(tr)
+      })
+      return t
+    }
+
     var v = d.verification || {}
-    var box = el('div')
-    box.appendChild(el('h2', null, 'Against the stated target'))
-    var line = el('div', 'fstatus ' + (v.meetsTarget === true ? 'ok' : v.meetsTarget === false ? 'bad' : 'muted'))
-    line.appendChild(el('span', null, (v.meetsTarget === true ? '✓' : v.meetsTarget === false ? '✗' : '—') + '  '))
-    line.appendChild(document.createTextNode(
-      v.meetsTarget === null || v.meetsTarget === undefined
-        ? 'No single review has been recorded yet, so the target has not been exercised.'
-        : 'The five-second target, on single review: ' + (v.meetsTarget ? 'met' : 'not met')))
-    box.appendChild(line)
-    box.appendChild(el('p', 'note',
-      'The target is about a person waiting, so it is judged on single review alone. Batch checks filings as they arrive — nobody watches it, and its timings are a capacity figure rather than a promise to anyone.'))
+    var rows = []
+    if (v.interactive && v.interactive.count) {
+      rows.push(['Single review', ms(v.interactive.p50), ms(v.interactive.p95),
+        ms(v.interactive.max), String(v.interactive.count)])
+    }
+    if (v.batch && v.batch.count) {
+      rows.push(['Batch', ms(v.batch.p50), ms(v.batch.p95), ms(v.batch.max), String(v.batch.count)])
+    }
 
-    var inter = v.interactive || { count: 0 }
-    if (inter.count) {
-      box.appendChild(el('div', 'freq', 'Single review — an agent is waiting'))
-      box.appendChild(el('div', 'dev',
-        'p50 ' + ms(inter.p50) + ' · p95 ' + ms(inter.p95) + ' · slowest ' + ms(inter.max) +
-        ' · over ' + inter.count + ' review' + (inter.count === 1 ? '' : 's')))
-    }
-    var bat = v.batch || { count: 0 }
-    if (bat.count) {
-      box.appendChild(el('div', 'freq', 'Batch — nobody is waiting'))
-      box.appendChild(el('div', 'dev',
-        'p50 ' + ms(bat.p50) + ' · p95 ' + ms(bat.p95) + ' · slowest ' + ms(bat.max) +
-        ' · over ' + bat.count + ' submission' + (bat.count === 1 ? '' : 's')))
-    }
-    if (v.total && v.total.count) {
-      box.appendChild(el('div', 'dev',
-        'Across both: reading ' + ms(v.extract && v.extract.p50) + ' · comparing ' +
-        ms(v.compare && v.compare.p50) + ' (p50)'))
-    }
-    body.appendChild(box)
+    body.appendChild(el('h2', null, 'Response time'))
+    if (rows.length) body.appendChild(table(['', 'p50', 'p95', 'slowest', 'n'], rows))
+    else body.appendChild(el('p', 'note', 'Nothing checked yet.'))
 
-    // Per region, because the label and the record are different work and an
-    // average of the two hides which one is slow.
+    var target = ms(v.targetMs) + ' p95, single review'
+    var line = el('div', 'verdictline ' +
+      (v.meetsTarget === true ? 'ok' : v.meetsTarget === false ? 'bad' : 'muted'))
+    line.textContent = 'Target ' + target + ' — ' +
+      (v.meetsTarget === true ? 'met' : v.meetsTarget === false ? 'not met' : 'not exercised')
+    body.appendChild(line)
+    body.appendChild(el('p', 'note',
+      'Batch runs ahead of the agent, so its times are capacity rather than anyone waiting.'))
+
     if (d.reads && d.reads.length) {
-      var reads = el('div')
-      reads.appendChild(el('h2', null, 'Each read'))
-      d.reads.forEach(function (r) {
-        var row = el('div', 'finding')
-        row.appendChild(el('div', 'freq', r.region === 'label' ? 'The label artwork' : 'The application record'))
-        row.appendChild(el('div', 'dev',
-          'p50 ' + ms(r.latency.p50) + ' · p95 ' + ms(r.latency.p95) + ' · slowest ' + ms(r.latency.max) +
-          ' · over ' + r.latency.count + ' read' + (r.latency.count === 1 ? '' : 's')))
-        row.appendChild(el('div', 'dev', r.tokensReported + ' of ' + r.latency.count + ' reported a token count'))
-        reads.appendChild(row)
-      })
-      body.appendChild(reads)
+      body.appendChild(el('h2', null, 'Reads'))
+      body.appendChild(table(['', 'p50', 'p95', 'slowest', 'n', 'counted'],
+        d.reads.map(function (r) {
+          return [r.region === 'label' ? 'Label' : 'Record',
+            ms(r.latency.p50), ms(r.latency.p95), ms(r.latency.max),
+            String(r.latency.count), r.tokensReported + ' of ' + r.latency.count]
+        })))
     }
 
-    // What it cost, per reader. "Which model reads best" has a price (B-Q4).
     if (d.cost && d.cost.length) {
-      var cost = el('div')
-      cost.appendChild(el('h2', null, 'What it cost'))
-      d.cost.forEach(function (c) {
-        var row = el('div', 'finding')
-        row.appendChild(el('div', 'freq', c.provider + ' · ' + c.modelId))
-        row.appendChild(el('div', 'dev',
-          num(c.totalTokens) + ' tokens across ' + c.reads + ' read' + (c.reads === 1 ? '' : 's') +
-          (c.reported === c.reads ? '' : ' — ' + c.reported + ' of them counted')))
-        if (c.promptTokens !== null || c.completionTokens !== null) {
-          row.appendChild(el('div', 'dev', 'sent ' + num(c.promptTokens) + ' · returned ' + num(c.completionTokens)))
-        }
-        cost.appendChild(row)
-      })
-      body.appendChild(cost)
+      body.appendChild(el('h2', null, 'Cost'))
+      body.appendChild(table(['Model', 'Reads', 'Sent', 'Returned', 'Total'],
+        d.cost.map(function (c) {
+          return [c.provider + ' · ' + c.modelId, String(c.reads),
+            num(c.promptTokens), num(c.completionTokens), num(c.totalTokens)]
+        })))
     }
 
-    // The vendor's own analytics, linked rather than copied in.
+    // What today's numbers mean for building the real thing. The page exists to
+    // inform a decision, not to display a dashboard, and a reader who cannot
+    // get from a figure to an implication has been given data rather than
+    // information.
+    var signals = []
+    var reads = (d.reads || []).reduce(function (n, r) { return n + r.latency.count }, 0)
+    var tokens = (d.cost || []).reduce(function (n, c) { return n + (c.totalTokens || 0) }, 0)
+    if (reads && tokens) {
+      signals.push(['Cost per submission',
+        Math.round(tokens / (reads / 2)).toLocaleString() + ' tokens',
+        'Near-constant between a clean label and a degraded one, so cost is a rate rather than a distribution. It does not constrain checking everything twice.'])
+    }
+    if (v.compare && v.total && v.total.count) {
+      signals.push(['Where the time goes',
+        'reading ' + ms(v.extract && v.extract.p50) + ', comparing ' + ms(v.compare.p50),
+        'All of it is inference. Optimising the code here buys nothing; capacity and provider choice are the levers.'])
+    }
+    var worst = v.batch && v.batch.count ? v.batch : v.interactive
+    if (worst && worst.count && worst.p50) {
+      signals.push(['The tail',
+        'slowest ' + ms(worst.max) + ' against a median of ' + ms(worst.p50),
+        'Isolated stalls rather than degradation. Production needs a bounded read — a timeout and one retry — or dedicated capacity, so the worst case is chosen rather than inherited.'])
+      signals.push(['Throughput',
+        (600 * (worst.p50 / 1000) / 3600).toFixed(1) + ' machine-hours a day',
+        'At 150,000 filings a year, roughly 600 a working day. Comfortable serially, and it distributes across workers.'])
+    }
+    if (signals.length) {
+      body.appendChild(el('h2', null, 'What this signals for production'))
+      body.appendChild(table(['', 'Today', 'What it means'], signals))
+    }
+
+    body.appendChild(el('h2', null, 'Integration'))
+    var links = el('p', 'dev')
     var g = d.gateway || {}
-    var gw = el('div')
-    gw.appendChild(el('h2', null, 'AI Gateway'))
-    if (g.configured && g.url) {
+    var entries = [
+      ['/events?limit=5', 'Event stream'],
+      ['/events?limit=5&format=ndjson', 'NDJSON'],
+      ['/events?action=decision.recorded', 'Determinations only'],
+    ]
+    if (g.configured && g.url) entries.push([g.url, 'AI Gateway (needs account access)'])
+    entries.forEach(function (pair, i) {
+      if (i) links.appendChild(document.createTextNode('  ·  '))
       var a = document.createElement('a')
-      a.href = g.url
-      a.target = '_blank'
-      a.rel = 'noopener noreferrer'
-      a.textContent = 'Open the gateway analytics (' + g.id + ')'
-      gw.appendChild(a)
-      if (g.requiresAccountAccess) {
-        gw.appendChild(el('span', 'what', '  — needs access to the Cloudflare account'))
-      }
-    }
-    if (g.note) gw.appendChild(el('p', 'note', g.note))
-    body.appendChild(gw)
-
-    if (d.window && d.window.note) body.appendChild(el('p', 'note', d.window.note))
+      a.href = pair[0]; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = pair[1]
+      links.appendChild(a)
+    })
+    body.appendChild(links)
+    body.appendChild(el('p', 'note',
+      'Events carry the chain digests, so a consumer can verify the stream rather than trust it. Identifiers and classifications only, never content. Runtime logs belong to the platform and are not stored here.'))
+    body.appendChild(el('p', 'note',
+      'Times cover the reads and the comparison; rasterisation and queue wait are outside them. Distributions are the most recent ' +
+      ((d.window && d.window.sampleLimit) || 2000) + ' reads; token totals are over every read. Nothing here counts a person.'))
   }
+
 
   function renderPolicy(d) {
     var body = byId('policyBody')

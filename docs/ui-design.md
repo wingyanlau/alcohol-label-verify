@@ -151,6 +151,37 @@ endpoint would 401 and leave the page half-built for exactly that visitor.
 
 ---
 
+### 3b. Measurement — figures, then what they mean
+
+The screen answers two questions and nothing else: **what is this doing today**,
+and **what does that signal for a production design**. It is tables, not prose.
+
+| Section | Content |
+|---|---|
+| Response time | Single review and batch, p50 / p95 / slowest / n, then the target verdict |
+| Reads | Label and record, with how many reported a token count |
+| Cost | Per model: reads, tokens sent, returned, total |
+| **What this signals for production** | Each row: the figure today, and the decision it informs |
+| Integration | Links to the event stream, NDJSON, and the vendor's analytics |
+
+**The signals section is the point.** A reader who cannot get from a number to
+an implication has been handed data rather than information — that cost per
+submission is a rate rather than a distribution, so checking everything twice is
+affordable; that all the time is inference, so optimising this codebase buys
+nothing; that the tail is isolated stalls, so production needs a bounded read
+rather than a faster one.
+
+**The target is judged on single review alone**, because it is a statement about
+a person waiting and batch runs ahead of anyone. Reporting a prepared worklist as
+failing a latency target was a real defect on the deployed screen, and it made
+the system look worse than it is while measuring the wrong thing.
+
+**Prose was cut deliberately.** An earlier revision explained each figure at
+length in the interface. Explanation belongs in these documents; the screen
+should let somebody read the numbers.
+
+---
+
 ## 4. Single Review — Specification
 
 ### 4.1 Regions
@@ -215,7 +246,7 @@ story about how the five-second requirement is met.
 | **Batch** | The work waiting for me | The work |
 | **Single review** | This one case, now | |
 | **Audit** | Does a determination still hold up, and what did I conclude | Reference, ordered by how often it is needed |
-| **Measurement** | What it cost and how long it took, against the stated target | |
+| **Measurement** | What it cost and how long it took, and what that signals for production | |
 | **Agents** | Who and what may act here, and what each may do | |
 | **Policy** | Which rules are in force, from when, approved by whom | |
 
