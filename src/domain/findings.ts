@@ -147,10 +147,20 @@ export function citationFor(ruleId: string, set: PolicySet = POLICY_SET): string
   const rule = set.rules.find((r) => r.id === ruleId)
   if (rule === undefined) return null
   const regulation = set.regulations.find((r) => r.id === rule.regulation)
+  if (regulation === undefined) return null
   // Title 27 is not read from the entry because the contract does not carry it:
   // a section like "5.63" is only meaningful under title 27 in the first place,
   // and this system knows no other title.
-  return regulation === undefined ? null : `27 CFR ${regulation.section}`
+  //
+  // A numbered section already embeds its part — "5.63" is part 5 — so the part
+  // must NOT be repeated. A subpart does not: "subpart I" alone identifies
+  // nothing, and prefixing it gave "27 CFR subpart I", a citation an agent could
+  // not have used with an applicant. Surfaced the day a rule resting on a
+  // subpart was first enacted.
+  const numbered = /^\d/.test(regulation.section)
+  return numbered
+    ? `27 CFR ${regulation.section}`
+    : `27 CFR ${regulation.part}, ${regulation.section}`
 }
 
 /**

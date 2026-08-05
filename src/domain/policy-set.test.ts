@@ -36,6 +36,7 @@ import { POLICY_SET } from './findings.js'
 const RELEASED: Readonly<Record<number, string>> = {
   2: 'c934ed02345c2925',
   3: 'db001feca5f640ca',
+  4: '17e71ef1e1d758f8',
 }
 
 /** The governing content, in a form whose digest cannot depend on key order. */

@@ -20,7 +20,7 @@ import {
   POLICY_SET,
   regulationSourceFor,
 } from './findings.js'
-import type { PolicySet } from './policy.js'
+import type { PolicyRule, PolicySet } from './policy.js'
 import type { ApplicationData, Extraction, ObservedField, WarningVerdict } from './types.js'
 
 const observed = (raw: string | null, unreadable = false): ObservedField => ({
@@ -101,6 +101,27 @@ describe('citing the regulation a rule came from (FR-10)', () => {
   })
 })
 
+describe('citing a regulation that is not a numbered section', () => {
+  /*
+   * Surfaced by enacting DS-MINIMUM-BOTTLING-STRENGTH. Every regulation this
+   * system had cited until then was a numbered section — "5.63" — which already
+   * carries its part, so the citation could be built by prefixing "27 CFR".
+   *
+   * A subpart does not. `27-CFR-5-SUBPART-I` has part 5 and section
+   * "subpart I", and the old builder dropped the part: "27 CFR subpart I",
+   * which identifies nothing. An agent quoting that to an applicant would be
+   * citing a subpart of an unnamed part of an unstated title.
+   */
+  it('keeps the part when the section is not a number', () => {
+    expect(citationFor('DS-MINIMUM-BOTTLING-STRENGTH')).toBe('27 CFR 5, subpart I')
+  })
+
+  it('leaves a numbered section exactly as it was', () => {
+    // The common case must not move: "5.63" already embeds its part.
+    expect(citationFor('DS-BRAND-NAME-PRESENT')).toBe('27 CFR 5.63')
+  })
+})
+
 describe('who is answerable for a rule, and which text it rests on', () => {
   /*
    * Both came back null on every real finding, for opposite reasons.
@@ -149,13 +170,40 @@ describe('who is answerable for a rule, and which text it rests on', () => {
     expect(regulationSourceFor('POLICY-SELECTION')).toBeNull()
   })
 
-  it('records that the enacted rules still carry no quote', () => {
-    // Asserted rather than described, so the day somebody adds provenance to
-    // an enacted rule this fails and they read why it was left alone.
+  it('records which enacted rules can be reviewed from their own quote', () => {
+    /*
+     * This used to assert that NO enacted rule carried a quote, which was true
+     * while the only rules in force were the nine written by hand. Enacting the
+     * six model-drafted ones changed the fact, and the test now records the
+     * split rather than the old absolute — because the split is the thing worth
+     * knowing.
+     *
+     * A rule with a quote can be reviewed on its own terms. One without pins
+     * its regulation by digest and issue date, which is traceable but not
+     * reviewable: checking it means re-reading the regulation (§18.5a). That is
+     * the gap the README calls the recall gap, and it is the ORIGINAL nine that
+     * still have it.
+     */
     const enacted = POLICY_SET.rules.filter((r) => r.status === 'active')
+    const quoted = enacted.filter((r) => r.provenance?.quote !== undefined)
+
     expect(enacted.length).toBeGreaterThan(0)
-    for (const rule of enacted) {
-      expect(rule.provenance?.quote, `${rule.id} now has a quote`).toBeUndefined()
+    expect(quoted.length).toBeGreaterThan(0)
+
+    // Every quoted rule is one a person enacted by name — a rule drafted by a
+    // model cannot be in force without that (D27), and the quote is what makes
+    // the approval reviewable rather than ceremonial.
+    for (const rule of quoted) {
+      expect(rule.approval?.by, `${rule.id} is quoted but names no approver`).toBeTruthy()
+    }
+
+    // And every rule still without one carries its regulation by digest, so
+    // nothing in force is untraceable.
+    for (const rule of enacted.filter((r) => r.provenance?.quote === undefined)) {
+      expect(
+        regulationSourceFor(rule.id)?.digest,
+        `${rule.id} has neither quote nor digest`,
+      ).toBeTruthy()
     }
   })
 })
@@ -224,15 +272,30 @@ describe('a model may propose a rule; only a person may enact one', () => {
     }
   })
 
-  it('applies none of them to a submission while they are drafts', () => {
-    // The property that makes carrying an unapproved proposal safe at all.
-    const draftIds = new Set(POLICY_SET.rules.filter((r) => r.status !== 'active').map((r) => r.id))
-    expect(draftIds.size).toBeGreaterThan(0)
-    for (const productType of GOVERNED_PRODUCT_TYPES) {
-      for (const id of assess(spirits({ productType })).binding.selectedRuleIds) {
-        expect(draftIds.has(id), `${id} selected for ${productType}`).toBe(false)
-      }
+  it('applies no unapproved rule, whether or not the file currently holds one', () => {
+    /*
+     * This used to read the drafts out of the shipped file. All six have since
+     * been enacted, so the file holds none — and a test that depends on one
+     * existing stops testing anything the moment the backlog empties, while
+     * still passing. It now constructs a draft and proves selection refuses it,
+     * which is the property rather than the circumstance.
+     */
+    const draft: PolicyRule = {
+      ...(POLICY_SET.rules.find((r) => r.id === 'DS-BRAND-NAME-PRESENT') as PolicyRule),
+      id: 'TEST-UNAPPROVED',
+      status: 'draft',
     }
+    const withDraft = assessPolicy({
+      application: spirits(),
+      extraction: goodLabel(),
+      warning: warningOk,
+      submittedOn: '2026-08-01',
+      rules: [...POLICY_SET.rules, draft],
+    })
+    expect(withDraft.binding.selectedRuleIds).not.toContain('TEST-UNAPPROVED')
+    // And the rules that ARE in force were still selected, so this did not pass
+    // by selecting nothing at all.
+    expect(withDraft.binding.selectedRuleIds).toContain('DS-BRAND-NAME-PRESENT')
   })
 })
 
@@ -332,9 +395,11 @@ describe('selection — which rules govern this submission (D25)', () => {
     expect(ids).not.toContain('DS-STANDARD-OF-FILL')
   })
 
-  it('never selects a draft rule', () => {
-    // A rule nobody has approved is carried for history, not applied (D27).
-    expect(assess(spirits()).binding.selectedRuleIds).not.toContain('DS-MINIMUM-BOTTLING-STRENGTH')
+  it('now selects the minimum-bottling-strength rule, which was a draft', () => {
+    // It was enacted on 2026-08-05 by a named policy-approver. The test that
+    // asserted its absence has become the record of its arrival — which is what
+    // a rule taking force should look like in a suite.
+    expect(assess(spirits()).binding.selectedRuleIds).toContain('DS-MINIMUM-BOTTLING-STRENGTH')
   })
 
   it('judges a filing by the rules in force when it was filed, not today', () => {

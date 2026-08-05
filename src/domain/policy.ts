@@ -78,6 +78,16 @@ export type Automation = 'advisory' | 'assisted' | 'automatic'
 
 export interface Regulation {
   readonly id: string
+  /**
+   * The CFR part — 4 wine, 5 distilled spirits, 7 malt beverages, 16 warning.
+   *
+   * Present in the data since the set was written and unmodelled until a rule
+   * resting on a *subpart* was enacted: a numbered section like "5.63" already
+   * embeds its part, so nothing had needed it. "subpart I" does not, and the
+   * citation built without it read "27 CFR subpart I" — which identifies
+   * nothing an agent could quote to an applicant.
+   */
+  readonly part: number
   readonly section: string
   readonly heading: string
   /** Verbatim from the regulation's own source note, or null when it has none. */
