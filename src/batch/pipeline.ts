@@ -58,6 +58,19 @@ function intakeLimits(env: Env): IntakeLimits {
   }
 }
 
+/**
+ * Whether this submission has already reached an outcome.
+ *
+ * Its own function so the rule can be tested without a queue, a browser and a
+ * database — and because the states that count as settled are a judgement, not
+ * an obvious fact. `RUNNING` is deliberately NOT settled: a redelivery arriving
+ * while the first attempt is still in flight should not be silently dropped,
+ * because the first attempt may yet fail and leave nothing.
+ */
+export function isAlreadySettled(state: string | null): boolean {
+  return state === 'COMPLETED' || state === 'REJECTED'
+}
+
 /** A deterministic refusal — the same input fails the same way, so never retry. */
 function isDeterministicRefusal(error: unknown): boolean {
   return error instanceof IntakeRejected || error instanceof UnknownFormError
@@ -213,6 +226,38 @@ export async function processItem(
   // seconds rather than each rediscovering the same dead end.
   const abandoned = await stub.abortedReason()
   if (abandoned !== null) return { retry: false }
+
+  // Already judged. Ack and stop.
+  //
+  // Queues deliver AT LEAST once: a message whose consumer did not ack in time
+  // is redelivered even though the work succeeded. Without this the whole
+  // pipeline runs again — two more model calls, and a SECOND verdict for a
+  // submission that already has one, neither superseding the other. The record
+  // then holds two current verdicts for one submission, which is a
+  // contradiction the design otherwise forbids: a correction supersedes, it
+  // does not duplicate.
+  //
+  // Observed, not anticipated. It appeared on the first corpus run after the
+  // batch began reading the record page too (D51): per-item latency roughly
+  // doubled, the slowest items crossed the acknowledgement window, and L06 and
+  // L14 — two of the slower reads — each came back with two verdicts.
+  //
+  // Keyed on the submission's own state rather than on a delivery count, so it
+  // holds however the redelivery arose.
+  const settled = await env.DB.prepare(`SELECT state FROM submission WHERE id = ?`)
+    .bind(submissionId)
+    .first<{ state: string }>()
+  if (isAlreadySettled(settled?.state ?? null)) {
+    emit({
+      event: 'item.redelivered',
+      jobId,
+      submissionId,
+      // A classification, not a sentence (D38, D20).
+      state: settled?.state ?? 'unknown',
+      reason: 'already-settled',
+    })
+    return { retry: false }
+  }
 
   await stub.startItem(submissionId)
 
