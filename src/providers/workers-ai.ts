@@ -24,6 +24,7 @@ import type { GatewaySettings } from './gateway.js'
 import { extractJson } from './json.js'
 import { buildPrompt, PROMPT_VERSION } from './prompt.js'
 import { type FaultKind, messageOf, type Provider, type ProviderSpec } from './types.js'
+import { usageFrom } from './usage.js'
 
 /** Greedy. Narrows variance without pretending to achieve determinism (§8.7.2). */
 const SAMPLING = { temperature: 0, max_tokens: 1024 } as const
@@ -172,6 +173,7 @@ export function createWorkersAiProvider(opts: WorkersAiOptions): Provider {
       )) as unknown
 
       const latencyMs = now() - started
+      const usage = usageFrom(response)
       const served =
         typeof response === 'object' && response !== null
           ? (response as Record<string, unknown>).model
@@ -197,6 +199,9 @@ export function createWorkersAiProvider(opts: WorkersAiOptions): Provider {
           promptVersion: PROMPT_VERSION,
           samplingParameters: { ...SAMPLING },
           latencyMs,
+          // What the read cost, where the vendor said. Absent stays absent
+          // (D52): a zero would claim the read was free.
+          ...(usage === null ? {} : { usage }),
         },
       }
     },

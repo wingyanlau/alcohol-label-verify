@@ -33,6 +33,10 @@ export interface ExtractionRow {
   readonly rasterDpi: number | null
   readonly rawResponse: string
   readonly latencyMs: number
+  /** What the vendor said the read cost. Null where it said nothing (D52). */
+  readonly promptTokens: number | null
+  readonly completionTokens: number | null
+  readonly totalTokens: number | null
 }
 
 export interface FieldVerdictRow {
@@ -86,6 +90,18 @@ export interface VerdictRow {
   /** The two dates that rebuild the rule set (D41, D42). Always written. */
   readonly validOn: string
   readonly asOf: string
+  /**
+   * What the verification itself took, in milliseconds (D52).
+   *
+   * The DOMAIN's stages only: the reads, and the comparison. Rasterisation and
+   * time spent waiting in the queue are outside them, so these are a floor on
+   * what an agent experiences rather than the whole of it — and the surface
+   * that reports them says so, because a figure labelled "total" that silently
+   * omits the slowest stage is worse than no figure.
+   */
+  readonly extractMs: number
+  readonly compareMs: number
+  readonly totalMs: number
 }
 
 export interface PolicyFindingRow {
@@ -179,6 +195,11 @@ function extractionRow(
     rasterDpi,
     rawResponse,
     latencyMs: provenance.latencyMs,
+    // Null where the vendor reported nothing, all the way to the column. A
+    // zero here would say the read was free (D52).
+    promptTokens: provenance.usage?.promptTokens ?? null,
+    completionTokens: provenance.usage?.completionTokens ?? null,
+    totalTokens: provenance.usage?.totalTokens ?? null,
   }
 }
 
@@ -241,6 +262,11 @@ export function buildPersistPlan(
       // have been.
       validOn: result.policy.validOn,
       asOf: result.policy.asOf,
+      // Rounded, because a duration in the record is read by a person and
+      // fractional milliseconds are noise on a five-second target.
+      extractMs: Math.round(result.timings.extractMs),
+      compareMs: Math.round(result.timings.compareMs),
+      totalMs: Math.round(result.timings.totalMs),
     },
     fields: fieldRows(result.fields),
     warning: warningRows(result.warning),
@@ -290,8 +316,9 @@ export async function persistResult(
         .prepare(
           `INSERT INTO extraction
              (id, submission_id, region, method, provider, model_id, prompt_version,
-              sampling, raster_dpi, raw_response, latency_ms, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              sampling, raster_dpi, raw_response, latency_ms, created_at,
+              prompt_tokens, completion_tokens, total_tokens)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           e.id,
@@ -306,6 +333,9 @@ export async function persistResult(
           e.rawResponse,
           e.latencyMs,
           now,
+          e.promptTokens,
+          e.completionTokens,
+          e.totalTokens,
         ),
     )
   }
@@ -317,8 +347,9 @@ export async function persistResult(
            (id, submission_id, outcome, ruleset_version, reference_data_version,
             policy_version, aggregation_version, extraction_ids, created_at,
             warning_legible, policy_set_version, selected_rule_ids,
-            selection_inputs, submitted_on, valid_on, as_of)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            selection_inputs, submitted_on, valid_on, as_of,
+            extract_ms, compare_ms, total_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         plan.verdict.id,
@@ -337,6 +368,9 @@ export async function persistResult(
         plan.verdict.submittedOn,
         plan.verdict.validOn,
         plan.verdict.asOf,
+        plan.verdict.extractMs,
+        plan.verdict.compareMs,
+        plan.verdict.totalMs,
       ),
   )
 

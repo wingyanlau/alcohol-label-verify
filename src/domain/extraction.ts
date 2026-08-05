@@ -82,6 +82,19 @@ export interface ExtractionProvenance {
   readonly promptVersion: string
   readonly samplingParameters: Readonly<Record<string, unknown>>
   readonly latencyMs: number
+  /**
+   * What the read cost, as the vendor counted it (D52).
+   *
+   * Absent where nothing was reported — a vendor that does not count, a model
+   * that omits it, a cached response. Absent must stay absent: a zero would be
+   * a claim that a read was free, and a column of invented zeroes sums to a
+   * number that looks like a measurement.
+   */
+  readonly usage?: {
+    readonly promptTokens: number | null
+    readonly completionTokens: number | null
+    readonly totalTokens: number | null
+  }
 }
 
 export interface ExtractionResult {

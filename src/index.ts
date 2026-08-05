@@ -47,6 +47,7 @@ import { referenceIsUnverified, warningReference } from './domain/reference.js'
 import { registeredUsers, roleLabelFor, userMay } from './domain/users.js'
 import type { Env, WorkMessage } from './env.js'
 import { checkGate, gateChallenge } from './gate.js'
+import { loadMeasurement } from './metrics/measurement.js'
 import { checkImageIntake } from './normalise/image.js'
 import { IntakeRejected, type NormaliseResult } from './normalise/normaliser.js'
 import { rasteriseSubmission } from './normalise/rasterise.js'
@@ -1375,6 +1376,43 @@ export default {
     //
     // It exists because you cannot review what you cannot read, and six rules
     // are currently waiting on exactly that.
+    // What this deployment has done, and what it cost (§16, D52).
+    //
+    // Every figure comes from the record: durations that were always stored,
+    // and token counts that were in each vendor response and discarded until
+    // D52. Nothing here counts a person — reads, models, durations, tokens —
+    // because per-agent throughput is what D47 defers and a metrics page is
+    // exactly where it would arrive by accident.
+    if (pathname === '/measurement' && request.method === 'GET') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+      const measurement = await loadMeasurement(env.DB)
+      return json({
+        ...measurement,
+        // The vendor's own analytics, linked rather than proxied. Pulling them
+        // in would need a Cloudflare API token with analytics scope — more
+        // credential surface behind a gate that exists to limit exactly that —
+        // and would render numbers in this UI that can go stale or fail
+        // silently. The account is addressed as `:account` so the id itself
+        // does not have to appear here.
+        gateway:
+          (env.AI_GATEWAY_ID ?? '') === ''
+            ? {
+                configured: false,
+                url: null,
+                note: 'AI Gateway is not configured for this deployment.',
+              }
+            : {
+                configured: true,
+                id: env.AI_GATEWAY_ID,
+                url: 'https://dash.cloudflare.com/?to=/:account/ai/ai-gateway',
+                note:
+                  'Per-request analytics, token counts, latency and errors, held by Cloudflare. ' +
+                  'Payload logging is off by default (D20) — the request body is a label image ' +
+                  'and the response is what was read from it.',
+              },
+      })
+    }
+
     // Who and what may act here (§19, D46).
     //
     // The register the agent concept draws on, made readable. An audit line

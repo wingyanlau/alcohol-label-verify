@@ -278,6 +278,14 @@ Secrets never appear in `wrangler.jsonc`, in the repository, or in logs (D20).
 The Gemini adapter sends its key in a header rather than a query parameter for
 the same reason: a URL is captured by anything that logs one.
 
+#### Schema 11 — measurement (D52)
+
+`0011_measurement.sql` adds token counts to `extraction` and stage timings to
+`verdict`. Every column is nullable: rows written before it have none, and NULL
+means *not reported* rather than zero. Nothing reads them but `/measurement`, so
+an unmigrated deployment degrades to an empty measurement screen rather than an
+error.
+
 #### The reviewer credentials (D49)
 
 Staging is a public URL that calls a metered API, so it is gated. Two pairs,

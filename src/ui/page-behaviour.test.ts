@@ -243,6 +243,54 @@ function boot(
           }),
       })
     }
+    if (url.includes('/measurement')) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            reads: [
+              {
+                region: 'label',
+                latency: { count: 4, p50: 3000, p95: 9000, max: 9000 },
+                tokensReported: 4,
+              },
+              {
+                region: 'record',
+                latency: { count: 4, p50: 800, p95: 900, max: 900 },
+                tokensReported: 0,
+              },
+            ],
+            verification: {
+              total: { count: 4, p50: 3800, p95: 9900, max: 9900 },
+              extract: { count: 4, p50: 3700, p95: 9800, max: 9800 },
+              compare: { count: 4, p50: 2, p95: 3, max: 3 },
+              meetsTarget: false,
+              targetMs: 5000,
+            },
+            cost: [
+              {
+                provider: 'gemini',
+                modelId: 'gemini-3.5-flash',
+                reads: 8,
+                reported: 4,
+                promptTokens: 4800,
+                completionTokens: 240,
+                totalTokens: 5040,
+              },
+            ],
+            gateway: {
+              configured: true,
+              id: 'ttb-labels',
+              url: 'https://dash.example/gw',
+              note: 'held by Cloudflare',
+            },
+            window: {
+              sampleLimit: 2000,
+              note: 'Distributions are drawn from the most recent 2000 reads.',
+            },
+          }),
+      })
+    }
     if (url.includes('/agents')) {
       return Promise.resolve({
         ok: true,
@@ -803,5 +851,64 @@ describe('the agent register (§19)', () => {
     byId.modeAgents?.click()
     await settle()
     expect(calls.filter((c) => c.includes('/agents')).length).toBe(1)
+  })
+})
+
+describe('the measurement screen (§16)', () => {
+  /*
+   * §16 opens by saying a criterion without a measurement is an intention
+   * rather than a claim. S1 — p95 within five seconds — went unmeasured by the
+   * product itself, knowable only by watching a page and counting.
+   */
+  const openMeasure = async () => {
+    const { byId, settle, calls } = boot()
+    await settle()
+    byId.modeMeasure?.click()
+    await settle()
+    return { byId, calls }
+  }
+
+  it('states the target and whether it is met', async () => {
+    const { byId } = await openMeasure()
+    const words = byId.measureBody?.words() ?? ''
+    expect(words).toContain('S1')
+    expect(words).toMatch(/not met/)
+  })
+
+  it('shows every figure with the sample it was drawn from', async () => {
+    // A p95 over four readings and one over four hundred are different claims,
+    // and a number without its denominator is the kind that gets quoted.
+    const { byId } = await openMeasure()
+    const words = byId.measureBody?.words() ?? ''
+    expect(words).toMatch(/over 4 verifications/)
+    expect(words).toMatch(/over 4 reads/)
+  })
+
+  it('separates the label read from the record read', async () => {
+    const { byId } = await openMeasure()
+    const words = byId.measureBody?.words() ?? ''
+    expect(words).toContain('The label artwork')
+    expect(words).toContain('The application record')
+  })
+
+  it('says how many reads actually reported a cost', async () => {
+    // 8 reads, 4 counted. A total shown flat against "8 reads" would read as
+    // the cost of all eight.
+    const { byId } = await openMeasure()
+    expect(byId.measureBody?.words()).toMatch(/4 of them counted/)
+  })
+
+  it('links the gateway rather than copying its numbers in', async () => {
+    const { byId } = await openMeasure()
+    expect(byId.measureBody?.count('a')).toBe(1)
+  })
+
+  it('does not fetch until the tab is opened', async () => {
+    const { byId, settle, calls } = boot()
+    await settle()
+    expect(calls.filter((c) => c.includes('/measurement'))).toEqual([])
+    byId.modeMeasure?.click()
+    await settle()
+    expect(calls.filter((c) => c.includes('/measurement')).length).toBe(1)
   })
 })

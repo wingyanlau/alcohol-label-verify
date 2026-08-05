@@ -2090,6 +2090,7 @@ plainly in the README, which is the correct handling of a known limitation.
 | D49 | **A shared credential gates the whole deployment** — two pairs, installed as worker secrets, open when unconfigured (§15.4) | Leaving the prototype open; or gating only the expensive routes; or Cloudflare Access | The address is public and checking a label calls a metered service, so anyone who finds it can spend somebody else's quota — and the first sign would be a bill or a hard 429 in the middle of an evaluation. Gating only `/review` and `/batch` would leave `/health/inference`, which is a model call, as the cheapest way in. It is **not authentication and must never be described as such**: one credential, shared, establishing that the caller was given it and nothing about who they are, so D14 still stands and every name in the record is still declared. Two pairs so two people can evaluate at once and either can be revoked without locking out the other. Open when unconfigured because a gate that closed without a credential would brick `wrangler dev` and turn a forgotten secret into an outage. The coordinator's WebSocket is exempt — a browser cannot attach a header to a handshake, it costs nothing to serve, and its job id comes only from a gated call | Easy — one check before routing |
 | D50 | **A second region map for a form filed on its own** — the record is read from page 1 above the affix box, and the three fields the paper form has no box for come back `NOT_SUPPLIED` (§8.6.1) | Defaulting those three fields so a real filing produces a full comparison; or leaving real filings unsupported | The corpus pairs the form's page 1 with a COLAs Online record page; a genuine filing has instruction pages there instead, so cropping page 2 read the instructions and reported that nothing could be checked. Supplying defaults was the tempting fix and is the dangerous one: a default is compared against the label, and a label agreeing with an invented expectation is a false MATCH — the failure direction the whole design exists to avoid (§8.3.1). `NOT_SUPPLIED` already means *not assessed*, which is what is true. What the form does carry is item 5, which selects the governing regulation, and item 6 — so the policy findings, which read the label rather than the record, all still apply | Easy — a map, a crop, and a page-count discriminator |
 | D51 | **The batch reads the record page, like every other path.** The corpus's declared record is no longer used as application data (§8.8.2) | Keeping the short-circuit for its cost saving, and for the fabrication it defended against | It made the batch and the single-review path two different checks of the same file: one trusting a value from a build artefact, the other reading pixels. The two could disagree about one submission while both looked correct, and only one of them was what an upload would get — so the corpus proved nothing about the path a real submission takes. The cost is real (two model calls per item rather than one, and the record page still comes from a build-time raster, so no extra browser launch). The defence it provided is real too: a record extraction was once observed inventing "Old Forester" for a compliant label. That is exactly what the extraction contract, the confidence floor and `UNREADABLE` exist to catch, and routing around it meant the corpus never exercised them | Easy to make, and it doubles inference per run |
+| D52 | **What a read cost is recorded, and the stated target is measured** — token counts on `extraction`, stage timings on `verdict`, and a surface reporting both (§16.5) | Leaving usage to AI Gateway alone; or reporting latency without cost | §16 opens by saying a criterion without a measurement is an intention rather than a claim, and S1 (p95 ≤ 5s) then went unmeasured by the product itself — knowable only by watching a page and counting. The token counts were in every vendor response and were discarded, which is the gap AI Gateway was added to close from *outside* the system; recording them puts cost beside the verdict it bought, and makes B-Q4's "which model reads best" a question with a price attached. Every column is nullable and NULL means *not reported* — a zero would claim a read was free, and a column of invented zeroes sums to something that looks like a measurement. The timings cover the reads and the comparison only, so they are a floor on what an agent experiences, and the surface says so rather than labelling them "total" | Easy — three columns, a parser, one endpoint |
 
 ---
 
@@ -2215,6 +2216,40 @@ real and it is somebody's personal account.
 §9.4 states what the running system emits. This section connects the three and,
 critically, **records what was actually measured** — without which a criterion is
 an intention rather than a claim.*
+
+### 16.0a What the deployment measures of itself (D52)
+
+Until D52 this section described measurements taken by hand. The running
+system now records two things it always produced and always threw away:
+
+| Recorded | Where | Why it was missing |
+|---|---|---|
+| Token counts per read | `extraction.prompt_tokens` / `completion_tokens` / `total_tokens` | Present in every vendor response; the adapters discarded them |
+| Stage timings per verdict | `verdict.extract_ms` / `compare_ms` / `total_ms` | Computed on every verification and never persisted |
+
+`GET /measurement` reports them, and the Measurement screen renders it. Three
+things it is careful about:
+
+- **Every figure carries its sample.** A p95 over four readings and a p95 over
+  four hundred are different claims, and a number without its denominator is the
+  kind that gets quoted in a slide.
+- **NULL is not zero.** A vendor that reports no usage, a cached response, a row
+  written before the migration — all stay absent. A zero would say the read was
+  free, and summing invented zeroes understates a bill.
+- **It does not claim to be end-to-end.** The timings cover the reads and the
+  comparison. Rasterisation and queue wait are outside them, so what is reported
+  is a *floor* on what an agent experiences. A figure labelled "total" that
+  silently omitted the slowest stage would be worse than no figure.
+
+**AI Gateway is linked, not proxied.** Pulling its analytics in would need a
+Cloudflare API token with analytics scope — more credential surface behind a
+gate that exists to limit exactly that (D49) — and would render vendor numbers
+in this UI where they can go stale or fail silently. The gateway is already the
+record of what was spent; a link is the honest way to reach it.
+
+**Nothing here counts a person.** Reads, models, durations, tokens. Per-agent
+throughput is what D47 defers, and a metrics surface is precisely where it would
+arrive by accident.
 
 ### 16.1 Baselines
 

@@ -31,6 +31,7 @@ import { toBase64 } from './base64.js'
 import { extractJson } from './json.js'
 import { buildPrompt, PROMPT_VERSION } from './prompt.js'
 import { type FaultKind, messageOf, type Provider, type ProviderSpec } from './types.js'
+import { type TokenUsage, usageFrom } from './usage.js'
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models'
 
@@ -344,6 +345,9 @@ export function createGeminiProvider(opts: GeminiOptions): Provider {
           promptVersion: PROMPT_VERSION,
           samplingParameters: { ...SAMPLING },
           latencyMs,
+          // What the read cost, where the vendor said. Absent stays absent
+          // (D52): a zero would claim the read was free.
+          ...(usageFrom(envelope) === null ? {} : { usage: usageFrom(envelope) as TokenUsage }),
         },
       }
     },

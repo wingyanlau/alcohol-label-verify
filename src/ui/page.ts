@@ -228,6 +228,7 @@ export const PAGE_HTML = `<!doctype html>
       <div class="refs" role="tablist" aria-label="How this system is governed">
         <button id="modePolicy" type="button" class="ref" role="tab" aria-selected="false">Policy</button>
         <button id="modeAgents" type="button" class="ref" role="tab" aria-selected="false">Agents</button>
+        <button id="modeMeasure" type="button" class="ref" role="tab" aria-selected="false">Measurement</button>
       </div>
     </div>
   </div>
@@ -251,6 +252,17 @@ export const PAGE_HTML = `<!doctype html>
     <p class="lede">Everyone and everything this deployment recognises, and what each may do.
       The model reads, the rules compare, the human decides — and the code refuses the rest.</p>
     <div id="agentsBody"></div>
+  </section>
+
+  <!-- What this deployment has done, and what it cost (§16, D52). Read only.
+       §16 opens by saying a criterion without a measurement is an intention
+       rather than a claim; S1 went unmeasured by the product itself until
+       this. -->
+  <section id="measure" class="hidden">
+    <h1>Measurement</h1>
+    <p class="lede">What this deployment has actually done, taken from the record rather than from a log.
+      Nothing here counts a person: reads, models, durations and tokens.</p>
+    <div id="measureBody"></div>
   </section>
 
   <!-- Single review (§4). One submission, checked now — and the same input the
@@ -745,6 +757,7 @@ export const PAGE_HTML = `<!doctype html>
     { mode: 'batch', section: 'batchHome', tab: 'modeBatch' },
     { mode: 'policy', section: 'policy', tab: 'modePolicy' },
     { mode: 'agents', section: 'agents', tab: 'modeAgents' },
+    { mode: 'measure', section: 'measure', tab: 'modeMeasure' },
   ]
 
   singleInit()
@@ -1127,6 +1140,112 @@ export const PAGE_HTML = `<!doctype html>
     return row
   }
 
+  /**
+   * What this deployment has done, and what it cost (§16, D52).
+   *
+   * Deliberately plain. Every figure carries the sample it was drawn from,
+   * because a p95 over four readings and a p95 over four hundred are different
+   * claims and only one of them is worth acting on — and a number without its
+   * denominator is the kind that gets quoted in a slide.
+   */
+  var measureLoaded = false
+  function loadMeasurement() {
+    if (measureLoaded) return
+    measureLoaded = true
+    var body = byId('measureBody')
+    body.textContent = 'Loading…'
+    fetch('/measurement')
+      .then(function (r) { if (!r.ok) throw new Error('unavailable'); return r.json() })
+      .then(function (d) { renderMeasurement(d) })
+      .catch(function () {
+        measureLoaded = false
+        body.textContent = ''
+        body.appendChild(el('p', 'err', 'The measurement could not be loaded. Please try again in a moment.'))
+      })
+  }
+
+  function ms(v) { return v === null || v === undefined ? '—' : (v / 1000).toFixed(2) + ' s' }
+  function num(v) { return v === null || v === undefined ? 'not reported' : String(v).replace(/B(?=(d{3})+(?!d))/g, ',') }
+
+  function renderMeasurement(d) {
+    var body = byId('measureBody')
+    body.textContent = ''
+
+    // The stated criterion first, and its verdict in words. §16: a criterion
+    // without a measurement is an intention rather than a claim.
+    var v = d.verification || {}
+    var box = el('div')
+    box.appendChild(el('h2', null, 'Against the stated target'))
+    var line = el('div', 'fstatus ' + (v.meetsTarget === true ? 'ok' : v.meetsTarget === false ? 'bad' : 'muted'))
+    line.appendChild(el('span', null, (v.meetsTarget === true ? '✓' : v.meetsTarget === false ? '✗' : '—') + '  '))
+    line.appendChild(document.createTextNode(
+      v.meetsTarget === null || v.meetsTarget === undefined
+        ? 'Nothing has been checked yet, so there is nothing to judge.'
+        : 'S1 — 95% of verifications within ' + ms(v.targetMs) + ': ' +
+          (v.meetsTarget ? 'met' : 'not met')))
+    box.appendChild(line)
+    if (v.total && v.total.count) {
+      box.appendChild(el('div', 'dev',
+        'p50 ' + ms(v.total.p50) + ' · p95 ' + ms(v.total.p95) + ' · slowest ' + ms(v.total.max) +
+        ' · over ' + v.total.count + ' verification' + (v.total.count === 1 ? '' : 's')))
+      box.appendChild(el('div', 'dev',
+        'Reading ' + ms(v.extract && v.extract.p50) + ' · comparing ' + ms(v.compare && v.compare.p50) + ' (p50)'))
+    }
+    body.appendChild(box)
+
+    // Per region, because the label and the record are different work and an
+    // average of the two hides which one is slow.
+    if (d.reads && d.reads.length) {
+      var reads = el('div')
+      reads.appendChild(el('h2', null, 'Each read'))
+      d.reads.forEach(function (r) {
+        var row = el('div', 'finding')
+        row.appendChild(el('div', 'freq', r.region === 'label' ? 'The label artwork' : 'The application record'))
+        row.appendChild(el('div', 'dev',
+          'p50 ' + ms(r.latency.p50) + ' · p95 ' + ms(r.latency.p95) + ' · slowest ' + ms(r.latency.max) +
+          ' · over ' + r.latency.count + ' read' + (r.latency.count === 1 ? '' : 's')))
+        row.appendChild(el('div', 'dev', r.tokensReported + ' of ' + r.latency.count + ' reported a token count'))
+        reads.appendChild(row)
+      })
+      body.appendChild(reads)
+    }
+
+    // What it cost, per reader. "Which model reads best" has a price (B-Q4).
+    if (d.cost && d.cost.length) {
+      var cost = el('div')
+      cost.appendChild(el('h2', null, 'What it cost'))
+      d.cost.forEach(function (c) {
+        var row = el('div', 'finding')
+        row.appendChild(el('div', 'freq', c.provider + ' · ' + c.modelId))
+        row.appendChild(el('div', 'dev',
+          num(c.totalTokens) + ' tokens across ' + c.reads + ' read' + (c.reads === 1 ? '' : 's') +
+          (c.reported === c.reads ? '' : ' — ' + c.reported + ' of them counted')))
+        if (c.promptTokens !== null || c.completionTokens !== null) {
+          row.appendChild(el('div', 'dev', 'sent ' + num(c.promptTokens) + ' · returned ' + num(c.completionTokens)))
+        }
+        cost.appendChild(row)
+      })
+      body.appendChild(cost)
+    }
+
+    // The vendor's own analytics, linked rather than copied in.
+    var g = d.gateway || {}
+    var gw = el('div')
+    gw.appendChild(el('h2', null, 'AI Gateway'))
+    if (g.configured && g.url) {
+      var a = document.createElement('a')
+      a.href = g.url
+      a.target = '_blank'
+      a.rel = 'noopener noreferrer'
+      a.textContent = 'Open the gateway analytics (' + g.id + ')'
+      gw.appendChild(a)
+    }
+    if (g.note) gw.appendChild(el('p', 'note', g.note))
+    body.appendChild(gw)
+
+    if (d.window && d.window.note) body.appendChild(el('p', 'note', d.window.note))
+  }
+
   function renderPolicy(d) {
     var body = byId('policyBody')
     body.textContent = ''
@@ -1203,6 +1322,7 @@ export const PAGE_HTML = `<!doctype html>
     })
     if (mode === 'policy') loadPolicy()
     if (mode === 'agents') loadAgents()
+    if (mode === 'measure') loadMeasurement()
   }
 
   function clearFieldError(id) {
