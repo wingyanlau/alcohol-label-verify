@@ -1,0 +1,104 @@
+{
+  "$proposal": "ABANDONED — hand-selected quotes are not chosen well enough to be worth applying. See docs/provenance-proposal.md. The three source documents and their digests are correct and reusable; the quote selection is the part that needs retrieval rather than string slicing.",
+  "addToSourceDocuments": [
+    {
+      "id": "DOC-ECFR-27-PART-4",
+      "title": "eCFR — 27 CFR part 4, full text as issued 2026-07-31",
+      "url": "https://www.ecfr.gov/api/versioner/v1/full/2026-07-31/title-27.xml?part=4",
+      "digest": "9059fcb15c2cd350",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-ECFR-27-PART-5",
+      "title": "eCFR — 27 CFR part 5, full text as issued 2026-07-31",
+      "url": "https://www.ecfr.gov/api/versioner/v1/full/2026-07-31/title-27.xml?part=5",
+      "digest": "2b24904b3b10adda",
+      "retrievedAt": "2026-08-04"
+    },
+    {
+      "id": "DOC-ECFR-27-PART-16",
+      "title": "eCFR — 27 CFR part 16, full text as issued 2026-07-31",
+      "url": "https://www.ecfr.gov/api/versioner/v1/full/2026-07-31/title-27.xml?part=16",
+      "digest": "60d6e204b84398ac",
+      "retrievedAt": "2026-08-04"
+    }
+  ],
+  "provenanceByRuleId": {
+    "DS-BRAND-NAME-PRESENT": {
+      "sourceDocument": "DOC-ECFR-27-PART-5",
+      "section": "27 CFR 5.63",
+      "quote": "Distilled spirits containers must bear a label or labels (as defined in § 5.61) containing the following information within the same field of vision (which means a single side of a container (for a cylindrical container, a side is 40 percent of the circumference) where all of the pieces of information can be viewed simultaneously without the need to turn the container): (1) Brand name, in accordance with § 5.64;",
+      "extractedBy": "model",
+      "model": "claude-opus-5",
+      "extractedAt": "2026-08-04"
+    },
+    "DS-CLASS-TYPE-PRESENT": {
+      "sourceDocument": "DOC-ECFR-27-PART-5",
+      "section": "27 CFR 5.63",
+      "quote": "(2) Class, type, or other designation, in accordance with subpart I of this part;",
+      "extractedBy": "model",
+      "model": "claude-opus-5",
+      "extractedAt": "2026-08-04"
+    },
+    "DS-ALCOHOL-CONTENT-PRESENT": {
+      "sourceDocument": "DOC-ECFR-27-PART-5",
+      "section": "27 CFR 5.63",
+      "quote": "and (3) Alcohol content, in accordance with § 5.65.",
+      "extractedBy": "model",
+      "model": "claude-opus-5",
+      "extractedAt": "2026-08-04"
+    },
+    "DS-ALCOHOL-CONTENT-FORMAT": {
+      "sourceDocument": "DOC-ECFR-27-PART-5",
+      "section": "27 CFR 5.65",
+      "quote": "The alcohol content statement must be expressed in one of the following formats: (A) “Alcohol ____ percent by volume”; (B) “____ percent alcohol by volume”; or (C) “Alcohol by volume ____ percent.” (ii) Any of the words or symbols may be enclosed in parentheses and authorized abbreviations may be used with or without a period. The alcohol content statement does not have to appear with quotation marks. (3) The statements listed in paragraph (b)(2)(i) of this section must appear as shown, except that the following abbreviations may be used: Alcohol may be abbreviated as “alc”; percent may be represented by the percent symbol “%”; alcohol and volume may be separated by a slash “/” in lieu of the word “by”; and volume may be abbreviated as “vol”.",
+      "extractedBy": "model",
+      "model": "claude-opus-5",
+      "extractedAt": "2026-08-04"
+    },
+    "DS-PROOF-CONSISTENT": {
+      "sourceDocument": "DOC-ECFR-27-PART-5",
+      "section": "27 CFR 5.65",
+      "quote": "A statement of alcohol content must be expressed as a percentage of alcohol by volume.",
+      "extractedBy": "model",
+      "model": "claude-opus-5",
+      "extractedAt": "2026-08-04"
+    },
+    "DS-NET-CONTENTS-PRESENT": {
+      "sourceDocument": "DOC-ECFR-27-PART-5",
+      "section": "27 CFR 5.70",
+      "quote": "The volume of spirits in the container must appear on a label as a net contents statement.",
+      "extractedBy": "model",
+      "model": "claude-opus-5",
+      "extractedAt": "2026-08-04"
+    },
+    "DS-STANDARD-OF-FILL": {
+      "sourceDocument": "DOC-ECFR-27-PART-5",
+      "section": "27 CFR 5.203",
+      "quote": "The following metric standards of fill are authorized for distilled spirits, whether domestically bottled or imported: (1) 3.75 Liters. (2) 3 Liters. (3) 2 Liters. (4) 1.8 Liters. (5) 1.75 Liters. (6) 1.5 Liters. (7) 1.00 Liter. (8) 945 mL. (9) 900 mL. (10) 750 mL. (11) 720 mL. (12) 710 mL. (13) 700 mL. (14) 570 mL. (15) 500 mL. (16) 475 mL. (17) 375 mL. (18) 355 mL. (19) 350 mL. (20) 331 mL. (21) 250 mL. (22) 200 mL. (23) 187 mL. (24) 100 mL. (25) 50 mL.",
+      "extractedBy": "model",
+      "model": "claude-opus-5",
+      "extractedAt": "2026-08-04"
+    },
+    "WINE-STANDARD-OF-FILL": {
+      "sourceDocument": "DOC-ECFR-27-PART-4",
+      "section": "27 CFR 4.72",
+      "quote": "The standards of fill for wine are the following: (1) 3 liters. (2) 2.25 liters. (3) 1.8 liters. (4) 1.5 liters. (5) 1 liter. (6) 750 milliliters. (7) 720 milliliters. (8) 700 milliliters. (9) 620 milliliters. (10) 600 milliliters. (11) 568 milliliters. (12) 550 milliliters. (13) 500 milliliters. (14) 473 milliliters. (15) 375 milliliters. (16) 360 milliliters. (17) 355 milliliters. (18) 330 milliliters. (19) 300 milliliters. (20) 250 milliliters. (21) 200 milliliters. (22) 187 milliliters. (23) 180 milliliters. (24) 100 milliliters. (25) 50 milliliters.",
+      "extractedBy": "model",
+      "model": "claude-opus-5",
+      "extractedAt": "2026-08-04"
+    },
+    "HEALTH-WARNING-TEXT": {
+      "sourceDocument": "DOC-ECFR-27-PART-16",
+      "section": "27 CFR 16.21",
+      "quote": "There shall be stated on the brand label or separate front label, or on a back or side label, separate and apart from all other information, the following statement: GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+      "extractedBy": "model",
+      "model": "claude-opus-5",
+      "extractedAt": "2026-08-04"
+    }
+  },
+  "approvalToAddToEachRule": {
+    "by": "<<< NAME OF THE APPROVER >>>",
+    "at": "<<< YYYY-MM-DD >>>"
+  }
+}
