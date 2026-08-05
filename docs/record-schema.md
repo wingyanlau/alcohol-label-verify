@@ -245,7 +245,45 @@ Sixteen, and every one serves a query the system actually makes:
 
 ---
 
-## 10. Migration history
+## 10. Does the schema actually support an audit?
+
+*Tested rather than asserted. Re-reading a verdict (`POST /audit/reread`) tries
+to reconstitute the conditions of the original run from the record alone, and
+reports each one as restored or not. It is a probe for schema completeness, and
+it found two gaps.*
+
+| Condition | Recorded as | Restorable? |
+|---|---|---|
+| Which model read it | `extraction.provider`, `extraction.model_id` | **Yes** — the provider is rebuilt for the recorded model, if a credential for that vendor is still configured |
+| Which regulations applied | `verdict.valid_on`, `as_of`, the bitemporal archive | **Yes** — `ruleSetAsAt` rebuilds the rule set as it stood |
+| What selection ran on | `verdict.selection_inputs` | **Yes** (D26) |
+| At what resolution | `extraction.raster_dpi` | **Yes** |
+| Whether the warning was legible | `verdict.warning_legible` | **Yes** — stored because it cannot be recomputed |
+| **Which instruction was used** | `extraction.prompt_version` | **No** — the version *identifies* the prompt; it does not *contain* it |
+| **With what parameters** | `extraction.sampling` | **Stored, not applicable** — each adapter uses a compiled-in constant and nothing accepts them back |
+
+### The two gaps, and what they cost
+
+**A superseded prompt cannot be rebuilt.** `label-extract@2` names an
+instruction that exists only in the deployed source. Re-reading a verdict
+produced under `@1` compares two different questions, and the endpoint says so
+rather than presenting the comparison as a stability measurement. Closing it
+means storing the prompt *text* — or its digest against a versioned store —
+not just the label.
+
+**Sampling parameters are recorded and cannot be re-applied.** Smaller: the
+adapters set temperature to zero in both cases, so the practical divergence is
+nil. But "recorded" and "reproducible" are different claims and the record
+currently supports only the first.
+
+**Neither gap affects replay**, which needs no model at all. They affect the
+stronger claim — *put the same filing to the same reader under the same
+conditions and see what comes back* — and that is precisely why the exercise was
+worth running against the schema rather than reasoning about it.
+
+---
+
+## 11. Migration history
 
 | | |
 |---|---|

@@ -1655,15 +1655,18 @@ export default {
 
       const recorded = (
         await env.DB.prepare(
-          `SELECT region, raw_response, model_id, prompt_version
+          `SELECT region, raw_response, provider, model_id, prompt_version, sampling, raster_dpi
              FROM extraction WHERE submission_id = ?1 ORDER BY created_at`,
         )
           .bind(submissionId)
           .all<{
             region: string
             raw_response: string
+            provider: string | null
             model_id: string | null
             prompt_version: string | null
+            sampling: string | null
+            raster_dpi: number | null
           }>()
       ).results
       if (recorded.length === 0) return json({ error: 'not_found', reason: 'no reading' }, 404)
@@ -1711,9 +1714,30 @@ export default {
               maxPageCount: Number(env.MAX_PAGE_COUNT),
               maxPixels: Number(env.MAX_PIXELS),
             },
-            dpi: Number(env.RASTER_DPI),
+            // The resolution the verdict was rendered at, from the record —
+            // not today's setting. An UNREADABLE is partly a property of the
+            // DPI this system chose, so re-reading at a different one compares
+            // two different questions.
+            dpi: recorded[0]?.raster_dpi ?? Number(env.RASTER_DPI),
           }))
-        const provider = createProvider(env)
+
+        // Rebuild the reader the verdict was produced by, from the record.
+        //
+        // This is the point of the exercise as much as the comparison is: if
+        // the conditions of a run cannot be reconstituted from what was stored,
+        // the schema does not support an audit — it supports a description of
+        // one. Each condition below is either restored or reported as
+        // irrecoverable, and the response says which.
+        const readerSpec = recorded[0]
+        const wantProvider = (readerSpec?.provider ?? '').trim()
+        const wantModel = (readerSpec?.model_id ?? '').trim()
+        const canRestoreReader =
+          wantProvider !== '' &&
+          wantModel !== '' &&
+          wantProvider === (env.MODEL_PROVIDER ?? '').trim()
+        const provider = canRestoreReader
+          ? createProvider({ ...env, MODEL_ID: wantModel })
+          : createProvider(env)
 
         const comparisons = []
         for (const row of recorded) {
@@ -1749,6 +1773,50 @@ export default {
           submissionId,
           regions: comparisons,
           identical: comparisons.every((c) => c.identical),
+          // What the record could and could not put back. A re-read is only as
+          // meaningful as the conditions it managed to restore, and an audit
+          // that cannot say which were restored is not an audit.
+          conditions: {
+            model: {
+              recorded: wantModel || 'unrecorded',
+              restored: canRestoreReader,
+              ...(canRestoreReader
+                ? {}
+                : {
+                    reason:
+                      wantProvider === ''
+                        ? 'no provider recorded against the reading'
+                        : `the verdict was read by "${wantProvider}" and this deployment is configured for "${(env.MODEL_PROVIDER ?? '').trim() || 'nothing'}" — a credential for the original vendor would be needed`,
+                  }),
+            },
+            prompt: {
+              recorded: readerSpec?.prompt_version ?? 'unrecorded',
+              // The version identifies the instruction; it does not contain it.
+              // A superseded prompt cannot be rebuilt, so a re-read after a
+              // prompt change compares two different questions and says so.
+              restored: readerSpec?.prompt_version === PROMPT_VERSION,
+              ...(readerSpec?.prompt_version === PROMPT_VERSION
+                ? {}
+                : {
+                    reason:
+                      'the record stores the prompt VERSION, not its text. A superseded ' +
+                      'instruction cannot be rebuilt from what was kept — a gap in the schema, ' +
+                      'not in this endpoint.',
+                  }),
+            },
+            sampling: {
+              recorded: readerSpec?.sampling ?? 'unrecorded',
+              restored: false,
+              reason:
+                'the parameters are recorded but each adapter applies a compiled-in constant; ' +
+                'nothing accepts them back. A second gap, and a smaller one — temperature is ' +
+                'zero in both.',
+            },
+            rasterDpi: {
+              recorded: readerSpec?.raster_dpi ?? null,
+              restored: shipped !== null || readerSpec?.raster_dpi != null,
+            },
+          },
           renderedFrom:
             shipped === null
               ? 'rasterised again from the retained PDF'

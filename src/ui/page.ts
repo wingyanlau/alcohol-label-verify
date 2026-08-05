@@ -928,6 +928,27 @@ export const PAGE_HTML = `<!doctype html>
     out.appendChild(line)
     if (b.renderedFrom) out.appendChild(el('div', 'dev', 'Read from ' + b.renderedFrom + '.'))
 
+    // What the record could and could not put back.
+    //
+    // A re-read is only as meaningful as the conditions it restored, and this
+    // is where the record is tested as much as the model is: a condition it
+    // cannot reconstitute is a gap in what was stored, and saying so is more
+    // useful than a comparison that quietly used today's settings.
+    var c = b.conditions
+    if (c) {
+      out.appendChild(el('div', 'freq', 'Conditions of the original run'))
+      ;[['model', 'The reader'], ['prompt', 'The instruction'], ['sampling', 'The parameters'], ['rasterDpi', 'The resolution']]
+        .forEach(function (pair) {
+          var k = c[pair[0]]
+          if (!k) return
+          var row = el('div', 'dev')
+          row.textContent = (k.restored ? '✓ ' : '— ') + pair[1] + ': ' +
+            (k.recorded === null || k.recorded === undefined ? 'not recorded' : String(k.recorded)) +
+            (k.restored ? ' (restored)' : ' — ' + (k.reason || 'not restored'))
+          out.appendChild(row)
+        })
+    }
+
     ;(b.regions || []).forEach(function (r) {
       var title = r.region === 'label' ? 'The label artwork' : 'The application record'
       out.appendChild(el('div', 'freq', title + (r.identical ? ' — unchanged' : ' — differs')))
