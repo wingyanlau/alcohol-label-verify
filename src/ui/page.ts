@@ -963,8 +963,13 @@ export const PAGE_HTML = `<!doctype html>
 
     var foot = el('div', 'rule')
     var bits = [r.regulation || 'no citation']
-    if (r.approvedBy) bits.push('approved by ' + r.approvedBy)
-    else bits.push('NOT APPROVED')
+    if (r.approvedBy) {
+      // Which assurance the reader has. "Covered by the set's approval" and
+      // "this person signed this rule" are not the same claim.
+      bits.push((r.approvalInherited ? 'covered by the set approval of ' : 'approved by ') + r.approvedBy)
+    } else {
+      bits.push('NOT APPROVED')
+    }
     if (r.proposedBy) bits.push('proposed by ' + r.proposedBy)
     foot.textContent = bits.join(' · ')
     wrap.appendChild(foot)

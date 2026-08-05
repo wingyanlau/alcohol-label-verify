@@ -10,6 +10,7 @@
 import { type Agent, DEPLOY_AGENT, humanAgent } from '../batch/agent.js'
 import { appendAudit } from '../batch/audit.js'
 import { sha256Hex } from '../batch/digest.js'
+import { POLICY_SET } from '../domain/findings.js'
 import type { PolicyRule } from '../domain/policy.js'
 import {
   type ArchivedRule,
@@ -125,6 +126,14 @@ export interface ArchiveEntry {
   readonly retiredAt: string | null
   readonly approvedBy: string | null
   readonly approvedAt: string | null
+  /**
+   * Whether that approval is the set's rather than the rule's own.
+   *
+   * Shown, not hidden: "covered by the set's approval" and "this person signed
+   * this rule" are different assurances, and a reviewer deciding whether to
+   * trust a rule should be told which one they have.
+   */
+  readonly approvalInherited: boolean
   /** The words it was drawn from, where the rule records any. */
   readonly quote: string | null
   readonly sourceDocument: string | null
@@ -189,8 +198,18 @@ export async function listArchive(db: D1Database): Promise<ArchiveEntry[]> {
       effectiveTo: r.effective_to,
       recordedAt: r.recorded_at,
       retiredAt: r.retired_at,
-      approvedBy: r.approved_by,
+      // Who is answerable, resolved the same way the finding and the enactment
+      // resolve it — and NOT the same way for a draft.
+      //
+      // A rule in force was approved: D27 admits no other way for it to be in
+      // force, and where it names no approver of its own the SET's covers it.
+      // A draft has not been approved by anyone, and inheriting there would
+      // put a person's name against a rule they have not seen — which is the
+      // exact claim this screen exists to let them make or withhold.
+      approvedBy: r.approved_by ?? (r.status === 'active' ? (POLICY_SET.approvedBy ?? null) : null),
       approvedAt: r.approved_at,
+      /** True when the approval is the set's rather than the rule's own. */
+      approvalInherited: r.approved_by === null && r.status === 'active',
       quote: r.quote,
       sourceDocument: r.source_document_id,
       proposedBy: rule?.provenance?.model ?? rule?.provenance?.extractedBy ?? null,

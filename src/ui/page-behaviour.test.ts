@@ -214,6 +214,7 @@ function boot(opts: { running?: boolean; items?: Item[]; resetStops?: number | n
                 recordedAt: '2026-08-04T10:00:00.000Z',
                 retiredAt: null,
                 approvedBy: 'IT Systems Administrator',
+                approvalInherited: true,
                 quote: null,
                 proposedBy: null,
               },
@@ -230,6 +231,7 @@ function boot(opts: { running?: boolean; items?: Item[]; resetStops?: number | n
                 recordedAt: '2026-08-04T10:00:00.000Z',
                 retiredAt: null,
                 approvedBy: null,
+                approvalInherited: false,
                 quote: 'Alcoholic content shall be stated in terms of percentage',
                 proposedBy: 'claude-opus-5',
               },
@@ -494,6 +496,24 @@ describe('the policy view (ui-design §2.3)', () => {
     // sentence says it is a known state.
     const { byId } = await openPolicy()
     expect(byId.policyBody?.words()).toContain('No source quote recorded')
+  })
+
+  it('distinguishes a rule signed for itself from one the set covers', async () => {
+    // Two different assurances. A reviewer deciding whether to trust a rule
+    // should be told which one they have, not shown both as "approved".
+    const { byId } = await openPolicy()
+    const words = byId.policyBody?.words() ?? ''
+    expect(words).toContain('covered by the set approval of IT Systems Administrator')
+  })
+
+  it('never claims a draft is approved by anyone', async () => {
+    // The set has an approver, and inheriting it here would put a person's
+    // name against a rule they have not seen — the exact claim this screen
+    // exists to let them make or withhold.
+    const { byId } = await openPolicy()
+    const words = byId.policyBody?.words() ?? ''
+    const draft = words.slice(words.indexOf('WINE-ALCOHOL-CONTENT-FORMAT'))
+    expect(draft).toContain('NOT APPROVED')
   })
 
   it('offers nothing that would write', async () => {
