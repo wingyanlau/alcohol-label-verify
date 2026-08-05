@@ -111,6 +111,38 @@ Everything needed for one review fits on one screen at legible size.
 
 ---
 
+## 3a. The front page
+
+The only page served without a credential, and the reason it exists: everything
+else is gated, so an evaluator's first experience was a browser password box on a
+bare URL — which is indistinguishable from a misconfigured server.
+
+It carries four things, in this order:
+
+| | |
+|---|---|
+| What the system does | One paragraph, and who holds the determination |
+| **How the five seconds are met** | Filings are checked as they arrive, so nobody waits for a model. The rule behind it: what a person waits for is decoupled from what the pipeline does |
+| **A guided run** | Six steps that ask the reviewer to *do* something — check a submission, check one that fails, run the batch, **make a determination**, audit the record that determination created, and see what it cost |
+| What it does not claim | Deterministic AI, an accuracy figure, and who decided — stated publicly, before anyone signs in |
+
+**The guided run is a demo, not a menu.** Listing screens invites a reviewer to
+click each once and form no impression. The arc that matters is *read the
+evidence → decide → audit the record your decision created*, because it is the
+one path that exercises the governing principle end to end and produces
+something auditable that did not exist a minute earlier.
+
+Each step says **what to notice**, since the interesting properties are all easy
+to walk past: that the system never says *approved*, that a refused file fails
+alone rather than stopping a run, that returning for better artwork is not a
+rejection, and that the audit draws no conclusion of its own.
+
+**It calls nothing and carries no credential or address.** It has to render for
+somebody who has not yet proved they may see anything, and a fetch to a gated
+endpoint would 401 and leave the page half-built for exactly that visitor.
+
+---
+
 ## 4. Single Review — Specification
 
 ### 4.1 Regions

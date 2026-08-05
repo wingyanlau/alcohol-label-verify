@@ -24,6 +24,26 @@ describe('the landing page', () => {
     }
   })
 
+  it('asks the reviewer to make a determination, not just to look', () => {
+    // A menu of screens is not a demo. The arc that matters is: read the
+    // evidence, decide, then audit the record your decision created.
+    const flat = LANDING_HTML.replace(/\s+/g, ' ')
+    expect(flat).toMatch(/Make a determination/i)
+    expect(flat).toMatch(/approve/i)
+    expect(flat).toMatch(/reject/i)
+    expect(flat).toMatch(/Audit what you just decided/i)
+  })
+
+  it('says what to notice, not only what to click', () => {
+    // Every interesting property here is easy to walk past — that the system
+    // never says "approved", that a refused file fails alone, that the audit
+    // draws no conclusion of its own.
+    const flat = LANDING_HTML.replace(/\s+/g, ' ')
+    expect(flat).toMatch(/never says <em>approved<\/em>/i)
+    expect(flat).toMatch(/fails alone/i)
+    expect(flat).toMatch(/offers no conclusion of its own/i)
+  })
+
   it('states the assumption the five-second answer rests on', () => {
     // The architectural point, and the one most likely to be misread as a
     // performance claim: nobody waits for the model on the batch path.

@@ -91,24 +91,63 @@ export const LANDING_HTML = `<!doctype html>
     abandoned for the same reason the last one was.</p>
   </div>
 
-  <h2>What to look at, in order</h2>
+  <h2>A guided run — about ten minutes</h2>
+  <p>Each step says what to notice, because the interesting parts are easy to
+  walk past.</p>
+
   <ol>
-    <li><strong>Single review</strong> — download a demo example and upload it.
-    Start with <em>Fully compliant</em>, then <em>Alcohol content genuinely
-    differs</em>. Each field shows what the label said beside what the
-    application said.</li>
-    <li><strong>Batch</strong> — runs 26 bundled submissions and streams results
-    as they settle. This is the path that scales: nobody is waiting for it.</li>
-    <li><strong>Policy</strong> — the rules in force, from when, and who approved
-    each. A rule takes effect by a reviewed change to a file, not a button.</li>
-    <li><strong>Agents</strong> — who and what may act here. The model reads; the
-    rules compare; only a person decides, and the code refuses the rest.</li>
-    <li><strong>Audit</strong> — take a decided record, re-derive its verdict
-    from the stored evidence, put the filing back to the model, and record what
-    you conclude.</li>
-    <li><strong>Measurement</strong> — what it cost and how long it took, from
-    the system's own record rather than a claim.</li>
+    <li><strong>Check one submission.</strong> On <em>Single review</em>, download
+    the demo example <em>Fully compliant</em> and upload it.
+    <br><span class="note">Notice: every field shows what the label said
+    <em>beside</em> what the application said, and the health warning is checked
+    clause by clause. Nothing asks you to trust a conclusion — you are given the
+    two values and the rule that compared them.</span></li>
+
+    <li><strong>Now one that fails.</strong> Upload <em>Alcohol content genuinely
+    differs</em>.
+    <br><span class="note">Notice: the discrepancy is localised to the one field
+    it belongs to, and the other three still pass. A tool that flagged the whole
+    submission would send an agent hunting.</span></li>
+
+    <li><strong>Run the batch.</strong> On <em>Batch</em>, press <em>Check the 26
+    test submissions</em>. Results stream in as they settle.
+    <br><span class="note">Notice: one submission is refused at intake — a
+    truncated file — and it fails alone rather than stopping the run. Notice also
+    that nobody is waiting for this: in service it would already have run as the
+    filings arrived.</span></li>
+
+    <li><strong>Make a determination.</strong> Open an item with problems. Read
+    the findings, the values either side, and the regulations that were applied.
+    Then record <em>approve</em>, <em>reject</em> or <em>return for better
+    artwork</em>, choosing your name from the register.
+    <br><span class="note">Notice: the system never says <em>approved</em>. It
+    says what it found and what it would suggest — the determination is yours,
+    and it is recorded against the recommendation so the two can be compared
+    later. Returning for better artwork is deliberately separate from rejecting:
+    one is not a finding against the applicant.</span></li>
+
+    <li><strong>Audit what you just decided.</strong> Open <em>Audit</em>. The
+    record you decided is now listed. Run the checks: the history is re-verified,
+    the verdict is re-derived from the stored evidence, and the recorded outcome
+    is shown beside the re-derived one. Optionally ask the model to read the
+    filing again. Then record what you conclude.
+    <br><span class="note">Notice: the system offers no conclusion of its own. It
+    presents evidence and a person decides, exactly as with the submission — a
+    machine signing off on the soundness of its own record is what an audit
+    exists to withhold. Your audit is then appended to the same hash-chained
+    history it just examined.</span></li>
+
+    <li><strong>See what it cost.</strong> Open <em>Measurement</em>.
+    <br><span class="note">Notice: tokens and timings come from the system's own
+    record, not from a claim — and the figures for the batch are throughput
+    rather than anything a person waited for.</span></li>
   </ol>
+
+  <p class="note">Two screens are worth a look at any point. <strong>Policy</strong>
+  shows the rules in force, from when, and who approved each — a rule takes effect
+  by a reviewed change to a file, not a button. <strong>Agents</strong> shows who
+  and what may act: the model reads, the rules compare, only a person decides, and
+  the code refuses the rest.</p>
 
   <h2>What it is honest about</h2>
   <table>
