@@ -1405,10 +1405,20 @@ export default {
                 configured: true,
                 id: env.AI_GATEWAY_ID,
                 url: 'https://dash.cloudflare.com/?to=/:account/ai/ai-gateway',
+                // Said plainly, because the link goes to a login wall for
+                // everyone but the operator. A reviewer clicking it and landing
+                // on a Cloudflare sign-in reads as a broken page, and the fix is
+                // a sentence rather than an account invitation: everything they
+                // need is already on this screen, taken from this system's own
+                // record rather than the vendor's.
+                requiresAccountAccess: true,
                 note:
-                  'Per-request analytics, token counts, latency and errors, held by Cloudflare. ' +
-                  'Payload logging is off by default (D20) — the request body is a label image ' +
-                  'and the response is what was read from it.',
+                  'Held by Cloudflare, and reachable only by someone with access to this ' +
+                  "Cloudflare account — the figures above are this system's own record and " +
+                  'need no such access. The gateway holds the same story from the vendor side: ' +
+                  'per-request analytics, token counts, latency and errors. Payload logging is ' +
+                  'off (D20) — the request body is a label image and the response is what was ' +
+                  'read from it.',
               },
       })
     }

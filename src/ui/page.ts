@@ -1239,6 +1239,9 @@ export const PAGE_HTML = `<!doctype html>
       a.rel = 'noopener noreferrer'
       a.textContent = 'Open the gateway analytics (' + g.id + ')'
       gw.appendChild(a)
+      if (g.requiresAccountAccess) {
+        gw.appendChild(el('span', 'what', '  — needs access to the Cloudflare account'))
+      }
     }
     if (g.note) gw.appendChild(el('p', 'note', g.note))
     body.appendChild(gw)
