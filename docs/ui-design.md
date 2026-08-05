@@ -142,7 +142,7 @@ Everything needed for one review fits on one screen at legible size.
 │  └─────────────────────────────────────────────────────────────────┘    │
 │                                                                        │
 │   ┌── C ────────────────────────┐  ┌── D ──────────────┐               │
-│   │   Check this submission     │  │   Start again     │               │
+│   │       Check this submission        │                             │
 │   └─────────────────────────────┘  └───────────────────┘               │
 │                                                                        │
 └────────────────────────────────────────────────────────────────────────┘
@@ -294,27 +294,23 @@ user no explanation for why clicking does nothing. Pressing it with nothing
 attached runs validation and moves focus to the problem, which *tells the agent
 what to do*. That is both the accessible pattern and the kinder one.
 
-**Beside it: Start again** — secondary styling, and smaller. UC-1 is a
-repeated act: an agent checks one submission, then the next.
+**And no second button beside it.** An earlier revision had *Clear this form*
+— justified by a screen with five typed fields, where starting over meant
+editing every one of them. It outlived that screen. With a single upload,
+**Remove** *is* starting over, and checking a submission already clears the
+previous result, so the extra control only ever reached a state the next action
+reached anyway. A fourth control that duplicates one of the other three is a
+control an agent has to reason about.
 
-- It removes the attached PDF, clears any error, and takes the previous verdict
-  off the screen
-- **The attached file goes with it.** A PDF left attached under a screen that
-  looks empty is the one state that would put the same submission through a
-  second review under a new reference
-- Focus returns to the picker, so the next submission starts where the eye
-  already is
-- **It asks no confirmation, because nothing is lost.** Every review is
-  persisted with its own reference code the moment it completes (M4), so this
-  discards a view of the record and not the record. An agent who needs the
-  previous result looks it up by reference (§11)
-- It is present from the start rather than appearing once a result exists: a
-  control that materialises only when you are finished is one nobody knows
-  about while they are working
+**Remove takes the verdict with it.** A result panel describes *that* document.
+Leaving it on screen after the document has been removed puts a verdict above an
+empty picker, naming a file that is no longer attached — and the artwork it
+shows has gone.
 
-It is deliberately *not* the same size as the primary action. Matching it would
-present "start again" as an equal choice to "check this submission", which is
-not what an agent came to the screen to do.
+Nothing is lost by removing. Every review is persisted with its own reference
+code the moment it completes (M4), so this discards a view of the record and not
+the record. An agent who needs the previous result looks it up by reference
+(§11).
 
 ### 4.5 Validation
 
@@ -382,7 +378,7 @@ A `Check another label` action resets to §4.1 with everything cleared.
 
 | | |
 |---|---|
-| Tab order | File button → primary action → start again → the demo examples |
+| Tab order | File button → primary action → the demo examples |
 | The drop zone is not a tab stop | The button inside it is |
 | Focus ring | Visible, never removed, ≥ 2px, ≥ 3:1 against its background |
 | On validation failure | Focus to the first invalid control — which is now always the file |
@@ -412,7 +408,7 @@ afterthought.*
 | Panel 1 heading | 1. The application says |
 | Panel 2 heading | 2. The label |
 | Field labels | Product type · Brand name · Class / type · Alcohol content · Net contents |
-| Buttons | Check this submission · Start again |
+| Buttons | Check this submission |
 | Required marker | (required) — on brand name only |
 | Class hint | e.g. Kentucky Straight Bourbon Whiskey |
 | Net contents hint | e.g. 750 mL |

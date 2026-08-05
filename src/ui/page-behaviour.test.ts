@@ -487,50 +487,64 @@ describe('the worklist lists what the coordinator sent', () => {
   })
 })
 
-describe('clearing the single-review form', () => {
+describe('removing the attached submission', () => {
   /*
-   * An agent checks one submission, then the next. The form used to hold five
-   * typed fields and the artwork; it now holds one PDF, and the thing that must
-   * not survive a clear is that PDF — a file left attached under a screen that
-   * looks empty is the one state that would put the same submission through a
-   * second review under a new reference.
+   * There used to be a separate "Start again" button beside the primary
+   * action. It was justified by a screen with five typed fields, where starting
+   * over meant editing all of them — and it outlived that screen. With one
+   * upload, Remove IS starting over, and checking a submission already clears
+   * the previous result, so the button only ever reached a state the next
+   * action reached anyway.
+   *
+   * What it did carry was one thing Remove did not: taking the verdict off the
+   * screen. That belongs with Remove, because a result describing a document
+   * that is no longer attached is a panel pointing at evidence that is not
+   * there.
    */
-  const attachedAndAnswered = (byId: Record<string, El>) => {
-    // The state an attached file leaves the panel in, so the assertion is about
-    // the flip rather than about where it already was.
+  const withResultOnScreen = (byId: Record<string, El>) => {
     byId.picked?.classList.remove('hidden')
     byId.drop?.classList.add('hidden')
     const result = byId.singleResult
     if (result) result.textContent = 'a previous verdict'
   }
 
-  it('removes the attached submission', async () => {
+  it('takes the verdict with it', async () => {
     const { byId, settle } = boot()
     await settle()
-    attachedAndAnswered(byId)
+    withResultOnScreen(byId)
+
+    byId.removeBtn?.click()
+
+    expect(byId.singleResult?.textContent).toBe('')
+  })
+
+  it('puts the picker back', async () => {
+    const { byId, settle } = boot()
+    await settle()
+    withResultOnScreen(byId)
     expect(byId.picked?.classList.contains('hidden')).toBe(false)
 
-    byId.clearBtn?.click()
+    byId.removeBtn?.click()
 
     expect(byId.picked?.classList.contains('hidden')).toBe(true)
     expect(byId.drop?.classList.contains('hidden')).toBe(false)
     expect(byId.file?.value).toBe('')
   })
 
-  it('takes the previous verdict off the screen', async () => {
+  it('leaves the check button usable', async () => {
+    // Removing a document is not a failure state; nothing should be disabled.
     const { byId, settle } = boot()
     await settle()
-    attachedAndAnswered(byId)
-    byId.clearBtn?.click()
-    expect(byId.singleResult?.textContent).toBe('')
+    byId.removeBtn?.click()
+    expect(byId.checkBtn?.disabled).toBe(false)
   })
 
-  it('leaves the check button usable', async () => {
-    // Clearing is not a failure state; nothing should be disabled by it.
+  it('offers no separate button for starting over', async () => {
+    // The screen has three controls: choose, remove, check. A fourth that
+    // duplicated one of them was a control an agent had to reason about.
     const { byId, settle } = boot()
     await settle()
-    byId.clearBtn?.click()
-    expect(byId.checkBtn?.disabled).toBe(false)
+    expect(byId.clearBtn?.listeners.click ?? []).toHaveLength(0)
   })
 })
 

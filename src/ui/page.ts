@@ -327,10 +327,6 @@ export const PAGE_HTML = `<!doctype html>
          the problem, which tells them what to do. -->
     <div class="primary-row">
       <button id="checkBtn" type="button">Check this submission</button>
-      <!-- Secondary, and always present rather than appearing after a result:
-           a control that materialises only once you are finished is one nobody
-           knows exists while they are working. -->
-      <button id="clearBtn" type="button" class="secondary">Start again</button>
       <p id="working" class="note hidden" role="status" aria-live="polite"></p>
     </div>
     <div id="singleResult"></div>
@@ -1494,39 +1490,29 @@ export const PAGE_HTML = `<!doctype html>
     clearFieldError('file')
   }
 
+  /**
+   * Take the document away, and its verdict with it.
+   *
+   * The verdict describes THIS document. Leaving it on screen after the
+   * document has been removed puts a result above an empty picker, referring to
+   * evidence that is no longer there — and the panel names a file that is not
+   * attached.
+   *
+   * This used to leave the result, and a separate "Start again" button existed
+   * to clear it. That button was justified by a screen with five typed fields,
+   * where starting over meant editing all of them; with one upload, Remove IS
+   * starting over. It was also redundant twice: checking a submission already
+   * clears the previous result, so the only state it reached was one the next
+   * action reached anyway.
+   */
   function detach() {
     attached = null
     byId('file').value = ''
     byId('picked').classList.add('hidden')
     byId('drop').classList.remove('hidden')
-  }
-
-  /**
-   * Empty the screen so the next submission can be checked.
-   *
-   * Named for what an agent is doing rather than for what is on screen. It was
-   * "Clear this form" while there was a form to clear; the screen now holds one
-   * upload, and a button naming a thing that no longer exists is a button
-   * nobody trusts.
-   *
-   * Nothing is lost by pressing this. Every review is persisted with its own
-   * reference code the moment it completes (M4), so clearing the screen
-   * discards a view of the record and not the record — which is why it asks no
-   * confirmation. An agent who needs the previous result back looks it up by
-   * reference.
-   *
-   * The attached file goes with it. A PDF left attached under a fresh-looking
-   * screen is the one state that could put the previous submission through a
-   * second review under a new reference.
-   */
-  function startAgain() {
-    detach()
-    clearFieldError('file')
     byId('singleResult').textContent = ''
     byId('working').classList.add('hidden')
-    // Back to the picker, so the next submission starts where the eye already
-    // is rather than wherever the last click left it.
-    byId('pickBtn').focus()
+    clearFieldError('file')
   }
 
   /**
@@ -1585,7 +1571,6 @@ export const PAGE_HTML = `<!doctype html>
     })
 
     byId('checkBtn').addEventListener('click', runSingle)
-    byId('clearBtn').addEventListener('click', startAgain)
     loadSamples()
   }
 
