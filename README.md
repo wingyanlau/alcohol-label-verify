@@ -127,14 +127,14 @@ has each one with its evidence.
 | P3 — governance and audit | 4 | 0 | 0 |
 | Other | 0 | 1 | 3 |
 
-**The three deliberate omissions share one shape.** Sign-in, in-app rule
-approval, and correcting a filing are the same missing prerequisite — an
-authenticated identity — wearing three hats. Every *Must* requirement maps to a
-passing test; the matrix is `test-plan.md` §12.
+**The three deliberate omissions have one cause.** Sign-in, in-app rule approval,
+and correcting a filing all depend on the same missing prerequisite: an
+authenticated identity. Every *Must* requirement maps to a passing test; the
+matrix is in `test-plan.md` §12.
 
 ---
 
-## Measured, not estimated
+## Cost and latency, measured
 
 From a corpus run on 2026-08-05, reported by the system's own Measurement
 screen. Full analysis: **[docs/value-case.md](docs/value-case.md)**.
@@ -147,25 +147,24 @@ screen. Full analysis: **[docs/value-case.md](docs/value-case.md)**.
 | Verification, p95 | 11.30 s — and the tail is provider queueing, not work |
 | Comparison alone | **sub-millisecond**. All the time is inference; none is our code |
 
-**The tail is not what it looks like.** The slowest reads are not the degraded
-scans: two record reads one token apart took 15.2 s and 3.9 s. Same work, four
-times the latency. That points at a metered free tier, not at the design — and
-25 samples cannot settle a p95 either way, which the value case says rather than
-declaring the target failed.
+**The slow reads are not the degraded scans.** Two record reads one token apart
+took 15.2 s and 3.9 s — the same work at four times the latency. That points to a
+metered free tier rather than the design, and 25 samples cannot settle a p95
+either way. The value case says as much, rather than declaring the target failed.
 
-**What a person waits for is decoupled from what the pipeline does** — a
-structural rule, not an optimisation. The checking will get longer; the agent's
-wait is the time to load a prepared result, and new pipeline stages go on the
-asynchronous side. Stability matters more than speed here: a predictable three
-seconds is a better tool than one usually fast and occasionally fifteen.
+**What a person waits for is kept separate from what the pipeline does.** This is
+a structural choice. The checking will get longer over time, but the agent's wait
+is only the time to load a prepared result, and new pipeline stages run on the
+asynchronous side. A predictable three seconds is more useful here than a time
+that is usually fast and occasionally fifteen.
 
-**And these numbers gate an agent on only one of the two paths.** The
-five-second requirement came from a vendor pilot that took 30–40 seconds *while
-an agent sat waiting*. The answer is not a faster model; it is that batch checks
-a filing **as it arrives**, so an agent opens a worklist of prepared
-recommendations and never waits for inference at all. Single review is for the
-case in front of them right now, and there the target applies literally. This
-assumes filings are recorded on arrival — see the assumptions below.
+**These numbers matter on only one of the two paths.** The five-second
+requirement came from a vendor pilot that took 30–40 seconds *while an agent sat
+waiting*. The fix is not a faster model: batch checks a filing **as it arrives**,
+so an agent opens a worklist of prepared recommendations and never waits for
+inference. Single review is for the case in front of them right now, and there
+the target applies literally. This assumes filings are recorded on arrival — see
+the assumptions below.
 
 ---
 
@@ -206,16 +205,16 @@ perception is stable. Both are in the product; neither proves the reading was
 between them is written down** — see
 [determinism-and-replay.md](docs/determinism-and-replay.md).
 
-**The recall gap is the honest headline.** What the system decided is fully
-recoverable; what it decided *by* is only partly so. The rules are now readable
-on screen, but a finding pins its regulation by digest rather than quoting it,
-and the nine original rules carry no source quote — the six enacted on
-5 August do. Producing the passage a rule
-rests on — with the provisions that qualify it — is a retrieval problem, which is
-exactly what a model is good at and exactly what this system has refused to use
-one for. It assists *review of the rules* rather than deciding compliance, so it
-sits on the right side of the principle. That is the direction this prototype
-points at and deliberately did not take.
+**The clearest limitation is how much of the reasoning is recoverable.** What the
+system decided is fully recoverable; what it decided *by* is only partly so. The
+rules are now readable on screen, but a finding pins its regulation by digest
+rather than quoting it, and the nine original rules carry no source quote (the six
+enacted on 5 August do). Producing the passage a rule rests on, with the
+provisions that qualify it, is a retrieval problem: the kind of task a model is
+good at, and the one this system has deliberately not used a model for. It would
+assist *review of the rules* rather than decide compliance, so it stays on the
+right side of the principle. That is the direction this prototype points toward
+and deliberately did not take.
 
 ---
 
