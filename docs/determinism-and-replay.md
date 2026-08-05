@@ -153,9 +153,10 @@ achievement misleads. It is a **limit**:
 | Where | The Audit tab, across every verdict | A button on the verdict itself |
 
 **Both are now available**, and the second is the one a reader intuitively
-expects. `POST /audit/reread/<submissionId>` puts the retained artwork back to
-the model, at the recorded prompt version, and compares field by field with the
-reading the verdict was built on.
+expects. `POST /audit/reread/<submissionId>` takes the submission as filed,
+produces the two regions again, puts **both** back to the model at the recorded
+prompt version, and compares field by field with the readings the verdict was
+built on.
 
 Three things it is careful about:
 
@@ -168,10 +169,22 @@ Three things it is careful about:
   agents (D29), and a difference then says the reader changed rather than that
   perception drifted. Reporting the comparison without that would attribute a
   configuration change to the model.
-- **The label region only.** The label crop is retained for the results panel;
-  the record crop is not, so there is nothing to put back for that half. And
-  once retention has purged the artwork (D32) the answer is `410` with the
-  reason — impossible by design rather than broken.
+- **It reproduces the pixels the verdict was read from, not merely similar
+  ones.** A bundled corpus item was read from rasters rendered at build time —
+  the record page at 150 DPI — while re-rendering the PDF produces 300. Feeding
+  the model a different image and calling the difference *drift* would report a
+  false positive on all twenty-six. So it takes the same branch the item worker
+  took: shipped rasters where they exist, a fresh rasterisation otherwise. An
+  upload has no shipped raster and is genuinely re-rendered, normalisation
+  included.
+- **Retention ends it.** Once the submission has been purged (D32) the answer is
+  `410` with the reason. Impossible by design rather than broken — and replay,
+  which needs no pixels, still works.
+
+**Why the record region can be re-read at all**, given that its crop is not
+retained: the *filing* is. The label crop is kept for the results panel and the
+record crop is not, but the PDF the whole verdict came from is in object storage
+for the retention window, so both regions can be produced again from it.
 
 It also detects the one thing `model_id` cannot: a vendor repointing a stable
 name at new weights. §5 of `toward-llm-policy.md` makes stability a release gate

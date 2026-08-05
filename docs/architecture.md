@@ -169,6 +169,7 @@ record read and the two paths could disagree about the same file (D51).
 |---|---|---|
 | **D1** | submissions, extractions (with raw response, latency, tokens), verdicts, field verdicts, policy findings, decisions, the bitemporal policy archive, hash-chained `audit_event` | Kept. The audit table is append-only by trigger |
 | **R2** | the filed PDF, the rasterised label crop | Purged by the retention sweep (D32) |
+| | *The record crop is not kept — but the filing is, so both regions can be produced again from it for a re-read.* | |
 | **Durable Object** | the live ledger for one job | The job's lifetime |
 | **Config (bundled)** | warning statement, policy set, approved models, user register | Versioned in git; reviewed, never edited at runtime (D45) |
 

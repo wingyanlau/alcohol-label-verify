@@ -915,7 +915,7 @@ export const PAGE_HTML = `<!doctype html>
   function renderRereadResult(out, res) {
     var b = res.body || {}
     if (!res.ok) {
-      // A purged artwork is a policy working, not a fault (D32).
+      // A purged submission is a policy working, not a fault (D32).
       out.appendChild(el('p', b.error === 'content_purged' ? 'note' : 'err',
         b.reason || 'The re-read could not be completed. The verdict is unaffected.'))
       return
@@ -926,25 +926,31 @@ export const PAGE_HTML = `<!doctype html>
     line.appendChild(document.createTextNode(
       b.identical ? 'The model read it the same way' : 'The model read it differently'))
     out.appendChild(line)
+    if (b.renderedFrom) out.appendChild(el('div', 'dev', 'Read from ' + b.renderedFrom + '.'))
 
-    if (!b.sameReader) {
-      // Otherwise a configuration change gets attributed to the model (D29).
-      out.appendChild(el('div', 'dev',
-        'Note: this is not the reader that answered originally — ' + b.reader.recordedModel + ' at ' +
-        b.reader.recordedPrompt + ', now ' + b.reader.freshModel + ' at ' + b.reader.freshPrompt +
-        '. A difference here says the reader changed, not that its reading drifted.'))
-    }
+    ;(b.regions || []).forEach(function (r) {
+      var title = r.region === 'label' ? 'The label artwork' : 'The application record'
+      out.appendChild(el('div', 'freq', title + (r.identical ? ' — unchanged' : ' — differs')))
 
-    ;(b.fields || []).forEach(function (f) {
-      if (f.same) return
-      var row = el('div', 'dev')
-      row.textContent = f.field + ': was ' + JSON.stringify(f.recorded) + ', now ' + JSON.stringify(f.fresh) +
-        (f.unreadable ? ' (one reading declined to read it)' : '')
-      out.appendChild(row)
+      if (!r.sameReader) {
+        // Otherwise a configuration change gets attributed to the model (D29).
+        out.appendChild(el('div', 'dev',
+          'Not the reader that answered originally: ' + r.reader.recordedModel + ' at ' +
+          r.reader.recordedPrompt + ', now ' + r.reader.freshModel + ' at ' + r.reader.freshPrompt +
+          '. A difference here says the reader changed, not that its reading drifted.'))
+      }
+
+      ;(r.fields || []).forEach(function (f) {
+        if (f.same) return
+        out.appendChild(el('div', 'dev',
+          f.field + ': was ' + JSON.stringify(f.recorded) + ', now ' + JSON.stringify(f.fresh) +
+          (f.unreadable ? ' (one reading declined to read it)' : '')))
+      })
+      if (r.warningStatement && !r.warningStatement.same) {
+        out.appendChild(el('div', 'dev', 'The warning statement transcribed differently.'))
+      }
     })
-    if (b.warningStatement && !b.warningStatement.same) {
-      out.appendChild(el('div', 'dev', 'The warning statement transcribed differently.'))
-    }
+
     if (b.note) out.appendChild(el('p', 'note', b.note))
   }
 

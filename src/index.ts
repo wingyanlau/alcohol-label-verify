@@ -39,6 +39,12 @@ import {
 } from './batch/reference-code.js'
 import { loadStoredVerdict, ReplayUnavailableError, replayVerdict } from './batch/replay-load.js'
 import { retentionPolicyText, retentionWindowDays, sweepRetention } from './batch/retention.js'
+import {
+  LABEL_RASTER,
+  RASTERS_PREFIX,
+  RECORD_RASTER,
+  submissionIdFor,
+} from './batch/submissions.js'
 import { approvalFor, isApproved } from './domain/approval.js'
 import { ExtractionContractError, parseExtractionResponse } from './domain/extraction.js'
 import { POLICY_SET } from './domain/findings.js'
@@ -53,7 +59,7 @@ import { loadMeasurement } from './metrics/measurement.js'
 import { checkImageIntake } from './normalise/image.js'
 import { IntakeRejected, type NormaliseResult } from './normalise/normaliser.js'
 import { rasteriseSubmission } from './normalise/rasterise.js'
-import { UnknownFormError } from './normalise/regions.js'
+import { TTB_F5100_31_2023, UnknownFormError } from './normalise/regions.js'
 import { archiveHealth, listArchive, reconcileArchive, ruleSetAsAt } from './policy/archive.js'
 import { gatewayFrom } from './providers/gateway.js'
 import { extractJson } from './providers/json.js'
@@ -230,6 +236,34 @@ function gatewayStatus(env: Env): { routed: boolean; id: string | null; reason?:
     return { routed: false, id: gateway.id, reason: 'AI_GATEWAY_ACCOUNT is not set' }
   }
   return { routed: true, id: gateway.id }
+}
+
+/**
+ * The build-time rasters a bundled submission was read from, or null.
+ *
+ * Mirrors `loadPrerendered` in the item worker, and exists for the same reason
+ * a re-read needs it: those are the exact pixels the verdict was produced from,
+ * and re-rendering the PDF instead would compare two different images while
+ * reporting on the model.
+ */
+async function loadShippedRasters(env: Env, corpusId: string): Promise<NormaliseResult | null> {
+  if (!env.ASSETS || corpusId === '') return null
+  const get = async (path: string): Promise<ArrayBuffer | null> => {
+    const response = await env.ASSETS?.fetch(new Request(`https://assets.local/${path}`))
+    return response?.ok ? response.arrayBuffer() : null
+  }
+  const [label, record] = await Promise.all([
+    get(`${RASTERS_PREFIX}/${corpusId}-label.png`),
+    get(`${RASTERS_PREFIX}/${corpusId}-record.png`),
+  ])
+  if (label === null || record === null) return null
+  return {
+    form: TTB_F5100_31_2023,
+    label: { region: 'label', image: label, mimeType: 'image/png', ...LABEL_RASTER },
+    record: { region: 'record', image: record, mimeType: 'image/png', ...RECORD_RASTER },
+    recordTextLayer: null,
+    elapsedMs: 0,
+  }
 }
 
 /**
@@ -1591,78 +1625,140 @@ export default {
     // Ask the model again, and compare (§ audit/reread.ts).
     //
     // POST rather than GET, and not because it writes anything — it writes
-    // nothing. It COSTS: a model call per re-read, against a metered API. A GET
-    // is something a browser prefetches, a crawler follows and a monitor polls,
-    // and none of those should be able to spend an inference budget.
+    // nothing. It COSTS: a browser launch and two model calls, against metered
+    // services. A GET is something a browser prefetches, a crawler follows and
+    // a monitor polls, and none of those should be able to spend a budget.
     //
-    // The label region only, and the response says so. The record crop is not
-    // retained — the label crop is kept for the results panel, the record is
-    // not — so there is nothing to put back to the model for that half.
+    // **Rasterised again from the retained PDF, rather than read off the kept
+    // crop.** The label crop is retained for the results panel and the record
+    // crop is not — so re-reading only what was kept would cover half the
+    // submission. Rasterisation is deterministic and the filing itself is
+    // retained, so regenerating both regions is the more faithful re-run: it
+    // exercises the same normalisation the verdict went through, not just the
+    // model call at the end of it.
     const reread = pathname.match(/^\/audit\/reread\/([^/]+)$/)
     if (reread && request.method === 'POST') {
       if (!env.DB || !env.STAGING) return json({ error: 'unavailable' }, 503)
+      if (!env.BROWSER) return json({ error: 'unavailable', reason: 'no BROWSER binding' }, 503)
       const submissionId = decodeURIComponent(reread[1] ?? '')
 
-      const stored = await env.DB.prepare(
-        `SELECT e.raw_response, e.model_id, e.prompt_version, s.job_id
-           FROM extraction e JOIN submission s ON s.id = e.submission_id
-          WHERE e.submission_id = ?1 AND e.region = 'label'
-          ORDER BY e.created_at DESC LIMIT 1`,
+      const submission = await env.DB.prepare(
+        `SELECT content_key, content_purged_at, source_name FROM submission WHERE id = ?1`,
       )
         .bind(submissionId)
         .first<{
-          raw_response: string
-          model_id: string | null
-          prompt_version: string | null
-          job_id: string
+          content_key: string | null
+          content_purged_at: string | null
+          source_name: string | null
         }>()
-      if (stored === null) return json({ error: 'not_found' }, 404)
+      if (submission === null) return json({ error: 'not_found' }, 404)
 
-      const object = await env.STAGING.get(labelImageKey(stored.job_id, submissionId))
+      const recorded = (
+        await env.DB.prepare(
+          `SELECT region, raw_response, model_id, prompt_version
+             FROM extraction WHERE submission_id = ?1 ORDER BY created_at`,
+        )
+          .bind(submissionId)
+          .all<{
+            region: string
+            raw_response: string
+            model_id: string | null
+            prompt_version: string | null
+          }>()
+      ).results
+      if (recorded.length === 0) return json({ error: 'not_found', reason: 'no reading' }, 404)
+
+      const object =
+        submission.content_key === null ? null : await env.STAGING.get(submission.content_key)
       if (object === null) {
-        // Stated rather than reported as a failure. Content is purged on a
-        // schedule this deployment publishes (D32), and a re-read after that is
-        // impossible by design rather than broken.
+        // A policy working, not a fault. Content is purged on a schedule this
+        // deployment publishes (D32), and a re-read after that is impossible by
+        // design — the verdict and its stored reading are untouched.
         return json(
           {
             error: 'content_purged',
+            purgedAt: submission.content_purged_at,
             reason:
-              'The artwork was deleted under the retention policy, so it cannot be put to ' +
-              'the model again. The verdict and its stored reading are unaffected.',
+              'The submission was deleted under the retention policy, so it cannot be put to ' +
+              'the model again. The verdict and the reading it was built on are unaffected, ' +
+              'and re-deriving the verdict from the record still works.',
           },
           410,
         )
       }
 
       try {
+        // Reproduce the pixels the verdict was actually read from.
+        //
+        // A bundled corpus item was read from rasters rendered at BUILD time —
+        // the record page at 150 DPI — while rasterising the PDF here produces
+        // 300. Feeding the model a different image and calling the difference
+        // "drift" would report a false positive on every one of the twenty-six.
+        //
+        // So this mirrors what the pipeline did for this submission: shipped
+        // rasters where they exist, a fresh rasterisation otherwise, which is
+        // exactly the branch `processItem` takes. An upload has no shipped
+        // raster and is genuinely re-rendered — the whole pipeline redone,
+        // normalisation included.
+        const corpusId = submissionIdFor(submission.source_name ?? '')
+        const shipped = await loadShippedRasters(env, corpusId)
+        const regions =
+          shipped ??
+          (await rasteriseSubmission(await object.arrayBuffer(), {
+            browser: env.BROWSER,
+            limits: {
+              maxBytes: Number(env.MAX_UPLOAD_BYTES),
+              maxPageCount: Number(env.MAX_PAGE_COUNT),
+              maxPixels: Number(env.MAX_PIXELS),
+            },
+            dpi: Number(env.RASTER_DPI),
+          }))
         const provider = createProvider(env)
-        const fresh = await provider.extract({
-          region: 'label',
-          image: await object.arrayBuffer(),
-          mimeType: 'image/png',
-          fields: FIELDS,
-          includeWarning: true,
-        })
-        const comparison = compareReadings(
-          'label',
-          parseExtractionResponse(extractJson(stored.raw_response), { includeWarning: true }),
-          fresh.extraction,
-          {
-            recordedModel: stored.model_id ?? 'unrecorded',
-            freshModel: fresh.provenance.modelId,
-            recordedPrompt: stored.prompt_version ?? 'unrecorded',
-            freshPrompt: fresh.provenance.promptVersion,
-          },
-        )
+
+        const comparisons = []
+        for (const row of recorded) {
+          const isLabel = row.region === 'label'
+          const image = isLabel ? regions.label : regions.record
+          const fresh = await provider.extract({
+            region: isLabel ? 'label' : 'record',
+            image: image.image,
+            mimeType: image.mimeType,
+            fields: FIELDS,
+            includeWarning: isLabel,
+            ...(isLabel ? {} : { includeProductType: true }),
+          })
+          comparisons.push(
+            compareReadings(
+              row.region,
+              parseExtractionResponse(extractJson(row.raw_response), {
+                includeWarning: isLabel,
+                includeProductType: !isLabel,
+              }),
+              fresh.extraction,
+              {
+                recordedModel: row.model_id ?? 'unrecorded',
+                freshModel: fresh.provenance.modelId,
+                recordedPrompt: row.prompt_version ?? 'unrecorded',
+                freshPrompt: fresh.provenance.promptVersion,
+              },
+            ),
+          )
+        }
+
         return json({
           submissionId,
-          ...comparison,
+          regions: comparisons,
+          identical: comparisons.every((c) => c.identical),
+          renderedFrom:
+            shipped === null
+              ? 'rasterised again from the retained PDF'
+              : 'the shipped rasters this submission was read from',
           note:
-            'The label region only — the record crop is not retained. A difference does not ' +
-            'mean either reading is wrong: perception is non-deterministic, and two readings ' +
-            'of the same pixels may legitimately differ. It means the verdict rests on a ' +
-            'reading the model does not reproduce, which is a fact for the person deciding. ' +
-            'Nothing here changes the verdict.',
+            'Both regions were put back to the model, from the same pixels the verdict was ' +
+            'read from. A difference does not mean either reading is wrong: perception is ' +
+            'non-deterministic, and two readings of the same pixels may legitimately differ. ' +
+            'It means the verdict rests on a reading the model does not reproduce, which is a ' +
+            'fact for the person deciding. Nothing here changes the verdict.',
         })
       } catch (error) {
         return json({ error: 'reread_failed', fault: faultOf(env, error) }, 503)
