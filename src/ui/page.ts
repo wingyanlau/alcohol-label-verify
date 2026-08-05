@@ -45,7 +45,26 @@ export const PAGE_HTML = `<!doctype html>
   h2 { font-size: 20px; margin: 28px 0 12px; }
   p.lede { color: var(--muted); margin: 0 0 24px; max-width: 68ch; }
   .note { color: var(--muted); font-size: 15px; max-width: 68ch; }
-  .samples { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--rule, #dcdcdc); }
+  /* Data tables. An earlier attempt at this styled nothing: the rules were
+     written against var(--rule), which does not exist, so every border fell
+     back to a near-invisible grey and the tables read as floating text. */
+  .tablewrap { overflow-x: auto; margin: 14px 0 10px; border: 1px solid var(--line);
+               border-radius: 6px; }
+  .metrics { border-collapse: collapse; width: 100%; font-size: 15px; }
+  .metrics th { text-align: left; font-size: 12px; font-weight: 700; color: var(--muted);
+                text-transform: uppercase; letter-spacing: .06em; white-space: nowrap;
+                padding: 10px 16px; background: var(--bg);
+                border-bottom: 2px solid var(--line); }
+  .metrics td { padding: 11px 16px; border-bottom: 1px solid var(--line);
+                vertical-align: top; line-height: 1.45; }
+  .metrics tr:last-child td { border-bottom: 0; }
+  .metrics tr:nth-child(even) td { background: var(--bg); }
+  .metrics td.name { font-weight: 600; color: var(--ink); white-space: nowrap; }
+  .metrics td.n { font-variant-numeric: tabular-nums; }
+  .brandline { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
+  .backlink { font-size: 14px; color: var(--muted); text-decoration: underline;
+              text-underline-offset: 4px; }
+  .samples { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
   .samples h3 { font-size: 15px; margin: 0 0 4px; }
   .samplelist { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
   .sample { display: flex; gap: 12px; align-items: baseline; }
@@ -161,7 +180,7 @@ export const PAGE_HTML = `<!doctype html>
   .mode[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent, #1a4480); }
   /* Reference, and quieter by a clear margin — read occasionally, never in the
      middle of checking a label. */
-  .refs { display: flex; gap: 14px; padding-left: 26px; border-left: 1px solid var(--rule, #dcdcdc); }
+  .refs { display: flex; gap: 14px; padding-left: 26px; border-left: 1px solid var(--line); }
   .ref { background: none; border: 0; padding: 6px 2px; font-size: 15px; color: var(--muted);
          text-decoration: underline; text-underline-offset: 4px; border-radius: 0; }
   .ref:hover { color: var(--ink); }
@@ -212,7 +231,11 @@ export const PAGE_HTML = `<!doctype html>
 <main>
   <!-- Region A: product name and the mode switch, and no other chrome (§4.1). -->
   <div class="topbar">
-    <h1>TTB Label Check</h1>
+    <div>
+      <h1>TTB Label Check</h1>
+      <p class="brandline">Alcohol and Tobacco Tax and Trade Bureau — label verification prototype ·
+        <a class="backlink" href="/">Demo guide</a></p>
+    </div>
     <!-- Two groups, because there are two kinds of thing here (§4.1).
          "Single review" and "Batch" are the work: an agent is in one or the
          other all day. "Policy" and "Agents" are reference — what the system
@@ -1164,6 +1187,29 @@ export const PAGE_HTML = `<!doctype html>
 
   function byId(id) { return document.getElementById(id) }
 
+  /**
+   * A data table, shared by every reference screen.
+   *
+   * In its own scroller: the policy table is six columns wide, and a page that
+   * scrolls sideways to accommodate one table is a page nobody can read. The
+   * first cell names the row; the rest are values.
+   */
+  function metricsTable(head, rows) {
+    var wrap = el('div', 'tablewrap')
+    var t = document.createElement('table')
+    t.className = 'metrics'
+    var hr = document.createElement('tr')
+    head.forEach(function (h) { hr.appendChild(el('th', null, h)) })
+    t.appendChild(hr)
+    rows.forEach(function (cells) {
+      var tr = document.createElement('tr')
+      cells.forEach(function (c, i) { tr.appendChild(el('td', i === 0 ? 'name' : 'n', c)) })
+      t.appendChild(tr)
+    })
+    wrap.appendChild(t)
+    return wrap
+  }
+
   // Three screens now, so the argument is a name rather than a boolean. It was
   // showMode(true|false), which stopped being able to say which screen the
   // moment there were more than two.
@@ -1227,25 +1273,12 @@ export const PAGE_HTML = `<!doctype html>
     var body = byId('agentsBody')
     body.textContent = ''
 
-    function table(head, rows) {
-      var t = document.createElement('table')
-      t.className = 'metrics'
-      var hr = document.createElement('tr')
-      head.forEach(function (h) { hr.appendChild(el('th', null, h)) })
-      t.appendChild(hr)
-      rows.forEach(function (cells) {
-        var tr = document.createElement('tr')
-        cells.forEach(function (c, i) { tr.appendChild(el('td', i === 0 ? 'name' : null, c)) })
-        t.appendChild(tr)
-      })
-      return t
-    }
 
     // 1. The division of labour on a single submission. This is the point of
     //    the page: three kinds of actor on one piece of work, with the boundary
     //    between them stated rather than implied.
     body.appendChild(el('h2', null, 'Who does what, on one submission'))
-    body.appendChild(table(['', 'Does', 'Cannot'], [
+    body.appendChild(metricsTable(['', 'Does', 'Cannot'], [
       ['System', 'Opens the job, stages the filing, purges it when retention says so', 'Judge anything'],
       ['Model', 'Reads the label and the record — two blind reads', 'See the expected values, or decide'],
       ['Rules', 'Compare, verify the warning, select and apply the regulations', 'Call a model, or reach the network'],
@@ -1263,7 +1296,7 @@ export const PAGE_HTML = `<!doctype html>
         byKind[a.kind].actions.push(a.action + ' ×' + a.n)
       })
       body.appendChild(el('h2', null, 'What each kind has done here'))
-      body.appendChild(table(['', 'Acts', 'What'],
+      body.appendChild(metricsTable(['', 'Acts', 'What'],
         Object.keys(byKind).sort().map(function (k) {
           return [k, String(byKind[k].n), byKind[k].actions.slice(0, 4).join(', ')]
         })))
@@ -1277,7 +1310,7 @@ export const PAGE_HTML = `<!doctype html>
       var of = agents.filter(function (a) { return a.kind === kind })
       if (!of.length) return
       body.appendChild(el('h2', null, KIND_TITLE[kind] + ' (' + of.length + ')'))
-      body.appendChild(table(['', 'Role', 'May', 'Decides'],
+      body.appendChild(metricsTable(['', 'Role', 'May', 'Decides'],
         of.map(function (a) {
           return [a.display, a.role, (a.entitlements || []).join('; '), a.mayDecide ? 'yes' : 'no']
         })))
@@ -1287,7 +1320,7 @@ export const PAGE_HTML = `<!doctype html>
     // 4. What the structure is for.
     if (d && d.progression && d.progression.length) {
       body.appendChild(el('h2', null, 'How a model earns more work'))
-      body.appendChild(table(['Stage', 'May', 'What has to be true first'],
+      body.appendChild(metricsTable(['Stage', 'May', 'What has to be true first'],
         d.progression.map(function (p) { return [p.stage, p.may, p.before] })))
       body.appendChild(el('p', 'note',
         'Entitlements are held per agent, so a reader is granted one capability at a time and measured on it. The boundary is a function in code, not a setting: letting a model past it is a commit somebody signs.'))
@@ -1585,19 +1618,6 @@ export const PAGE_HTML = `<!doctype html>
     var body = byId('measureBody')
     body.textContent = ''
 
-    function table(head, rows) {
-      var t = document.createElement('table')
-      t.className = 'metrics'
-      var hr = document.createElement('tr')
-      head.forEach(function (h) { hr.appendChild(el('th', null, h)) })
-      t.appendChild(hr)
-      rows.forEach(function (cells) {
-        var tr = document.createElement('tr')
-        cells.forEach(function (c, i) { tr.appendChild(el('td', i === 0 ? 'name' : 'n', c)) })
-        t.appendChild(tr)
-      })
-      return t
-    }
 
     var v = d.verification || {}
     var rows = []
@@ -1610,7 +1630,7 @@ export const PAGE_HTML = `<!doctype html>
     }
 
     body.appendChild(el('h2', null, 'Response time'))
-    if (rows.length) body.appendChild(table(['', 'p50', 'p95', 'slowest', 'n'], rows))
+    if (rows.length) body.appendChild(metricsTable(['', 'p50', 'p95', 'slowest', 'n'], rows))
     else body.appendChild(el('p', 'note', 'Nothing checked yet.'))
 
     var target = ms(v.targetMs) + ' p95, single review'
@@ -1624,7 +1644,7 @@ export const PAGE_HTML = `<!doctype html>
 
     if (d.reads && d.reads.length) {
       body.appendChild(el('h2', null, 'Reads'))
-      body.appendChild(table(['', 'p50', 'p95', 'slowest', 'n', 'counted'],
+      body.appendChild(metricsTable(['', 'p50', 'p95', 'slowest', 'n', 'counted'],
         d.reads.map(function (r) {
           return [r.region === 'label' ? 'Label' : 'Record',
             ms(r.latency.p50), ms(r.latency.p95), ms(r.latency.max),
@@ -1634,7 +1654,7 @@ export const PAGE_HTML = `<!doctype html>
 
     if (d.cost && d.cost.length) {
       body.appendChild(el('h2', null, 'Cost'))
-      body.appendChild(table(['Model', 'Reads', 'Sent', 'Returned', 'Total'],
+      body.appendChild(metricsTable(['Model', 'Reads', 'Sent', 'Returned', 'Total'],
         d.cost.map(function (c) {
           return [c.provider + ' · ' + c.modelId, String(c.reads),
             num(c.promptTokens), num(c.completionTokens), num(c.totalTokens)]
@@ -1669,7 +1689,7 @@ export const PAGE_HTML = `<!doctype html>
     }
     if (signals.length) {
       body.appendChild(el('h2', null, 'What this signals for production'))
-      body.appendChild(table(['', 'Today', 'What it means'], signals))
+      body.appendChild(metricsTable(['', 'Today', 'What it means'], signals))
     }
 
     body.appendChild(el('h2', null, 'Integration'))
@@ -1700,19 +1720,6 @@ export const PAGE_HTML = `<!doctype html>
     var body = byId('policyBody')
     body.textContent = ''
 
-    function table(head, rows) {
-      var t = document.createElement('table')
-      t.className = 'metrics'
-      var hr = document.createElement('tr')
-      head.forEach(function (h) { hr.appendChild(el('th', null, h)) })
-      t.appendChild(hr)
-      rows.forEach(function (cells) {
-        var tr = document.createElement('tr')
-        cells.forEach(function (c, i) { tr.appendChild(el('td', i === 0 ? 'name' : null, c)) })
-        t.appendChild(tr)
-      })
-      return t
-    }
 
     var inForce = d.inForce || []
     var waiting = d.awaitingApproval || []
@@ -1721,7 +1728,7 @@ export const PAGE_HTML = `<!doctype html>
     // 1. The engine, as a lifecycle. The rules are data; this is what happens
     //    to a change to them, and where the human gate sits.
     body.appendChild(el('h2', null, 'How a rule reaches force'))
-    body.appendChild(table(['Step', 'Who', 'What'], [
+    body.appendChild(metricsTable(['Step', 'Who', 'What'], [
       ['Proposed', 'A policy author', 'Drafted into the reviewed file, with the regulation and the passage it rests on. May be drafted with a model'],
       ['Approved', 'A policy approver — never the author', 'A named person signs it. The system refuses to load a model-drafted rule in force without one'],
       ['Reconciled', 'The deployment', 'On deploy, the file is compared with the archive and differences are inserted or superseded'],
@@ -1751,7 +1758,7 @@ export const PAGE_HTML = `<!doctype html>
     }
 
     body.appendChild(el('h2', null, 'In force (' + inForce.length + ')'))
-    body.appendChild(table(['Rule', 'Regulation', 'Applies to', 'Governs', 'Source', 'Answerable'],
+    body.appendChild(metricsTable(['Rule', 'Regulation', 'Applies to', 'Governs', 'Source', 'Answerable'],
       inForce.map(function (r) {
         return [r.ruleId, r.regulation || '—', (r.productTypes || []).join(', ') || 'all',
           windows(r), source(r), approval(r)]
@@ -1759,7 +1766,7 @@ export const PAGE_HTML = `<!doctype html>
 
     body.appendChild(el('h2', null, 'Awaiting approval (' + waiting.length + ')'))
     if (waiting.length) {
-      body.appendChild(table(['Rule', 'Regulation', 'Applies to', 'Source', 'Standing'],
+      body.appendChild(metricsTable(['Rule', 'Regulation', 'Applies to', 'Source', 'Standing'],
         waiting.map(function (r) {
           return [r.ruleId, r.regulation || '—', (r.productTypes || []).join(', ') || 'all',
             source(r), 'proposed by ' + (r.proposedBy || 'unattributed') + ' · ' + approval(r)]
@@ -1772,7 +1779,7 @@ export const PAGE_HTML = `<!doctype html>
 
     if (retired.length) {
       body.appendChild(el('h2', null, 'No longer in force (' + retired.length + ')'))
-      body.appendChild(table(['Rule', 'Regulation', 'Retired'],
+      body.appendChild(metricsTable(['Rule', 'Regulation', 'Retired'],
         retired.map(function (r) { return [r.ruleId, r.regulation || '—', r.retiredAt || '—'] })))
       body.appendChild(el('p', 'note',
         'Kept. A verdict reached under one of these still needs the rule that produced it.'))
@@ -1780,7 +1787,7 @@ export const PAGE_HTML = `<!doctype html>
 
     // 3. What the engine signals for production.
     body.appendChild(el('h2', null, 'What this signals for production'))
-    body.appendChild(table(['', 'Today', 'What it means'], [
+    body.appendChild(metricsTable(['', 'Today', 'What it means'], [
       ['Policy as data',
         inForce.length + ' rules in a reviewed file',
         'A regulation change is a pull request, not a deployment of new logic. The people who own the rules are not the people who own the code.'],

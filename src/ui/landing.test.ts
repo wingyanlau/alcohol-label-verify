@@ -12,6 +12,10 @@ import { describe, expect, it } from 'vitest'
 import { LANDING_HTML } from './landing.js'
 
 describe('the landing page', () => {
+  it('spells the agency out', () => {
+    expect(LANDING_HTML).toContain('Alcohol and Tobacco Tax and Trade Bureau')
+  })
+
   it('explains before it asks', () => {
     expect(LANDING_HTML).toContain('TTB F 5100.31')
     expect(LANDING_HTML.replace(/\s+/g, ' ')).toMatch(/cost control/)

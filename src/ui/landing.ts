@@ -62,7 +62,8 @@ export const LANDING_HTML = `<!doctype html>
 <body>
 <main>
   <h1>TTB Label Check</h1>
-  <p class="sub">A prototype: checking an alcohol beverage label against the application it was filed with.</p>
+  <p class="sub">Alcohol and Tobacco Tax and Trade Bureau — a prototype that checks an alcohol
+  beverage label against the application it was filed with.</p>
 
   <p class="lede">An agent uploads a completed TTB F 5100.31. The label artwork and
   the application record are read as two separate, independent readings, compared
@@ -170,7 +171,8 @@ export const LANDING_HTML = `<!doctype html>
     API, so an open address is an unbounded bill. The credential came with the
     link to this page.</p>
     <p><a class="go" href="/app">Open the prototype</a></p>
-    <p class="note">Your browser will ask for the credential once.</p>
+    <p class="note">Your browser will ask for the credential once. You can come back to this
+    page from the link beneath the title on any screen.</p>
   </div>
 
   <footer>
