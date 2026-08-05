@@ -283,6 +283,40 @@ worth running against the schema rather than reasoning about it.
 
 ---
 
+## 10a. Reading the record from outside
+
+`GET /events` serves the chained event stream for anything that wants to watch
+this system — log analysis, monitoring, an observability pipeline.
+
+| | |
+|---|---|
+| Filters | `action`, `actorKind`, `subjectType`, `since`, `until` — column equality, never a pattern |
+| Paging | `afterSeq` cursor; `nextCursor` is **null at the end of the stream**, so a poller never has to infer completion from a page size |
+| Formats | JSON, or `format=ndjson` for one event per line |
+| Carries | The chain digests, so a consumer can **verify** the stream rather than trust it |
+
+**Two properties make this an integration point rather than a dump.**
+
+*The consumer can check the source.* Most log APIs hand over lines that must be
+taken on faith. This hands over `previous` and `digest` with every event, so a
+downstream system re-computes the chain and is auditing the system rather than
+charting it.
+
+*Content is absent by construction.* `detail` holds identifiers, classifications
+and versions and never artwork or a value read from a label, so the stream can be
+exported wholesale without leaking a submission. That is a property of what was
+written rather than a filter applied on the way out — which is the difference
+between a guarantee and a hope.
+
+**This is not the runtime log.** `emit()` writes operational lines — a request
+failed, a rate limit was waited out — to the platform's pipeline, and a
+monitoring stack should read those from Logpush. They are transient and this
+system stores none of them. `/events` is the durable record of *what happened to
+an application*, which is the log an auditor, an applicant or a dispute would
+ask for.
+
+---
+
 ## 11. Migration history
 
 | | |

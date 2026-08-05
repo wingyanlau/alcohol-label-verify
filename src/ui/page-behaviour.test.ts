@@ -366,10 +366,12 @@ function boot(
               },
             ],
             verification: {
+              interactive: { count: 2, p50: 2400, p95: 2600, max: 2600 },
+              batch: { count: 2, p50: 9900, p95: 9900, max: 9900 },
               total: { count: 4, p50: 3800, p95: 9900, max: 9900 },
               extract: { count: 4, p50: 3700, p95: 9800, max: 9800 },
               compare: { count: 4, p50: 2, p95: 3, max: 3 },
-              meetsTarget: false,
+              meetsTarget: true,
               targetMs: 5000,
             },
             cost: [
@@ -987,11 +989,21 @@ describe('the measurement screen (§16)', () => {
     return { byId, calls }
   }
 
-  it('states the target and whether it is met', async () => {
+  it('judges the target on single review, and says why', async () => {
+    // A worklist prepared in batch once produced a twenty-second p95 and the
+    // page reported the stated criterion as failed. Nobody had waited for any
+    // of it.
     const { byId } = await openMeasure()
     const words = byId.measureBody?.words() ?? ''
-    expect(words).toContain('S1')
-    expect(words).toMatch(/not met/)
+    expect(words).toMatch(/five-second target, on single review: met/)
+    expect(words).toMatch(/judged on single review alone/)
+  })
+
+  it('separates the path where somebody waits from the one where nobody does', async () => {
+    const { byId } = await openMeasure()
+    const words = byId.measureBody?.words() ?? ''
+    expect(words).toContain('Single review — an agent is waiting')
+    expect(words).toContain('Batch — nobody is waiting')
   })
 
   it('shows every figure with the sample it was drawn from', async () => {
@@ -999,7 +1011,7 @@ describe('the measurement screen (§16)', () => {
     // and a number without its denominator is the kind that gets quoted.
     const { byId } = await openMeasure()
     const words = byId.measureBody?.words() ?? ''
-    expect(words).toMatch(/over 4 verifications/)
+    expect(words).toMatch(/over 2 reviews/)
     expect(words).toMatch(/over 4 reads/)
   })
 

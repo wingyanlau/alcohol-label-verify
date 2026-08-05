@@ -10,6 +10,7 @@
  */
 
 import { agentRoster } from './agents/roster.js'
+import { type EventRow, eventSql, nextCursor, parseEventQuery, toEvent } from './audit/events.js'
 import { compareReadings } from './audit/reread.js'
 import { AuditRejected, checkAudit } from './audit/review.js'
 import { AgentNotPermitted, humanAgent, SYSTEM_AGENT } from './batch/agent.js'
@@ -1636,6 +1637,72 @@ export default {
       }
 
       return json({ ...detail, replay })
+    }
+
+    // The durable event stream, for anything that wants to watch this system.
+    //
+    // "Give me the logs" has two answers and they are different things. The
+    // transient runtime logs — what `emit()` writes — belong to the platform
+    // and a monitoring stack should read them from Logpush. THIS is the durable
+    // stream: every act that changed the record, with the agent that performed
+    // it, hash-chained.
+    //
+    // It hands over the digests as well as the events, so a downstream system
+    // can verify the chain itself rather than trusting this exporter. And the
+    // detail carries identifiers and classifications only (D20) — never
+    // artwork, never a value read from a label — so exporting it wholesale
+    // cannot leak a submission. That is a property of what was written rather
+    // than a filter on the way out, which is why an integration can rely on it.
+    if (pathname === '/events' && request.method === 'GET') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+      const url = new URL(request.url)
+      const query = parseEventQuery(url)
+      const { sql, binds } = eventSql(query)
+      const { results } = await env.DB.prepare(sql)
+        .bind(...binds)
+        .all<EventRow>()
+
+      const events = results.map(toEvent)
+      const cursor = nextCursor(results, query.limit)
+
+      // NDJSON for an ingester, JSON for a person. One event per line is what
+      // most log pipelines expect, and building it here saves every consumer
+      // writing the same reshaping.
+      if (url.searchParams.get('format') === 'ndjson') {
+        return new Response(`${events.map((e) => JSON.stringify(e)).join('\n')}\n`, {
+          headers: {
+            'content-type': 'application/x-ndjson; charset=utf-8',
+            'cache-control': 'no-store',
+            // The cursor travels in a header, since NDJSON has nowhere to put
+            // an envelope. Absent means the stream is exhausted.
+            ...(cursor === null ? {} : { 'x-next-cursor': String(cursor) }),
+          },
+        })
+      }
+
+      return json({
+        events,
+        // Null rather than repeating the last sequence, so a poller can tell
+        // "you have everything" from "there is more" without comparing counts
+        // to the page size — which is how a consumer silently stops at a page
+        // boundary and believes it is current.
+        nextCursor: cursor,
+        query: {
+          afterSeq: query.afterSeq,
+          limit: query.limit,
+          ...(query.action === undefined ? {} : { action: query.action }),
+          ...(query.actorKind === undefined ? {} : { actorKind: query.actorKind }),
+          ...(query.subjectType === undefined ? {} : { subjectType: query.subjectType }),
+          ...(query.since === undefined ? {} : { since: query.since }),
+          ...(query.until === undefined ? {} : { until: query.until }),
+        },
+        note:
+          'The durable record of what happened, hash-chained. Every event carries the digest ' +
+          'of the one before it, so a consumer can verify this stream rather than trust it. ' +
+          'Detail is identifiers and classifications only — never content. Transient runtime ' +
+          'logs are a different thing and belong to the platform (Logpush). ' +
+          'Add format=ndjson for one event per line.',
+      })
     }
 
     // Records that can be audited, and what anyone has concluded about them.

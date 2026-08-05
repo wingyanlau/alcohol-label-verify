@@ -58,11 +58,31 @@ export interface ModelCost {
 
 export interface Measurement {
   readonly reads: readonly ReadStats[]
+  /**
+   * Verification time, split by the path it came from — and the split is the
+   * point rather than a refinement.
+   *
+   * S1 is about **a person waiting**, and only one of the two paths makes them
+   * wait. Batch checks filings as they arrive, so its timings are a throughput
+   * property: nobody is watching them. Judging batch runs against a latency
+   * target reports a system as failing a criterion that criterion was never
+   * about — which is what this screen did until the two were separated.
+   */
   readonly verification: {
+    /** Single review: an agent is watching. The target applies as written. */
+    readonly interactive: Distribution
+    /** Batch: nobody waits. Reported for capacity, not as a promise. */
+    readonly batch: Distribution
     readonly total: Distribution
     readonly extract: Distribution
     readonly compare: Distribution
-    /** Against S1. Null where nothing has been checked — never a pass. */
+    /**
+     * Against S1, computed from the **interactive** path alone.
+     *
+     * Null where no interactive review has been recorded — which is not a pass
+     * and not a failure. A deployment whose worklist was prepared in batch has
+     * simply not exercised the criterion yet.
+     */
     readonly meetsTarget: boolean | null
     readonly targetMs: number
   }
@@ -82,6 +102,7 @@ interface TimingRow {
   extract_ms: number | null
   compare_ms: number | null
   total_ms: number | null
+  kind: string | null
 }
 interface CostRow {
   provider: string | null
@@ -112,10 +133,12 @@ export async function loadMeasurement(db: D1Database): Promise<Measurement> {
   const timings = (
     await db
       .prepare(
-        `SELECT extract_ms, compare_ms, total_ms
-           FROM verdict
-          WHERE total_ms IS NOT NULL
-          ORDER BY created_at DESC
+        `SELECT v.extract_ms, v.compare_ms, v.total_ms, j.kind
+           FROM verdict v
+           JOIN submission s ON s.id = v.submission_id
+           JOIN job j        ON j.id = s.job_id
+          WHERE v.total_ms IS NOT NULL
+          ORDER BY v.created_at DESC
           LIMIT ?`,
       )
       .bind(SAMPLE_LIMIT)
@@ -144,6 +167,12 @@ export async function loadMeasurement(db: D1Database): Promise<Measurement> {
 
   const regions = [...new Set(latency.map((r) => r.region))].sort()
   const total = summarise(numbers(timings.map((t) => t.total_ms)))
+  const interactive = summarise(
+    numbers(timings.filter((t) => t.kind === 'single').map((t) => t.total_ms)),
+  )
+  const batch = summarise(
+    numbers(timings.filter((t) => t.kind !== 'single').map((t) => t.total_ms)),
+  )
 
   return {
     reads: regions.map((region) => {
@@ -155,10 +184,15 @@ export async function loadMeasurement(db: D1Database): Promise<Measurement> {
       }
     }),
     verification: {
+      interactive,
+      batch,
       total,
       extract: summarise(numbers(timings.map((t) => t.extract_ms))),
       compare: summarise(numbers(timings.map((t) => t.compare_ms))),
-      meetsTarget: meets(total, P95_TARGET_MS),
+      // The interactive path only. `meets` already returns null on an empty
+      // distribution, so a deployment that has only run batches reports "not
+      // exercised" rather than a pass or a failure it has not earned.
+      meetsTarget: meets(interactive, P95_TARGET_MS),
       targetMs: P95_TARGET_MS,
     },
     cost: cost.map((c) => ({
@@ -178,7 +212,9 @@ export async function loadMeasurement(db: D1Database): Promise<Measurement> {
         `Distributions are drawn from the most recent ${SAMPLE_LIMIT} reads. ` +
         'Token totals are over every read ever recorded — a bill is not a sample. ' +
         'Verification time covers the reads and the comparison; rasterisation and ' +
-        'queue wait are outside it, so it is a floor on what an agent experiences.',
+        'queue wait are outside it, so it is a floor on what an agent experiences. ' +
+        'The five-second target is about a person waiting, so it is judged on single ' +
+        'review alone — batch checks filings as they arrive and nobody watches it.',
     },
   }
 }

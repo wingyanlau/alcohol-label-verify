@@ -97,11 +97,15 @@ function insertRead(
   )
 }
 
-function insertVerdict(db: DatabaseSync, id: string, totalMs: number | null) {
+function insertVerdict(db: DatabaseSync, id: string, totalMs: number | null, kind = 'batch') {
+  db.exec(
+    `INSERT OR IGNORE INTO job (id, created_at, state, item_count, kind)
+     VALUES ('job-${kind}', '2026-08-05T00:00:00.000Z', 'COMPLETE', 0, '${kind}')`,
+  )
   db.prepare(
     `INSERT INTO submission (id, job_id, source_name, content_digest, byte_size, state, created_at)
-     VALUES (?, 'job', 'x.pdf', 'd', 1, 'COMPLETED', '2026-08-05T00:00:00.000Z')`,
-  ).run(`vsub-${id}`)
+     VALUES (?, ?, 'x.pdf', 'd', 1, 'COMPLETED', '2026-08-05T00:00:00.000Z')`,
+  ).run(`vsub-${id}`, `job-${kind}`)
   db.prepare(
     `INSERT INTO verdict
        (id, submission_id, outcome, ruleset_version, reference_data_version, policy_version,
@@ -126,11 +130,44 @@ describe('the measurement surface', () => {
     const d1 = fakeD1()
     // Four fast and one very slow: the mean passes, the p95 does not.
     for (const [i, ms] of [400, 500, 600, 700, 30_000].entries()) {
-      insertVerdict(d1.raw, `v${i}`, ms)
+      insertVerdict(d1.raw, `v${i}`, ms, 'single')
     }
     const m = await loadMeasurement(d1)
     expect(m.verification.targetMs).toBe(P95_TARGET_MS)
     expect(m.verification.meetsTarget).toBe(false)
+  })
+
+  it('judges the target on single review alone, not on batch runs', async () => {
+    /*
+     * The defect this fixes, seen on the deployed screen: a worklist prepared
+     * in batch produced a p95 of twenty seconds, and the page reported the
+     * stated criterion as FAILED. Nobody waited for any of it — the target is
+     * about a person waiting, and batch checks filings as they arrive.
+     */
+    const d1 = fakeD1()
+    for (const [i, ms] of [20_000, 23_000, 18_000, 2500, 2600].entries()) {
+      insertVerdict(d1.raw, `b${i}`, ms, 'batch')
+    }
+    for (const [i, ms] of [2100, 2400, 2600].entries()) {
+      insertVerdict(d1.raw, `s${i}`, ms, 'single')
+    }
+    const m = await loadMeasurement(d1)
+    expect(m.verification.batch.count).toBe(5)
+    expect(m.verification.interactive.count).toBe(3)
+    // Judged on the three interactive reviews, all of which are inside target.
+    expect(m.verification.meetsTarget).toBe(true)
+    // And the batch numbers are still reported — for capacity, not as a promise.
+    expect(m.verification.batch.max).toBe(23_000)
+  })
+
+  it('reports the target as unexercised when only batches have run', async () => {
+    // Not a pass and not a failure. A deployment whose worklist was prepared
+    // in batch has simply not put a person in front of the wait yet.
+    const d1 = fakeD1()
+    insertVerdict(d1.raw, 'b0', 20_000, 'batch')
+    const m = await loadMeasurement(d1)
+    expect(m.verification.meetsTarget).toBeNull()
+    expect(m.verification.batch.count).toBe(1)
   })
 
   it('separates the two reads, because they are different work', async () => {

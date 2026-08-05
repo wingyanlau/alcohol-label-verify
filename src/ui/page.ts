@@ -1539,16 +1539,30 @@ export const PAGE_HTML = `<!doctype html>
     line.appendChild(el('span', null, (v.meetsTarget === true ? '✓' : v.meetsTarget === false ? '✗' : '—') + '  '))
     line.appendChild(document.createTextNode(
       v.meetsTarget === null || v.meetsTarget === undefined
-        ? 'Nothing has been checked yet, so there is nothing to judge.'
-        : 'S1 — 95% of verifications within ' + ms(v.targetMs) + ': ' +
-          (v.meetsTarget ? 'met' : 'not met')))
+        ? 'No single review has been recorded yet, so the target has not been exercised.'
+        : 'The five-second target, on single review: ' + (v.meetsTarget ? 'met' : 'not met')))
     box.appendChild(line)
+    box.appendChild(el('p', 'note',
+      'The target is about a person waiting, so it is judged on single review alone. Batch checks filings as they arrive — nobody watches it, and its timings are a capacity figure rather than a promise to anyone.'))
+
+    var inter = v.interactive || { count: 0 }
+    if (inter.count) {
+      box.appendChild(el('div', 'freq', 'Single review — an agent is waiting'))
+      box.appendChild(el('div', 'dev',
+        'p50 ' + ms(inter.p50) + ' · p95 ' + ms(inter.p95) + ' · slowest ' + ms(inter.max) +
+        ' · over ' + inter.count + ' review' + (inter.count === 1 ? '' : 's')))
+    }
+    var bat = v.batch || { count: 0 }
+    if (bat.count) {
+      box.appendChild(el('div', 'freq', 'Batch — nobody is waiting'))
+      box.appendChild(el('div', 'dev',
+        'p50 ' + ms(bat.p50) + ' · p95 ' + ms(bat.p95) + ' · slowest ' + ms(bat.max) +
+        ' · over ' + bat.count + ' submission' + (bat.count === 1 ? '' : 's')))
+    }
     if (v.total && v.total.count) {
       box.appendChild(el('div', 'dev',
-        'p50 ' + ms(v.total.p50) + ' · p95 ' + ms(v.total.p95) + ' · slowest ' + ms(v.total.max) +
-        ' · over ' + v.total.count + ' verification' + (v.total.count === 1 ? '' : 's')))
-      box.appendChild(el('div', 'dev',
-        'Reading ' + ms(v.extract && v.extract.p50) + ' · comparing ' + ms(v.compare && v.compare.p50) + ' (p50)'))
+        'Across both: reading ' + ms(v.extract && v.extract.p50) + ' · comparing ' +
+        ms(v.compare && v.compare.p50) + ' (p50)'))
     }
     body.appendChild(box)
 

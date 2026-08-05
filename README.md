@@ -216,7 +216,10 @@ from the reviewed file, and re-derives every stored verdict.
 | `AI_GATEWAY_ACCOUNT` / `_TOKEN` | routing inference through AI Gateway |
 
 Useful endpoints: `/health` · `/health/inference` · `/health/raster` ·
-`/audit/verify` · `/audit/replay` · `/measurement` · `/reference/<code>`
+`/audit/verify` · `/audit/replay` · `/measurement` · `/reference/<code>` ·
+`/events` — the chained event stream, filterable and paged, with the digests so
+a consumer can verify it rather than trust it (`format=ndjson` for a log
+pipeline)
 
 ---
 
