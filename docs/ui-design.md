@@ -142,7 +142,7 @@ Everything needed for one review fits on one screen at legible size.
 │  └─────────────────────────────────────────────────────────────────┘    │
 │                                                                        │
 │   ┌── C ────────────────────────┐  ┌── D ──────────────┐               │
-│   │   Check this submission     │  │  Clear this form  │               │
+│   │   Check this submission     │  │   Start again     │               │
 │   └─────────────────────────────┘  └───────────────────┘               │
 │                                                                        │
 └────────────────────────────────────────────────────────────────────────┘
@@ -294,7 +294,7 @@ user no explanation for why clicking does nothing. Pressing it with nothing
 attached runs validation and moves focus to the problem, which *tells the agent
 what to do*. That is both the accessible pattern and the kinder one.
 
-**Beside it: Clear this form** — secondary styling, and smaller. UC-1 is a
+**Beside it: Start again** — secondary styling, and smaller. UC-1 is a
 repeated act: an agent checks one submission, then the next.
 
 - It removes the attached PDF, clears any error, and takes the previous verdict
@@ -382,11 +382,10 @@ A `Check another label` action resets to §4.1 with everything cleared.
 
 | | |
 |---|---|
-| Tab order | Product type → brand name → class/type → alcohol → net contents → file button → primary action → clear this form |
+| Tab order | File button → primary action → start again → the demo examples |
 | The drop zone is not a tab stop | The button inside it is |
 | Focus ring | Visible, never removed, ≥ 2px, ≥ 3:1 against its background |
-| `Enter` in any text field | Submits — matches the expectation of a four-field form |
-| On validation failure | Focus to the first invalid control |
+| On validation failure | Focus to the first invalid control — which is now always the file |
 | On results | Focus to the outcome banner |
 | On error | Focus to the error message |
 
@@ -413,7 +412,7 @@ afterthought.*
 | Panel 1 heading | 1. The application says |
 | Panel 2 heading | 2. The label |
 | Field labels | Product type · Brand name · Class / type · Alcohol content · Net contents |
-| Buttons | Check this submission · Clear this form |
+| Buttons | Check this submission · Start again |
 | Required marker | (required) — on brand name only |
 | Class hint | e.g. Kentucky Straight Bourbon Whiskey |
 | Net contents hint | e.g. 750 mL |

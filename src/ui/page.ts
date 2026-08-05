@@ -330,7 +330,7 @@ export const PAGE_HTML = `<!doctype html>
       <!-- Secondary, and always present rather than appearing after a result:
            a control that materialises only once you are finished is one nobody
            knows exists while they are working. -->
-      <button id="clearBtn" type="button" class="secondary">Clear this form</button>
+      <button id="clearBtn" type="button" class="secondary">Start again</button>
       <p id="working" class="note hidden" role="status" aria-live="polite"></p>
     </div>
     <div id="singleResult"></div>
@@ -1504,6 +1504,11 @@ export const PAGE_HTML = `<!doctype html>
   /**
    * Empty the screen so the next submission can be checked.
    *
+   * Named for what an agent is doing rather than for what is on screen. It was
+   * "Clear this form" while there was a form to clear; the screen now holds one
+   * upload, and a button naming a thing that no longer exists is a button
+   * nobody trusts.
+   *
    * Nothing is lost by pressing this. Every review is persisted with its own
    * reference code the moment it completes (M4), so clearing the screen
    * discards a view of the record and not the record — which is why it asks no
@@ -1514,7 +1519,7 @@ export const PAGE_HTML = `<!doctype html>
    * screen is the one state that could put the previous submission through a
    * second review under a new reference.
    */
-  function clearSingleForm() {
+  function startAgain() {
     detach()
     clearFieldError('file')
     byId('singleResult').textContent = ''
@@ -1580,7 +1585,7 @@ export const PAGE_HTML = `<!doctype html>
     })
 
     byId('checkBtn').addEventListener('click', runSingle)
-    byId('clearBtn').addEventListener('click', clearSingleForm)
+    byId('clearBtn').addEventListener('click', startAgain)
     loadSamples()
   }
 
