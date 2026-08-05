@@ -44,6 +44,19 @@ export interface Env {
    * external provider's URL. Caching is off unless `AI_GATEWAY_CACHE_TTL` is
    * set, because a corpus run served from cache measures the cache.
    */
+  /**
+   * The credentials that gate the deployment (D49).
+   *
+   * Two pairs, so two people can evaluate this at once and either can be
+   * revoked without locking out the other. None configured means the door is
+   * open, which is what `wrangler dev` needs. Not authentication of anybody:
+   * shared credentials establish only that the caller was given one. See
+   * `gate.ts`.
+   */
+  POC_USER_ONE?: string
+  POC_USER_ONE_PASSWORD?: string
+  POC_USER_TWO?: string
+  POC_USER_TWO_PASSWORD?: string
   AI_GATEWAY_ID?: string
   AI_GATEWAY_ACCOUNT?: string
   AI_GATEWAY_CACHE_TTL?: string

@@ -150,9 +150,26 @@ export const PAGE_HTML = `<!doctype html>
 
   /* Single review (§4). */
   .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
-  .modes { display: flex; gap: 8px; }
-  .mode { padding: 8px 16px; font-size: 16px; }
-  .mode[aria-selected="false"] { background: var(--panel); color: var(--ink); }
+  .nav { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; }
+  /* The work: a real tab strip, selected by an underline rather than by being
+     the only filled button in a row. A tab says "you are here"; a button says
+     "press me", and three buttons said it three times at once. */
+  .modes { display: flex; gap: 4px; }
+  .mode { padding: 9px 16px; font-size: 16px; background: none; color: var(--muted);
+          border: 0; border-bottom: 3px solid transparent; border-radius: 0; font-weight: 600; }
+  .mode:hover { color: var(--ink); }
+  .mode[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent, #1a4480); }
+  /* Reference, and quieter by a clear margin — read occasionally, never in the
+     middle of checking a label. */
+  .refs { display: flex; gap: 14px; padding-left: 26px; border-left: 1px solid var(--rule, #dcdcdc); }
+  .ref { background: none; border: 0; padding: 6px 2px; font-size: 15px; color: var(--muted);
+         text-decoration: underline; text-underline-offset: 4px; border-radius: 0; }
+  .ref:hover { color: var(--ink); }
+  .ref[aria-selected="true"] { color: var(--ink); font-weight: 600; }
+  @media (max-width: 720px) {
+    .nav { gap: 12px; }
+    .refs { padding-left: 0; border-left: 0; }
+  }
   .layout2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
   @media (max-width: 820px) { .layout2 { grid-template-columns: 1fr; } }
   .panel { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 20px 22px; }
@@ -196,10 +213,22 @@ export const PAGE_HTML = `<!doctype html>
   <!-- Region A: product name and the mode switch, and no other chrome (§4.1). -->
   <div class="topbar">
     <h1>TTB Label Check</h1>
-    <div class="modes" role="tablist" aria-label="Mode">
-      <button id="modeSingle" type="button" class="mode" role="tab" aria-selected="true">Single review</button>
-      <button id="modeBatch" type="button" class="mode secondary" role="tab" aria-selected="false">Batch</button>
-      <button id="modePolicy" type="button" class="mode secondary" role="tab" aria-selected="false">Policy</button>
+    <!-- Two groups, because there are two kinds of thing here (§4.1).
+         "Single review" and "Batch" are the work: an agent is in one or the
+         other all day. "Policy" and "Agents" are reference — what the system
+         is governed by and who may act — read occasionally, and never in the
+         middle of checking a label. Four equal buttons in a row made the
+         choice look like four equal jobs, and pushed the two that matter into
+         a line of chrome. -->
+    <div class="nav">
+      <div class="modes" role="tablist" aria-label="What to check">
+        <button id="modeSingle" type="button" class="mode" role="tab" aria-selected="true">Single review</button>
+        <button id="modeBatch" type="button" class="mode" role="tab" aria-selected="false">Batch</button>
+      </div>
+      <div class="refs" role="tablist" aria-label="How this system is governed">
+        <button id="modePolicy" type="button" class="ref" role="tab" aria-selected="false">Policy</button>
+        <button id="modeAgents" type="button" class="ref" role="tab" aria-selected="false">Agents</button>
+      </div>
     </div>
   </div>
 
@@ -212,6 +241,16 @@ export const PAGE_HTML = `<!doctype html>
     <p class="lede">The rules this system applies, and where each came from. Read only —
       a rule takes effect when it is approved in the reviewed policy file.</p>
     <div id="policyBody"></div>
+  </section>
+
+  <!-- Who and what may act here (§19, D46). Read only, like the policy view:
+       the register is config, reviewed like everything else, and a control
+       here that wrote would be a control with no gate behind it (D14). -->
+  <section id="agents" class="hidden">
+    <h1>Agents</h1>
+    <p class="lede">Everyone and everything this deployment recognises, and what each may do.
+      The model reads, the rules compare, the human decides — and the code refuses the rest.</p>
+    <div id="agentsBody"></div>
   </section>
 
   <!-- Single review (§4). One submission, checked now — and the same input the
@@ -580,6 +619,26 @@ export const PAGE_HTML = `<!doctype html>
     startBtn.disabled = true
     startBtn.textContent = 'Starting…'
     startErr.classList.add('hidden')
+    // Clear the previous run NOW, before the request goes out.
+    //
+    // Reported from staging: pressing this again left 26 finished rows, their
+    // counts and a full progress bar on screen while the new job was being
+    // created. Nothing changes until the first snapshot arrives, so every
+    // visible signal said the batch was finished and the only one saying
+    // otherwise was a word on a button — which reads as stuck, not as starting.
+    //
+    // The old rows are not merely stale, either. They belong to a job the agent
+    // has just stopped looking at, and a progress bar that says "Checked 26 of
+    // 26" over a run that has checked nothing is the screen contradicting
+    // itself. An empty list under a zeroed bar is both honest and legible as
+    // work beginning.
+    rows.clear()
+    total = 0
+    renderCounts()
+    renderWorklist()
+    progressLabel.textContent = 'Checked 0 of 0'
+    bar.style.width = '0%'
+    batchSection.classList.remove('hidden')
     // The server returns the job in flight if there is one, so this is a join
     // rather than a second batch. Nothing here needs to distinguish them.
     fetch('/batch', { method: 'POST' })
@@ -611,6 +670,11 @@ export const PAGE_HTML = `<!doctype html>
           'The check could not be started. Nothing was saved. Please try again in a moment.' +
           (said ? ' (' + said + ')' : '')
         startErr.classList.remove('hidden')
+        // Clearing on click promised a new run. If there is not one, the page
+        // must not be left blank: the earlier job still exists and the agent
+        // has just lost sight of it. Ask the service what is true rather than
+        // restoring rows from memory that may no longer be what it holds.
+        reconcile()
       })
   })
 
@@ -671,6 +735,16 @@ export const PAGE_HTML = `<!doctype html>
   // reaches for, and the batch screen is the demonstration. The bootstrap may
   // still switch to batch if a job is already running, which is the one case
   // where the other screen matters more.
+  // Four screens now, so the argument is a name rather than a boolean — it was
+  // showMode(true|false), which stopped being able to say which screen the
+  // moment there were more than two.
+  var SCREENS = [
+    { mode: 'single', section: 'single', tab: 'modeSingle' },
+    { mode: 'batch', section: 'batchHome', tab: 'modeBatch' },
+    { mode: 'policy', section: 'policy', tab: 'modePolicy' },
+    { mode: 'agents', section: 'agents', tab: 'modeAgents' },
+  ]
+
   singleInit()
   showMode('single')
 
@@ -978,6 +1052,79 @@ export const PAGE_HTML = `<!doctype html>
       })
   }
 
+  /**
+   * The agent register (§19, D46).
+   *
+   * Grouped by kind, in the order the governing principle puts them: people
+   * first. A list that opened with the machines would read as though the
+   * machines were the establishment and the people an annotation.
+   */
+  var agentsLoaded = false
+  function loadAgents() {
+    if (agentsLoaded) return
+    agentsLoaded = true
+    var body = byId('agentsBody')
+    body.textContent = 'Loading…'
+    fetch('/agents')
+      .then(function (r) { if (!r.ok) throw new Error('agents unavailable'); return r.json() })
+      .then(function (d) { renderAgents(d) })
+      .catch(function () {
+        agentsLoaded = false
+        body.textContent = ''
+        body.appendChild(el('p', 'err', 'The agent register could not be loaded. Please try again in a moment.'))
+      })
+  }
+
+  var KIND_TITLE = {
+    human: 'People',
+    model: 'Models',
+    system: 'The system itself',
+  }
+  var KIND_NOTE = {
+    human: 'Recognised, not authenticated: this says who may act, not that whoever typed a name is that person.',
+    model: 'A reader is identified by its whole tuple — provider, model and prompt version — because each of them changes what it produces.',
+    system: 'The deployment executing its own steps. Opening a job is execution, not anyone deciding.',
+  }
+
+  function renderAgents(d) {
+    var body = byId('agentsBody')
+    body.textContent = ''
+
+    var agents = (d && d.agents) || []
+    ;['human', 'model', 'system'].forEach(function (kind) {
+      var of = agents.filter(function (a) { return a.kind === kind })
+      if (!of.length) return
+      var box = el('div')
+      box.appendChild(el('h2', null, KIND_TITLE[kind] + ' (' + of.length + ')'))
+      box.appendChild(el('p', 'note', KIND_NOTE[kind]))
+      of.forEach(function (a) { box.appendChild(agentRow(a)) })
+      body.appendChild(box)
+    })
+
+    if (d && d.note) body.appendChild(el('p', 'note', d.note))
+  }
+
+  function agentRow(a) {
+    var row = el('div', 'finding')
+
+    // What it may decide, first and in plain words. It is the one fact on this
+    // page that is a rule rather than a description, and the code enforces it.
+    var line = el('div', 'fstatus ' + (a.mayDecide ? 'ok' : 'muted'))
+    line.appendChild(el('span', null, (a.mayDecide ? '✓' : '—') + '  '))
+    line.appendChild(document.createTextNode(a.mayDecide ? 'May decide' : 'May not decide'))
+    row.appendChild(line)
+
+    row.appendChild(el('div', 'freq', a.display + ' — ' + a.role))
+    ;(a.entitlements || []).forEach(function (e) {
+      row.appendChild(el('div', 'dev', '· ' + e))
+    })
+    // The identity exactly as the record carries it, so a line in the audit
+    // trail can be matched to a row on this page without interpretation.
+    row.appendChild(el('div', 'rule', a.id))
+    if (a.source) row.appendChild(el('div', 'dev', a.source))
+    return row
+  }
+
   function renderPolicy(d) {
     var body = byId('policyBody')
     body.textContent = ''
@@ -1048,13 +1195,12 @@ export const PAGE_HTML = `<!doctype html>
   }
 
   function showMode(mode) {
-    byId('single').classList.toggle('hidden', mode !== 'single')
-    byId('batchHome').classList.toggle('hidden', mode !== 'batch')
-    byId('policy').classList.toggle('hidden', mode !== 'policy')
-    byId('modeSingle').setAttribute('aria-selected', String(mode === 'single'))
-    byId('modeBatch').setAttribute('aria-selected', String(mode === 'batch'))
-    byId('modePolicy').setAttribute('aria-selected', String(mode === 'policy'))
+    SCREENS.forEach(function (s) {
+      byId(s.section).classList.toggle('hidden', mode !== s.mode)
+      byId(s.tab).setAttribute('aria-selected', String(mode === s.mode))
+    })
     if (mode === 'policy') loadPolicy()
+    if (mode === 'agents') loadAgents()
   }
 
   function clearFieldError(id) {
@@ -1153,9 +1299,9 @@ export const PAGE_HTML = `<!doctype html>
   }
 
   function singleInit() {
-    byId('modeSingle').addEventListener('click', function () { showMode('single') })
-    byId('modeBatch').addEventListener('click', function () { showMode('batch') })
-    byId('modePolicy').addEventListener('click', function () { showMode('policy') })
+    SCREENS.forEach(function (s) {
+      byId(s.tab).addEventListener('click', function () { showMode(s.mode) })
+    })
 
     byId('pickBtn').addEventListener('click', function () { byId('file').click() })
     byId('replaceBtn').addEventListener('click', function () { byId('file').click() })

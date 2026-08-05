@@ -145,6 +145,7 @@ function boot(
     items?: Item[]
     resetStops?: number | null
     samplesFail?: boolean
+    startFails?: boolean
   } = {},
 ) {
   const items = opts.items ?? corpusItems()
@@ -242,6 +243,44 @@ function boot(
           }),
       })
     }
+    if (url.includes('/agents')) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            note: 'Deliberately no counts of what anyone did (D47).',
+            agents: [
+              {
+                kind: 'human',
+                id: 'human:Sarah Peterson',
+                display: 'Sarah Peterson',
+                role: 'Policy author',
+                entitlements: ['Propose a rule for approval — and never enact their own proposal'],
+                mayDecide: true,
+                source: 'Named in the user register.',
+              },
+              {
+                kind: 'model',
+                id: 'model:workers-ai:@cf/meta/llama-4-scout-17b-16e-instruct',
+                display: 'workers-ai @cf/meta/llama-4-scout-17b-16e-instruct',
+                role: 'Reader',
+                entitlements: ['Read a label, and report what it could not read'],
+                mayDecide: false,
+                source: 'Approved to read labels (D29).',
+              },
+              {
+                kind: 'system',
+                id: 'system',
+                display: 'system',
+                role: 'The deployment executing',
+                entitlements: ['Open and close a job'],
+                mayDecide: false,
+                source: 'Execution, not anyone deciding.',
+              },
+            ],
+          }),
+      })
+    }
     if (url.includes('/policy/rules')) {
       return Promise.resolve({
         ok: true,
@@ -287,6 +326,15 @@ function boot(
             retired: [],
           }),
       })
+    }
+    if (url === '/batch' && init?.method === 'POST') {
+      if (opts.startFails) {
+        return Promise.resolve({
+          ok: false,
+          json: () => Promise.resolve({ detail: 'queue unavailable' }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ jobId: JOB }) })
     }
     const body = url.includes('/batch/current')
       ? { jobId: JOB, running, counts: { queued: 0, running: 0, settled: items.length } }
@@ -639,5 +687,121 @@ describe('the sample submissions on the review screen', () => {
     // that costs them nothing.
     expect(byId.fileErr?.textContent).toBe('')
     expect(byId.sampleList?.words()).toBe('')
+  })
+})
+
+describe('starting a second run (the stall that was not one)', () => {
+  /*
+   * Reported from staging. Pressing "Check the 26 test submissions again" put
+   * the button into "Starting…" and left the previous run's 26 rows, counts and
+   * full progress bar on screen — because nothing changes until the new job's
+   * first snapshot arrives, and that takes a moment.
+   *
+   * So the screen said "Checked 26 of 26" and showed a finished list while a new
+   * run was starting. Every visible signal said nothing was happening, and the
+   * one that said otherwise was a word on a button. The old results are also
+   * not merely stale: they belong to a job the agent is no longer looking at.
+   */
+  const startFresh = async () => {
+    const { byId, settle, calls } = boot()
+    await settle()
+    // The previous run is on screen: 26 rows and a completed bar.
+    expect(byId.worklist?.count('li')).toBe(27)
+    byId.startBtn?.click()
+    return { byId, settle, calls }
+  }
+
+  it('clears the previous run before the new one reports anything', async () => {
+    const { byId } = await startFresh()
+    // Synchronously, on the click — not after a round trip. The whole problem
+    // was the gap between the two.
+    expect(byId.worklist?.count('li')).toBe(0)
+  })
+
+  it('puts the progress back to nothing done', async () => {
+    const { byId } = await startFresh()
+    expect(byId.progressLabel?.textContent).toBe('Checked 0 of 0')
+    expect(byId.bar?.style.width).toBe('0%')
+  })
+
+  it('empties the counts rather than carrying the old ones', async () => {
+    const { byId } = await startFresh()
+    // "26 matched" beside an empty list is a screen contradicting itself.
+    expect(byId.counts?.words()).not.toMatch(/[1-9]/)
+  })
+
+  it('shows the progress area, so there is something visibly underway', async () => {
+    const { byId } = await startFresh()
+    expect(byId.batch?.classList.contains('hidden')).toBe(false)
+  })
+
+  it('brings the previous run back if the start fails', async () => {
+    // Clearing on click is a promise that a new run is beginning. If it is not,
+    // the page must not be left blank — the earlier job still exists, and the
+    // agent has lost sight of it.
+    const { byId, settle } = boot({ startFails: true })
+    await settle()
+    byId.startBtn?.click()
+    await settle()
+    expect(byId.worklist?.count('li')).toBe(27)
+    expect(byId.startErr?.classList.contains('hidden')).toBe(false)
+  })
+})
+
+describe('the agent register (§19)', () => {
+  /*
+   * D46 made "who or what acted" one concept with three kinds, and then the
+   * register existed only for code: an audit line reading
+   * `model:workers-ai:@cf/…` identified an agent exactly and gave a reader
+   * nowhere to look up what it is or what it may do.
+   */
+  const openAgents = async () => {
+    const { byId, settle, calls } = boot()
+    await settle()
+    byId.modeAgents?.click()
+    await settle()
+    return { byId, calls }
+  }
+
+  it('groups the three kinds, people first', async () => {
+    const { byId } = await openAgents()
+    const words = byId.agentsBody?.words() ?? ''
+    expect(words).toContain('People')
+    expect(words).toContain('Models')
+    expect(words).toContain('The system itself')
+    expect(words.indexOf('People')).toBeLessThan(words.indexOf('Models'))
+  })
+
+  it('says of each agent whether it may decide', async () => {
+    const { byId } = await openAgents()
+    const words = byId.agentsBody?.words() ?? ''
+    expect(words).toContain('May decide')
+    expect(words).toContain('May not decide')
+  })
+
+  it('shows the identity exactly as the record carries it', async () => {
+    // So a line in the audit trail matches a row here without interpretation.
+    const { byId } = await openAgents()
+    expect(byId.agentsBody?.words()).toContain(
+      'model:workers-ai:@cf/meta/llama-4-scout-17b-16e-instruct',
+    )
+  })
+
+  it('shows no count of what anyone did (D47)', async () => {
+    // A roster is exactly where a productivity number arrives by accident, and
+    // its absence is a decision rather than an omission.
+    const { byId } = await openAgents()
+    const words = byId.agentsBody?.words() ?? ''
+    expect(words).toMatch(/no counts of what anyone did/i)
+    expect(words).not.toMatch(/\b\d+ (checks|decisions|labels|submissions) /i)
+  })
+
+  it('does not fetch the register until the tab is opened', async () => {
+    const { byId, settle, calls } = boot()
+    await settle()
+    expect(calls.filter((c) => c.includes('/agents'))).toEqual([])
+    byId.modeAgents?.click()
+    await settle()
+    expect(calls.filter((c) => c.includes('/agents')).length).toBe(1)
   })
 })

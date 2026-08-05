@@ -278,6 +278,40 @@ Secrets never appear in `wrangler.jsonc`, in the repository, or in logs (D20).
 The Gemini adapter sends its key in a header rather than a query parameter for
 the same reason: a URL is captured by anything that logs one.
 
+#### The reviewer credentials (D49)
+
+Staging is a public URL that calls a metered API, so it is gated. Two pairs,
+so two people can evaluate at once and either can be revoked without disturbing
+the other:
+
+| GitHub environment secret | Worker secret | Purpose |
+|---|---|---|
+| `POC_USER_ONE` | `POC_USER_ONE` | First reviewer's username |
+| `POC_USER_ONE_PASSWORD` | `POC_USER_ONE_PASSWORD` | …and password |
+| `POC_USER_TWO` | `POC_USER_TWO` | Second reviewer's username |
+| `POC_USER_TWO_PASSWORD` | `POC_USER_TWO_PASSWORD` | …and password |
+
+Set them on the **`staging` GitHub environment**, not at repository scope — the
+same rule the Cloudflare credentials follow, so a workflow that does not declare
+an environment cannot resolve them. CI installs each pair only when **both**
+halves are present, and says in the log which of the two states it left the
+deployment in.
+
+```bash
+# By hand, if ever needed. Both halves, or the pair is ignored.
+npx wrangler secret put POC_USER_ONE --env staging
+npx wrangler secret put POC_USER_ONE_PASSWORD --env staging
+```
+
+**With none configured the deployment is open**, and that is deliberate: a gate
+that closed without a credential would brick `wrangler dev` and turn a forgotten
+secret into an outage. The deploy log carries a warning when it leaves staging
+open, so it is a stated fact rather than an assumption.
+
+**It is a cost control, not a login.** It says the caller was given a
+credential and nothing about who they are — see design §15.4.1. Handing a
+reviewer the URL and one pair is the whole of the access procedure.
+
 ---
 
 ## 6. Deploy

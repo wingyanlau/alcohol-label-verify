@@ -37,6 +37,16 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # The door on the deployment (D49). Every probe below goes through it,
+      # including the cheap ones — a health check that calls a model is the
+      # cheapest way to spend the quota the gate exists to protect.
+      #
+      # Two pairs, so two people can evaluate at once and either can be revoked
+      # without locking out the other. CI uses the first.
+      POC_USER_ONE: ${{ secrets.POC_USER_ONE }}
+      POC_USER_ONE_PASSWORD: ${{ secrets.POC_USER_ONE_PASSWORD }}
+      POC_USER_TWO: ${{ secrets.POC_USER_TWO }}
+      POC_USER_TWO_PASSWORD: ${{ secrets.POC_USER_TWO_PASSWORD }}
     steps:
       # First, and before the checkout: a missing environment secret otherwise
       # surfaces as an opaque wrangler auth error several minutes in. Now that
@@ -139,6 +149,68 @@ jobs:
           fi
           printf '%s' "$AI_GATEWAY_TOKEN" | npx wrangler secret put AI_GATEWAY_TOKEN --env staging
 
+      # The reviewer credentials, installed as worker secrets.
+      #
+      # None configured means the deployment stays open, which is the honest
+      # behaviour for a repository somebody has just forked: a gate that closed
+      # without a credential would leave them with a 401 and no way in. Which of
+      # the two states this deploy left is reported, not assumed.
+      #
+      # Each pair is installed only if BOTH halves are present. Half a pair
+      # would otherwise install a username whose password is whatever was left
+      # deployed from a previous run.
+      - name: Push the reviewer credentials
+        run: |
+          set -euo pipefail
+          installed=0
+          put() {
+            name="$1"; user="$2"; password="$3"
+            if [ -z "$user" ] || [ -z "$password" ]; then
+              echo "::notice::$name incomplete or unset — not installed"
+              return 0
+            fi
+            printf '%s' "$user" | npx wrangler secret put "${name}" --env staging
+            printf '%s' "$password" | npx wrangler secret put "${name}_PASSWORD" --env staging
+            installed=$((installed + 1))
+          }
+          put POC_USER_ONE "${POC_USER_ONE:-}" "${POC_USER_ONE_PASSWORD:-}"
+          put POC_USER_TWO "${POC_USER_TWO:-}" "${POC_USER_TWO_PASSWORD:-}"
+          if [ "$installed" -eq 0 ]; then
+            echo "::warning::no reviewer credential configured — this deployment is OPEN to anyone with the URL"
+          else
+            echo "::notice::$installed reviewer credential(s) installed; the deployment is gated"
+          fi
+
+      # How every probe below authenticates.
+      #
+      # A netrc file rather than -u: the credential then never appears in a
+      # process argument list, and a password containing a space survives the
+      # unquoted expansion these steps use. Empty when nothing is configured,
+      # which is exactly the open-deployment case.
+      - name: Prepare the probe credential
+        run: |
+          set -euo pipefail
+          # Whichever pair is complete, preferring the first. Taking only pair
+          # one would fail every probe on a deployment gated by pair two alone
+          # — a real configuration, and one where the deploy would look broken
+          # rather than gated.
+          user=""; password=""
+          if [ -n "${POC_USER_ONE:-}" ] && [ -n "${POC_USER_ONE_PASSWORD:-}" ]; then
+            user="$POC_USER_ONE"; password="$POC_USER_ONE_PASSWORD"
+          elif [ -n "${POC_USER_TWO:-}" ] && [ -n "${POC_USER_TWO_PASSWORD:-}" ]; then
+            user="$POC_USER_TWO"; password="$POC_USER_TWO_PASSWORD"
+          fi
+          if [ -z "$user" ]; then
+            echo "GATE_AUTH=" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          netrc="$RUNNER_TEMP/gate.netrc"
+          umask 077
+          printf 'machine %s login %s password %s\n' \
+            "alcohol-label-verify-staging.wing-lawrence.workers.dev" \
+            "$user" "$password" > "$netrc"
+          echo "GATE_AUTH=--netrc-file $netrc" >> "$GITHUB_ENV"
+
       - name: Deploy
         id: deploy
         run: |
@@ -186,7 +258,7 @@ jobs:
           body=''
           got=''
           for attempt in $(seq 1 15); do
-            body=$(curl -sS --max-time 20 "$url/health" || true)
+            body=$(curl -sS $GATE_AUTH --max-time 20 "$url/health" || true)
             got=$(printf '%s' "$body" | jq -r '.version // ""' 2>/dev/null || echo '')
             [ "$got" = "$want" ] && break
             echo "attempt $attempt: serving version ${got:-<none>}, waiting for $want"
@@ -215,9 +287,9 @@ jobs:
 
           # Cloudflare propagation lags a few seconds; retry before diagnosing.
           for attempt in 1 2 3 4 5; do
-            if body=$(curl -fsS --max-time 20 "$url/health"); then break; fi
+            if body=$(curl -fsS $GATE_AUTH --max-time 20 "$url/health"); then break; fi
             echo "attempt $attempt: /health not healthy yet"
-            body=$(curl -sS --max-time 20 "$url/health" || true)
+            body=$(curl -sS $GATE_AUTH --max-time 20 "$url/health" || true)
             sleep 5
           done
 
@@ -262,7 +334,7 @@ jobs:
           url="https://alcohol-label-verify-staging.wing-lawrence.workers.dev"
 
           for attempt in $(seq 1 10); do
-            code=$(curl -sS --max-time 60 -X POST "$url/policy/reconcile" \
+            code=$(curl -sS $GATE_AUTH --max-time 60 -X POST "$url/policy/reconcile" \
                      -o /tmp/reconcile.json -w '%{http_code}') || true
             if [ "$code" = "200" ] && jq -e 'has("actions")' /tmp/reconcile.json >/dev/null 2>&1; then
               jq '{actions, summary, events}' /tmp/reconcile.json
@@ -286,7 +358,7 @@ jobs:
         run: |
           set -euo pipefail
           url="https://alcohol-label-verify-staging.wing-lawrence.workers.dev"
-          body=$(curl -sS --max-time 60 "$url/health/policy") || true
+          body=$(curl -sS $GATE_AUTH --max-time 60 "$url/health/policy") || true
           echo "$body" | jq '{rows, pending, inSync, activeInFile, draftsInFile}' || echo "$body"
           echo "$body" | jq -e '.inSync == true' >/dev/null \
             || { echo "::error::policy archive does not match the reviewed file"; exit 1; }
@@ -295,7 +367,7 @@ jobs:
         run: |
           set -euo pipefail
           url="https://alcohol-label-verify-staging.wing-lawrence.workers.dev"
-          body=$(curl -sS --max-time 60 "$url/health/inference" || true)
+          body=$(curl -sS $GATE_AUTH --max-time 60 "$url/health/inference" || true)
           echo "$body"
 
           if echo "$body" | jq -e '.status == "ok"' > /dev/null 2>&1; then
@@ -338,9 +410,9 @@ jobs:
           # launch can be refused for reasons that have nothing to do with this
           # revision. One retry, rather than failing a good deploy on contention.
           for attempt in 1 2; do
-            if body=$(curl -fsS --max-time 90 "$url/health/raster"); then break; fi
+            if body=$(curl -fsS $GATE_AUTH --max-time 90 "$url/health/raster"); then break; fi
             echo "attempt $attempt: browser launch refused or timed out"
-            body=$(curl -sS --max-time 90 "$url/health/raster" || true)
+            body=$(curl -sS $GATE_AUTH --max-time 90 "$url/health/raster" || true)
             sleep 10
           done
 
@@ -378,7 +450,7 @@ jobs:
           set -euo pipefail
           url="https://alcohol-label-verify-staging.wing-lawrence.workers.dev"
 
-          body=$(curl -sS --max-time 60 "$url/audit/replay?limit=25")
+          body=$(curl -sS $GATE_AUTH --max-time 60 "$url/audit/replay?limit=25")
           echo "$body" | jq '{checked, identical, differs, "not-comparable", "not-re-derivable", "record-altered"}'
 
           # Nothing to replay is not a pass. A fresh database would otherwise

@@ -2087,6 +2087,7 @@ plainly in the README, which is the correct handling of a known limitation.
 | D46 | **Who or what acted is one concept — an agent — with a kind (`human` / `model` / `system`) and a fully qualified identity** (§19) | Leaving `actor`, `extractedBy`, `model_id` and `decided_by` as four unrelated fields | They are four representations of one idea that cannot be joined, so the record can say a model read a label and a person approved it and still not answer *what has this agent done*. The reason to build it is not headcount: it turns the governing principle — the model reads, the human decides — from prose enforced in one place into an invariant assertable over the whole record, continuously and against production data. `system` is a third kind rather than a tidy-up: `job.opened` is the system executing, not anyone deciding, and folding it into either other kind attributes work to a party that did not do it | Moderate — `audit_event` is append-only, so a rebuild in the shape of 0005 |
 | D47 | **The workforce metric is deliberately deferred** (§19.6). Agreement *by agent kind* is safe to build; per-person measurement is not | Building attribution and volume metrics alongside the agent concept | Three reasons that survive the schema change. Throughput is not effectiveness — the measure that means anything is agreement, which the record already holds. The costs of disagreement are asymmetric (a false pass admits a non-compliant label; a false flag costs five minutes), and a metric averaging them would recommend moving precisely the wrong work to the model, with a confident-looking number. And measuring named employees is a labour-relations question before a technical one — `ui-design.md` §2.3 records a likely formal notification obligation, and building it first presents the agency a fait accompli instead of a decision | Easy to revisit — the data would exist; only the measure is withheld |
 | D48 | **Item 5, type of product, is read from the application record** — a closed classification against the three boxes the form offers, failing closed to *no product type* on anything else (§8.3.3). The single-review screen takes the filed PDF and no typed fields | Keeping the typed dropdown, and leaving a record read from an image with no product type at all | Product type selects the body of regulation. Typed, it was a value that could be mistyped into a discrepancy nobody could explain — and on the image path it was absent entirely, so every submission read from a PDF applied *no rule* and reported that nothing could be checked. Reading it removes a transcription step that was never part of the job. It fails closed because a wrong product type is the most dangerous single misread here: the findings that follow all look perfectly ordinary against the wrong rules, and nothing in the output reveals it. `Beer` does not become `Malt beverages` | Moderate — a prompt change, a parse rule, one screen rebuilt |
+| D49 | **A shared credential gates the whole deployment** — two pairs, installed as worker secrets, open when unconfigured (§15.4) | Leaving the prototype open; or gating only the expensive routes; or Cloudflare Access | The address is public and checking a label calls a metered service, so anyone who finds it can spend somebody else's quota — and the first sign would be a bill or a hard 429 in the middle of an evaluation. Gating only `/review` and `/batch` would leave `/health/inference`, which is a model call, as the cheapest way in. It is **not authentication and must never be described as such**: one credential, shared, establishing that the caller was given it and nothing about who they are, so D14 still stands and every name in the record is still declared. Two pairs so two people can evaluate at once and either can be revoked without locking out the other. Open when unconfigured because a gate that closed without a credential would brick `wrangler dev` and turn a forgotten secret into an outage. The coordinator's WebSocket is exempt — a browser cannot attach a header to a handshake, it costs nothing to serve, and its job id comes only from a gated call | Easy — one check before routing |
 
 ---
 
@@ -2175,6 +2176,34 @@ worse prototype and a speculative abstraction.
 The claim this section supports is narrow and defensible: **the prototype is
 shaped so the production path is substitution rather than rewrite**, and the
 places where that is not true (§15.3) are named rather than glossed.
+
+#### 15.4.1 One exception: a door, and what it does not do (D49)
+
+The staging deployment sits on a public URL and calls a metered inference API.
+A batch is 26 submissions, `/review` is two model calls, and `/health/inference`
+is one. Anyone who finds the address can spend somebody else's quota, and the
+first sign would be a bill or a hard 429 in the middle of an evaluation. So
+there is a shared credential in front of it.
+
+**It is not authentication, and nothing should ever describe it as such.** It
+establishes that the caller was given the credential and nothing at all about
+who they are. D14 stands unchanged: this prototype has no accounts, every name
+in the record is *declared*, and a decision recorded against "Dave Mitchell" is
+still a claim by whoever typed it. The agent register (§19.5) says so on its
+face, and that honesty is worth more than the convenience of calling this a
+login.
+
+| | |
+|---|---|
+| What it protects | Cost. Every route, because a health probe that calls a model is the cheapest way in |
+| What is exempt | The coordinator's WebSocket — a browser cannot attach a header to a handshake, it costs nothing to serve, and its job id comes only from a gated call |
+| How many credentials | Two pairs, so two people can evaluate at once and either can be revoked without locking out the other |
+| Unconfigured | **Open.** A gate that closed without a credential would brick `wrangler dev` and turn a forgotten secret into an outage. The deploy states which of the two it left |
+| Where they live | Worker secrets, from GitHub environment secrets. Never in `wrangler.jsonc` |
+
+This is the one production concern the prototype does anticipate, and it is
+anticipated for a reason that has nothing to do with architecture: the bill is
+real and it is somebody's personal account.
 
 ---
 

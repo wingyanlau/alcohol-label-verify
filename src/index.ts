@@ -9,6 +9,7 @@
  * §9.5 (configuration).
  */
 
+import { agentRoster } from './agents/roster.js'
 import { SYSTEM_AGENT } from './batch/agent.js'
 import { appendAudit, readWholeChain, verifyChain } from './batch/audit.js'
 import { MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
@@ -45,6 +46,7 @@ import type { PolicyRule } from './domain/policy.js'
 import { referenceIsUnverified, warningReference } from './domain/reference.js'
 import { registeredUsers, roleLabelFor, userMay } from './domain/users.js'
 import type { Env, WorkMessage } from './env.js'
+import { checkGate, gateChallenge } from './gate.js'
 import { checkImageIntake } from './normalise/image.js'
 import { IntakeRejected, type NormaliseResult } from './normalise/normaliser.js'
 import { rasteriseSubmission } from './normalise/rasterise.js'
@@ -260,6 +262,24 @@ export { JobCoordinator } from './job-coordinator.js'
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const { pathname } = new URL(request.url)
+
+    // The door (D49). Before routing, so no route can be forgotten.
+    //
+    // It covers the cheap paths as well as the expensive ones, because the
+    // cheapest way to spend somebody's inference quota is a health probe that
+    // calls a model — leaving those open would defeat the point by the shortest
+    // available route.
+    //
+    // The one carve-out is the coordinator's WebSocket. A browser cannot attach
+    // an Authorization header to a socket handshake, so gating it would break
+    // live progress for exactly the reviewer the credential was issued to. It
+    // carries a job's progress and costs nothing to serve, and the job id it
+    // needs is a UUID returned only by a gated call — capability rather than
+    // authentication, which is what it is and is worth saying plainly.
+    const isCoordinatorSocket =
+      /^\/batch\/[^/]+\/stream$/.test(pathname) &&
+      (request.headers.get('upgrade') ?? '').toLowerCase() === 'websocket'
+    if (!isCoordinatorSocket && !checkGate(request, env)) return gateChallenge()
 
     if (pathname === '/health') {
       const problems = validateConfig(env)
@@ -1329,6 +1349,27 @@ export default {
     //
     // It exists because you cannot review what you cannot read, and six rules
     // are currently waiting on exactly that.
+    // Who and what may act here (§19, D46).
+    //
+    // The register the agent concept draws on, made readable. An audit line
+    // naming `model:workers-ai:@cf/…:label-extract@2` identifies an agent
+    // exactly and gives a reader nowhere to look up what it is or what it may
+    // do; this is that page. No database: the roster is what the deployment
+    // recognises, not what has happened.
+    if (pathname === '/agents' && request.method === 'GET') {
+      return json({
+        agents: agentRoster(),
+        // Stated rather than left as an absent column. A page listing agents is
+        // exactly where a productivity number would arrive by accident, and its
+        // absence here is a decision (D47).
+        note:
+          'Who may act, and what each may do. Deliberately no counts of what anyone did: ' +
+          'throughput is not effectiveness, the costs of a wrong pass and a wrong flag are ' +
+          'not symmetric, and measuring named people is a labour question before a technical ' +
+          'one (D47). Only a person may decide (§18.5a) — the code refuses the rest.',
+      })
+    }
+
     if (pathname === '/policy/rules' && request.method === 'GET') {
       if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
       const rules = await listArchive(env.DB)
