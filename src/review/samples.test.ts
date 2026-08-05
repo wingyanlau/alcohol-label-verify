@@ -87,3 +87,39 @@ describe('serving a sample file', () => {
     }
   })
 })
+
+describe('the real-filing sample (D50)', () => {
+  /*
+   * The screen used to say "or feel free to submit a filled application" and
+   * link the blank form. That asked a visitor to do twenty minutes of data
+   * entry to see one case, and most would have uploaded the blank form instead
+   * and got a verdict saying nothing could be read.
+   */
+  const filed = catalogue.find((s) => s.id === 'F01')
+
+  it('is offered', () => {
+    expect(filed).toBeDefined()
+  })
+
+  it('is the form alone, with no separate record page', () => {
+    const entry = manifest.cases.find((c) => c.id === 'F01')
+    expect(entry?.file).toMatch(/form-only/)
+  })
+
+  it('expects the three fields the form has no box for to go unassessed', () => {
+    // The ground truth states it, so a change that started defaulting them —
+    // and producing MATCH against an invented expectation — fails here.
+    const entry = manifest.cases.find((c) => c.id === 'F01') as
+      | { expected: { fields: Record<string, string> } }
+      | undefined
+    expect(entry?.expected.fields.classType).toBe('NOT_SUPPLIED')
+    expect(entry?.expected.fields.alcoholContent).toBe('NOT_SUPPLIED')
+    expect(entry?.expected.fields.netContents).toBe('NOT_SUPPLIED')
+    // And the one the form DOES carry is compared.
+    expect(entry?.expected.fields.brandName).toBe('MATCH')
+  })
+
+  it('says what is not assessed rather than leaving it to be discovered', () => {
+    expect(filed?.shows).toMatch(/not assessed/i)
+  })
+})

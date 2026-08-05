@@ -102,6 +102,25 @@ submission — front label only — where reporting the warning missing is the
 | L25 | Fanciful name present on the record and the label | `CLEAR` | §8.7 — Item 7 is a field the prototype does not model |
 | L26 | Corrupt / truncated file | `INTAKE_ERROR` | ADV-04, NFR-6 — intake rejection; in a batch it must fail alone |
 
+**And one that is not a corpus case.**
+
+| ID | Case | Expected | Serves |
+|---|---|---|---|
+| F01 | A real filing — the form on its own | `CLEAR` | D50 — the filed-alone region map; offered as a demo sample, never run in the batch |
+
+`F01` is L01's page 1 and nothing else: the form as ttb.gov publishes it, with
+the labels affixed and the applicant's entries on it. It is **not** among the
+26 — `SUBMISSION_FILES` in `src/batch/submissions.ts` lists those, and this is
+not one of them — because it tests no comparison rule. It exists so the
+single-review screen can show what a genuine filing does without asking anyone
+to fill out a form.
+
+Its ground truth is the point: `brandName` is `MATCH`, and class/type, alcohol
+content and net contents are `NOT_SUPPLIED`, because **the paper form has no box
+for them**. Not assessed, and not a pass. If a future change starts defaulting
+those fields, that entry is what fails — a default would be compared against the
+label, and agreement with an invented expectation is a false match.
+
 ## Regenerating
 
 ```

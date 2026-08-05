@@ -290,8 +290,9 @@ export const PAGE_HTML = `<!doctype html>
            authored ground truth for what it should produce. -->
       <div class="samples">
         <h3>Demo examples</h3>
-        <p class="hint">Download one of these and upload it above to test out the demo. Or feel free to submit a filled application:
-          <a href="https://www.ttb.gov/system/files/images/pdfs/forms/f510031.pdf" rel="noopener noreferrer" target="_blank">TTB F 5100.31</a>.</p>
+        <p class="hint">Download one of these and upload it above to test out the demo. The last one is a real filing — the
+          <a href="https://www.ttb.gov/system/files/images/pdfs/forms/f510031.pdf" rel="noopener noreferrer" target="_blank">TTB F 5100.31</a>
+          on its own, so nobody has to fill one in to see that case.</p>
         <div id="sampleList" class="samplelist"></div>
       </div>
     </div>

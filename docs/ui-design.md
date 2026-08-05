@@ -230,10 +230,16 @@ label.
 visible at rest, not revealed by an error.
 
 **Beneath the upload: demo examples.** A short list of real corpus documents to
-download and upload, and a link to the blank TTB F 5100.31 for anyone who would
-rather fill one in. Without them the single-review path is a file picker that
+download and upload. Without them the single-review path is a file picker that
 refuses every file its visitor owns, which is the state anyone evaluating the
 deployment arrives in.
+
+**The last one is a real filing** — the TTB F 5100.31 on its own, with no
+separate record page (D50). It is there so nobody has to fill out a form to see
+that case, which is what the screen asked of them for one revision: a link to
+the blank form and an invitation to complete it. Twenty minutes of data entry
+to see one verdict is not an invitation, and the likeliest outcome was somebody
+uploading the *blank* form and getting a verdict saying nothing could be read.
 
 > **A real filing is checked on what it actually carries** (D50). The form has
 > no box for class/type, alcohol content or net contents — item 15 asks for

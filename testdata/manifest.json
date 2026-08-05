@@ -689,6 +689,27 @@
       },
       "note": "Never reaches extraction. Must produce a clear message, and in batch mode must not abort the remaining items.",
       "warningLegibility": null
+    },
+    {
+      "id": "F01",
+      "file": "F01-filed-application-form-only.pdf",
+      "title": "A real filing \u2014 the form on its own",
+      "serves": "D50 \u2014 the filed-alone region map; demo only, not a batch item",
+      "application": {
+        "brandName": "Old Tom Distillery",
+        "productType": "Distilled spirits"
+      },
+      "expected": {
+        "outcome": "CLEAR",
+        "fields": {
+          "brandName": "MATCH",
+          "classType": "NOT_SUPPLIED",
+          "alcoholContent": "NOT_SUPPLIED",
+          "netContents": "NOT_SUPPLIED"
+        },
+        "warningOk": true
+      },
+      "note": "Derived from L01 by keeping page 1. Demonstrates what a genuine TTB F 5100.31 can and cannot be checked against: item 5 selects the governing rules and item 6 is compared, while the three fields the form has no box for are NOT_SUPPLIED \u2014 not assessed, and not a pass. Every regulation check still applies, because those read the label."
     }
   ]
 }

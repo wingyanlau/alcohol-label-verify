@@ -854,6 +854,52 @@ def main() -> int:
     })
     print(f"  L26  {bad.name}")
 
+    # F01 — the same filing as L01, submitted as the form alone (D50).
+    #
+    # Not a corpus case and never part of the batch: `SUBMISSION_FILES` in
+    # src/batch/submissions.ts lists the 26, and this is not among them. It
+    # exists so the single-review screen can offer what a REAL filing looks
+    # like without asking a visitor to fill out a form.
+    #
+    # Page 1 only, which is what ttb.gov publishes plus an applicant's entries:
+    # the labels affixed, item 5 ticked, item 6 filled. The three fields the
+    # paper form has no box for — class/type, alcohol content, net contents —
+    # have no source here, and the expected outcome says so with NOT_SUPPLIED
+    # rather than pretending a value.
+    filed = OUT / "F01-filed-application-form-only.pdf"
+    fw = PdfWriter()
+    fw.add_page(PdfReader(OUT / manifest[0]["file"]).pages[0])
+    with filed.open("wb") as fh:
+        fw.write(fh)
+    manifest.append({
+        "id": "F01", "file": filed.name,
+        "title": "A real filing — the form on its own",
+        "serves": "D50 — the filed-alone region map; demo only, not a batch item",
+        "application": {
+            # Only what page 1 actually carries. Nothing is filled in for the
+            # rest: a value invented here would be compared against the label,
+            # and agreement with an invented expectation is a false MATCH.
+            "brandName": CASES[0].get("brand", BASE["brand"]),
+            "productType": "Distilled spirits",
+        },
+        "expected": {
+            "outcome": "CLEAR",
+            "fields": {
+                "brandName": "MATCH",
+                "classType": "NOT_SUPPLIED",
+                "alcoholContent": "NOT_SUPPLIED",
+                "netContents": "NOT_SUPPLIED",
+            },
+            "warningOk": True,
+        },
+        "note": "Derived from L01 by keeping page 1. Demonstrates what a genuine "
+                "TTB F 5100.31 can and cannot be checked against: item 5 selects the "
+                "governing rules and item 6 is compared, while the three fields the "
+                "form has no box for are NOT_SUPPLIED — not assessed, and not a pass. "
+                "Every regulation check still applies, because those read the label.",
+    })
+    print(f"  F01  {filed.name}")
+
     (HERE / "manifest.json").write_text(json.dumps({
         "form": "TTB F 5100.31 (04/2023), page 1 — real form, values drawn at its own "
                 "AcroForm field coordinates, widgets stripped",
