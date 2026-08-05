@@ -216,10 +216,18 @@ label.
 **Constraints are stated before they are violated** (P6). Format and size are
 visible at rest, not revealed by an error.
 
-**Beneath the upload: sample submissions.** *No filing to hand?* — a short list
-of real corpus documents to download and upload. Without them the single-review
-path is a file picker that refuses every file its visitor owns, which is the
-state anyone evaluating the deployment arrives in.
+**Beneath the upload: demo examples.** A short list of real corpus documents to
+download and upload, and a link to the blank TTB F 5100.31 for anyone who would
+rather fill one in. Without them the single-review path is a file picker that
+refuses every file its visitor owns, which is the state anyone evaluating the
+deployment arrives in.
+
+> **The link outruns the implementation, and knowingly.** A genuinely filled
+> F 5100.31 carries the label and item 5 on page 1; pages 2–5 are instructions.
+> The record region this system crops is page 2, which the corpus supplies as a
+> COLAs Online record and the real form does not. A real filing therefore reads
+> its four comparison fields from an instructions page and reports that nothing
+> could be checked. Closing that gap needs a second region map — see §4.2.
 
 - They are **the corpus files**, not mock-ups: the same documents the batch runs
   on, each with authored ground truth for what it should produce

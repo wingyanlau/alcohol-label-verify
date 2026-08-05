@@ -289,8 +289,9 @@ export const PAGE_HTML = `<!doctype html>
            files, not mock-ups: the same documents the batch runs on, each with
            authored ground truth for what it should produce. -->
       <div class="samples">
-        <h3>No filing to hand?</h3>
-        <p class="hint">Download one of these and upload it above. They are real submissions from the test corpus — the same ones the batch runs.</p>
+        <h3>Demo examples</h3>
+        <p class="hint">Download one of these and upload it above to test out the demo. Or feel free to submit a filled application:
+          <a href="https://www.ttb.gov/system/files/images/pdfs/forms/f510031.pdf" rel="noopener noreferrer" target="_blank">TTB F 5100.31</a>.</p>
         <div id="sampleList" class="samplelist"></div>
       </div>
     </div>
