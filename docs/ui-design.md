@@ -151,6 +151,40 @@ endpoint would 401 and leave the page half-built for exactly that visitor.
 
 ---
 
+### 3d. Policy — the engine, not a list of rules
+
+Like the Agents screen, this listed its table. It now shows what the policy
+engine *is*.
+
+| Section | Content |
+|---|---|
+| **How a rule reaches force** | Proposed → approved by a different named person → reconciled on deploy → applied by the rule engine → superseded, never deleted |
+| In force | Rule, regulation, what it applies to, **both time windows**, whether it carries a source quote, and who is answerable |
+| Awaiting approval | Or a statement that none are, and that the gate is code refusing to load an unapproved rule rather than a queue somebody checks |
+| No longer in force | Kept, because a verdict that cited a rule still needs it |
+| **What this signals for production** | Policy as data; judged by date; and the deterministic engine as a test oracle |
+
+**Two time windows, not one.** *Which filings a rule governs* and *when this
+deployment held it* are different questions, and an audit asks both. A first
+attempt at making this screen concise dropped the second, along with whether a
+rule carries a source quote — concision at the cost of the properties the screen
+exists to show. Both are back, and tests pin them.
+
+**Nobody answerable is stated, not implied.** A rule with no approver reads
+`NOT APPROVED`; one covered by the set approval says so in those words, because
+"approved by X" and "covered by X's approval of the whole set" are different
+claims about how carefully that rule was read.
+
+**The production signal is the succession plan.** The rule engine is
+deterministic and every finding names its rule, its regulation and its evidence —
+which makes it the **test oracle** for a model-based compliance engine: each
+finding is a labelled example produced on real traffic at no extra cost. The
+limit is stated on the screen rather than buried: where the rules are complete
+they can certify a model, and those are exactly the cases where a model adds
+least.
+
+---
+
 ### 3c. Agents — the division of labour, not a user table
 
 An earlier revision listed who was recognised, with their roles and
@@ -278,7 +312,7 @@ story about how the five-second requirement is met.
 | **Audit** | Does a determination still hold up, and what did I conclude | Reference, ordered by how often it is needed |
 | **Measurement** | What it cost and how long it took, and what that signals for production | |
 | **Agents** | How human, model and system divide one submission — and what a model would have to prove to do more | |
-| **Policy** | Which rules are in force, from when, approved by whom | |
+| **Policy** | How a rule reaches force, what is in force now, and what the engine signals for production | |
 
 *Audit* is named for the act rather than the noun. "Record" could mean the audit
 trail, one submission's record, or the act of recording; a reader goes there to

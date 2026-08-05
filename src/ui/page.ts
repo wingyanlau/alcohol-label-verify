@@ -1700,18 +1700,103 @@ export const PAGE_HTML = `<!doctype html>
     var body = byId('policyBody')
     body.textContent = ''
 
-    var head = el('div', 'refline')
-    head.appendChild(document.createTextNode('Policy set version '))
-    head.appendChild(el('code', 'refcode', String(d.policySetVersion)))
-    head.appendChild(document.createTextNode('  ·  approved by ' + (d.approvedBy || 'nobody named')))
-    body.appendChild(head)
+    function table(head, rows) {
+      var t = document.createElement('table')
+      t.className = 'metrics'
+      var hr = document.createElement('tr')
+      head.forEach(function (h) { hr.appendChild(el('th', null, h)) })
+      t.appendChild(hr)
+      rows.forEach(function (cells) {
+        var tr = document.createElement('tr')
+        cells.forEach(function (c, i) { tr.appendChild(el('td', i === 0 ? 'name' : null, c)) })
+        t.appendChild(tr)
+      })
+      return t
+    }
 
-    group(body, 'In force', d.inForce, 'These rules are applied to every submission they govern.')
-    group(body, 'Awaiting approval', d.awaitingApproval,
-      'Proposed, and not applied to anything. A rule takes effect when it is approved in the reviewed policy file.')
-    group(body, 'No longer in force', d.retired,
-      'Kept, not deleted — a verdict reached under one of these still needs the rule that produced it.')
+    var inForce = d.inForce || []
+    var waiting = d.awaitingApproval || []
+    var retired = d.retired || []
+
+    // 1. The engine, as a lifecycle. The rules are data; this is what happens
+    //    to a change to them, and where the human gate sits.
+    body.appendChild(el('h2', null, 'How a rule reaches force'))
+    body.appendChild(table(['Step', 'Who', 'What'], [
+      ['Proposed', 'A policy author', 'Drafted into the reviewed file, with the regulation and the passage it rests on. May be drafted with a model'],
+      ['Approved', 'A policy approver — never the author', 'A named person signs it. The system refuses to load a model-drafted rule in force without one'],
+      ['Reconciled', 'The deployment', 'On deploy, the file is compared with the archive and differences are inserted or superseded'],
+      ['Applied', 'The rule engine', 'Deterministic code, to every submission filed while the rule is in force'],
+      ['Superseded', '—', 'Never deleted. A verdict that cited it still needs the rule that produced it'],
+    ]))
+    body.appendChild(el('p', 'note',
+      'Policy is data, not code: changing a rule is a reviewed change to a file, not a release. Version ' +
+      d.policySetVersion + ', approved by ' + (d.approvedBy || 'nobody named') + '.'))
+
+    // 2. What is actually in force, and what is waiting on somebody.
+    // Two time windows and the source, because they answer different questions
+    // and dropping either was the cost of the first attempt at concision.
+    function approval(r) {
+      if (!r.approvedBy) return 'NOT APPROVED'
+      return r.approvalInherited
+        ? 'covered by the set approval of ' + r.approvedBy
+        : 'approved by ' + r.approvedBy
+    }
+    function windows(r) {
+      return 'filings from ' + (r.effectiveFrom || 'any date') +
+        (r.effectiveTo ? ' to ' + r.effectiveTo : '') +
+        ' · recorded ' + String(r.recordedAt || '').slice(0, 10)
+    }
+    function source(r) {
+      return r.quote ? 'quoted' : 'No source quote recorded — pinned by digest'
+    }
+
+    body.appendChild(el('h2', null, 'In force (' + inForce.length + ')'))
+    body.appendChild(table(['Rule', 'Regulation', 'Applies to', 'Governs', 'Source', 'Answerable'],
+      inForce.map(function (r) {
+        return [r.ruleId, r.regulation || '—', (r.productTypes || []).join(', ') || 'all',
+          windows(r), source(r), approval(r)]
+      })))
+
+    body.appendChild(el('h2', null, 'Awaiting approval (' + waiting.length + ')'))
+    if (waiting.length) {
+      body.appendChild(table(['Rule', 'Regulation', 'Applies to', 'Source', 'Standing'],
+        waiting.map(function (r) {
+          return [r.ruleId, r.regulation || '—', (r.productTypes || []).join(', ') || 'all',
+            source(r), 'proposed by ' + (r.proposedBy || 'unattributed') + ' · ' + approval(r)]
+        })))
+      body.appendChild(el('p', 'note', 'Carried, visible, and applied to nothing.'))
+    } else {
+      body.appendChild(el('p', 'note',
+        'None. A proposal sits here until a named approver signs it — the gate is the code refusing to load an unapproved rule in force, not a queue somebody remembers to check.'))
+    }
+
+    if (retired.length) {
+      body.appendChild(el('h2', null, 'No longer in force (' + retired.length + ')'))
+      body.appendChild(table(['Rule', 'Regulation', 'Retired'],
+        retired.map(function (r) { return [r.ruleId, r.regulation || '—', r.retiredAt || '—'] })))
+      body.appendChild(el('p', 'note',
+        'Kept. A verdict reached under one of these still needs the rule that produced it.'))
+    }
+
+    // 3. What the engine signals for production.
+    body.appendChild(el('h2', null, 'What this signals for production'))
+    body.appendChild(table(['', 'Today', 'What it means'], [
+      ['Policy as data',
+        inForce.length + ' rules in a reviewed file',
+        'A regulation change is a pull request, not a deployment of new logic. The people who own the rules are not the people who own the code.'],
+      ['Judged by date',
+        'Rules carry the dates they govern and the dates this deployment held them',
+        'A verdict is judged by the rules in force when it was filed. Changing the rules does not rewrite what was already decided.'],
+      ['A deterministic engine',
+        'Every finding names its rule, its regulation and the evidence',
+        'It is also the test oracle for a model-based engine: each finding is a labelled example, produced on real traffic at no extra cost.'],
+    ]))
+    body.appendChild(el('p', 'note',
+      'The plan is a model that reasons about compliance rather than rules that pattern-match it. The route is to run both against the same reading and adjudicate the divergence — safety measured against the rules, value measured by a person. The limit is worth stating: where the rules are complete they can certify the model, and those are exactly the cases where a model adds least.'))
+
+    if (d.note) body.appendChild(el('p', 'note', d.note))
   }
+
 
   function group(parent, title, rules, note) {
     var box = el('div')
