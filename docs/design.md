@@ -94,7 +94,29 @@ must not be applied to the warning statement text.
 | # | Criterion | Measurement | Target | Traces to |
 |---|---|---|---|---|
 | S1 | Single-label verdict latency | Wall clock, submit → results rendered, on a representative image over normal broadband | p95 ≤ 5s | G2 |
+| S1a | **Batch readiness** — a filing is checked before an agent opens it | Time from a filing arriving to its recommendation being available, against the rate filings arrive | Ready on arrival at 150,000/year | G2, A10 |
 | S2 | First-result latency in batch mode | Wall clock, submit → first row resolved | ≤ 5s | G2, G6 |
+
+**S1 is about a person waiting, and only the interactive path makes them wait.**
+Sarah's five seconds came from a vendor pilot that took 30–40 seconds *while an
+agent sat there*, and the agents went back to doing it by eye. The architectural
+answer is not to make inference fast enough to hold a human's attention — it is
+to take the human out of the waiting.
+
+Batch checks a filing **as it arrives**, against the queue rather than against a
+person. By the time an agent opens their worklist the recommendation is already
+there, and what they experience is the time to load a prepared result. Inference
+latency stops being a user-facing number and becomes a throughput question:
+150,000 filings a year is roughly 600 a working day, which at ten seconds each is
+under two hours of machine time and parallelises freely.
+
+Single review remains for the case an agent has in front of them right now — and
+there S1 applies literally, because there a person really is waiting.
+
+This rests on **A10**: that filings are recorded somewhere the system can see on
+arrival. Without it, everything reverts to the interactive path and the vendor
+pilot's problem is ours.
+
 | S3 | Correct verdicts on the curated test set | Manual scoring against a hand-labelled set including deliberate mismatches | No false pass on any seeded mismatch | G1 |
 | S4 | Warning statement detection | Test set includes correct text, altered wording, and title-case "Government Warning:" | All three classified correctly | G3 |
 | S5 | Presentation-variance tolerance | Test set includes the `STONE'S THROW` / `Stone's Throw` case and equivalents | Reported as match, not mismatch | G5 |
@@ -239,6 +261,7 @@ breaks if it is wrong.*
 | A7 | The 5s target is measured end to end, submit to rendered result, on ordinary broadband | High | If measured server-side only, the budget in §9.1 is more generous than assumed |
 | A8 | In batch, images pair with application rows by filename | Medium | Pairing needs an explicit column or a manual reconciliation step |
 | A9 | A vision model is reachable from wherever the prototype is deployed | High | The system cannot function; see C5 |
+| A10 | **Applications are recorded in an agency system on arrival, so they can be checked *before* an agent opens one.** Batch runs against the queue as filings land; the agent reads a prepared recommendation | Medium | S1 collapses back onto inference latency — the agent waits for the model, which is the vendor pilot's failure mode (§2.3). The architecture would then need inference fast enough to sit inside a human's attention span, which is a much harder problem than making it fast enough to keep up with arrivals |
 
 **On A2 — the front-and-back problem.** Distilled spirits and wine commonly carry
 brand name and class/type on the front label and the government health warning on
@@ -1233,6 +1256,39 @@ subsection is completed or marked N/A with a reason in Appendix A.*
 Target: **p95 ≤ 5s**, submit to rendered result (S1, NFR-1). Sarah's account is
 that the previous pilot failed on this axis alone, so the budget is apportioned
 across §8.1 rather than measured after the fact.
+
+#### 9.1.1 The governing rule: what a person waits for is decoupled from what the pipeline does
+
+**The time a human waits must not be a function of how much work the system
+performs.** It is a separate design concern, and keeping the two apart is a
+structural decision rather than an optimisation.
+
+The pipeline will get longer. Reading the record as well as the label already
+doubled the model calls per submission; retrieval, a proposing model and an
+adversarial critic (see the model-judgement roadmap) would each add more. If the
+agent's experience is coupled to that pipeline, every improvement to the checking
+makes the tool worse to use — and the tool that is worse to use is the one that
+gets abandoned, which is precisely what happened to the previous vendor.
+
+So:
+
+| | Rule |
+|---|---|
+| **Asynchronous path** (batch) | May grow without limit. It runs ahead of the human, against arrivals rather than against a person's attention. Its constraint is throughput, not latency |
+| **Interactive path** (single review) | Deliberately minimal, and stays that way. New pipeline stages go on the asynchronous side unless there is a reason they cannot |
+| **Both** | The agent's wait is bounded by *loading a prepared result*, not by the work that prepared it |
+
+**Stability matters more than speed.** A predictable three seconds is a better
+tool than one that is usually fast and occasionally fifteen: the second teaches
+an agent to distrust it, and the measured spread on the interactive path — a p50
+near two seconds against a p95 several times that — is itself the argument for
+keeping people off it wherever the work can be done in advance.
+
+**Token cost is optimised separately and never against the interface.** Cheaper
+prompts, smaller crops and cached reads are worth pursuing, but they are a
+throughput and cost question. Trading them against what an agent sees — fewer
+checks, less evidence, a shorter warning comparison — would be paying for
+machine time with review quality.
 
 | Stage | Budget | Notes |
 |---|---|---|

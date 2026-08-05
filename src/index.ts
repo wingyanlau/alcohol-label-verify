@@ -68,6 +68,7 @@ import { PROMPT_VERSION, promptDigest } from './providers/prompt.js'
 import { createProvider, knownProviderNames, specFor } from './providers/registry.js'
 import { sampleCatalogue, sampleFileFor } from './review/samples.js'
 import { checkReviewRequest, ReviewRejected, reviewOne } from './review/single.js'
+import { LANDING_HTML } from './ui/landing.js'
 import { PAGE_HTML } from './ui/page.js'
 
 /**
@@ -315,6 +316,20 @@ export default {
     // carries a job's progress and costs nothing to serve, and the job id it
     // needs is a UUID returned only by a gated call — capability rather than
     // authentication, which is what it is and is worth saying plainly.
+    // The front page, and only the front page, is public.
+    //
+    // Everything else is gated, which made an evaluator's first experience a
+    // browser password box with no context — indistinguishable from a
+    // misconfigured server. This page explains what the prototype is and what
+    // to look at, then sends them to `/app`, where the gate asks. It carries no
+    // data and calls nothing, because it must render for somebody who has not
+    // yet proved they may see anything.
+    if (pathname === '/' && request.method === 'GET') {
+      return new Response(LANDING_HTML, {
+        headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
+      })
+    }
+
     const isCoordinatorSocket =
       /^\/batch\/[^/]+\/stream$/.test(pathname) &&
       (request.headers.get('upgrade') ?? '').toLowerCase() === 'websocket'
@@ -2039,7 +2054,8 @@ export default {
       })
     }
 
-    if (pathname === '/') {
+    // The application itself, behind the gate.
+    if (pathname === '/app') {
       return new Response(PAGE_HTML, {
         headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
       })

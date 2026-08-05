@@ -58,13 +58,36 @@ deployment path is *self-hosted model*, not *different vendor*.
 > an in-boundary model without touching verification logic. Verified by running
 > the corpus through both and diffing verdicts.
 
-### 1.4 What else a real integration must supply
+### 1.4 The system must learn that a filing has arrived
+
+This is the integration requirement the five-second target actually depends on,
+and it is easy to miss because it looks like a performance concern.
+
+Sarah's requirement came from a vendor pilot at 30–40 seconds per label *with an
+agent waiting*. The answer is not a faster model. It is that a filing is checked
+**when it arrives**, so that by the time an agent opens their worklist the
+recommendation is already there and nobody waits for inference at all.
+
+> **Integration requirement:** the system must be told when a filing lands —
+> a queue, a webhook, a polled view, an export — and be permitted to process it
+> before an agent opens it.
+
+Without it, every review reverts to the interactive path, and the previous
+pilot's failure mode becomes ours. With it, latency stops being a user-facing
+number: 150,000 filings a year is roughly 600 a working day, under two hours of
+machine time, and it distributes across workers freely.
+
+It also changes what must be sized. Not *how fast is one check* but *can the
+queue keep up with arrivals, including Janet's 200–300 at once*.
+
+### 1.5 What else a real integration must supply
 
 | Needed | Prototype's stand-in | Why it cannot ship as-is |
 |---|---|---|
 | **Identity** | None. Names on decisions are *declared* | An audit trail attributing a decision to an unverified string is not an audit trail. Prerequisite for US-19, US-20 |
 | **Filing date** | Today's date | The rule set applied depends on it. A backdated filing is judged by today's rules, which is wrong and currently invisible |
 | **Application identifier** | A generated reference code | `Q-INT-06` — the record has no COLA/TTB id to join on |
+| **Notification of arrival** | The corpus is handed over in one go; nothing tells this system a filing landed | Above — the batch path assumes it |
 | **Retention schedule** | Configurable window, demo default | How long an agency may hold a submission is a records decision, not ours |
 | **Policy approval workflow** | A reviewed commit to `config/policy-set.json` | Works, and needs a named approver with an identity to be meaningful |
 

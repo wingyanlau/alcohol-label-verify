@@ -97,6 +97,27 @@ per-finding-category rather than global:
 
 ---
 
+## 2a. Every stage here goes on the asynchronous side
+
+A constraint on all of the above, and the reason it can be built at all without
+making the product worse.
+
+Each stage adds work per submission: retrieval is a call, shadow mode is a
+second opinion, a critic is a third. **None of it may land on the path where a
+person is waiting.** The system checks filings as they arrive, so the pipeline
+can grow while what an agent experiences stays the time to load a prepared
+result.
+
+Where a stage genuinely must be synchronous — an agent asking, right now, why a
+rule fired — it is bounded and stated, and it is a request the agent chose to
+make rather than a cost imposed on every review.
+
+The failure this avoids has a precedent in this project's own brief: the vendor
+pilot was abandoned because agents waited. A system that gets more thorough and
+slower with each release fails the same way, however good its findings are.
+
+---
+
 ## 3. What would have to change in the code — and the friction is deliberate
 
 Promoting a model to decide is **not a configuration change**:

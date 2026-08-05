@@ -74,7 +74,31 @@ scans — are nowhere near the top. Instead:
 is uncorrelated with the size of the job, which points at provider-side
 queueing on a metered free tier rather than at anything the design controls.
 
-### What that means for the stated target
+### Which target this is, and which it is not
+
+**These are inference numbers, and inference only gates the agent on one of the
+two paths.**
+
+The five-second target came from a vendor pilot that took 30–40 seconds *while
+an agent sat waiting*, and the agents went back to doing it by eye. The
+architectural answer is not to make a model fast enough to hold someone's
+attention — it is to stop the person waiting for it.
+
+| Path | Who waits | What the number above means |
+|---|---|---|
+| **Batch** — filings checked as they arrive | Nobody. The agent opens a worklist of prepared recommendations | A **throughput** figure. 150,000 filings a year is ~600 a working day; at ten seconds each that is under two hours of machine time, and it parallelises |
+| **Single review** — an agent with a case in front of them | The agent, literally | A **latency** figure, and the target applies as written |
+
+So the p95 below is a real constraint on single review and not on the batch
+path — where what an agent experiences is the time to load a result that was
+computed hours earlier.
+
+**This rests on an assumption worth stating plainly:** that filings are recorded
+in an agency system on arrival, so they can be checked before anyone opens them.
+Without it, everything reverts to the interactive path and the pilot's problem
+becomes ours.
+
+### And on the interactive path, the sample is too small to settle it
 
 S1 is *"p95 ≤ 5 s"*. p50 is comfortably inside it; p95 is not.
 

@@ -87,7 +87,7 @@ has each one with its evidence.
 
 | | Built | Partial | Not built |
 |---|---|---|---|
-| P1 — core review | 6 | 1 | 0 |
+| P1 — core review | 7 | 1 | 0 |
 | P2 — batch, Janet's case | 4 | 0 | 0 |
 | P3 — governance and audit | 4 | 0 | 0 |
 | Other | 0 | 1 | 3 |
@@ -118,6 +118,20 @@ times the latency. That points at a metered free tier, not at the design — and
 25 samples cannot settle a p95 either way, which the value case says rather than
 declaring the target failed.
 
+**What a person waits for is decoupled from what the pipeline does** — a
+structural rule, not an optimisation. The checking will get longer; the agent's
+wait is the time to load a prepared result, and new pipeline stages go on the
+asynchronous side. Stability matters more than speed here: a predictable three
+seconds is a better tool than one usually fast and occasionally fifteen.
+
+**And these numbers gate an agent on only one of the two paths.** The
+five-second requirement came from a vendor pilot that took 30–40 seconds *while
+an agent sat waiting*. The answer is not a faster model; it is that batch checks
+a filing **as it arrives**, so an agent opens a worklist of prepared
+recommendations and never waits for inference at all. Single review is for the
+case in front of them right now, and there the target applies literally. This
+assumes filings are recorded on arrival — see the assumptions below.
+
 ---
 
 ## Assumptions that matter
@@ -132,6 +146,7 @@ Five that would change the product if wrong. All nine, with impact:
 | One submission carries every field under review | Fields spread across documents are invisible; the most consequential assumption in the design (A2) |
 | The agent is trusted at the network perimeter | No record here is evidence of *who* — attribution is declared, not verified |
 | A vision model is reachable from the deployment | The system cannot function. Marcus's firewall blocked the last vendor's endpoints |
+| **Filings are recorded on arrival, so they can be checked before an agent opens one** | The five-second target collapses back onto inference latency — the agent waits for the model, which is exactly how the previous vendor pilot was abandoned |
 
 ---
 
