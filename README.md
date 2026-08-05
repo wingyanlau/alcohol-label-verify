@@ -207,6 +207,8 @@ Worked before the code, and the specification rather than background.
 | [architecture.md](docs/architecture.md) | how it is built — context, containers, both request paths |
 | [personas-and-stories.md](docs/personas-and-stories.md) | who it is for, and what is built vs not |
 | [determinism-and-replay.md](docs/determinism-and-replay.md) | what is deterministic here and what is not — and the demonstration |
+| [record-schema.md](docs/record-schema.md) | the D1 record, column by column, and why each one exists |
+| [toward-llm-policy.md](docs/toward-llm-policy.md) | what it would take to let a model judge, and what should stop us |
 | [value-case.md](docs/value-case.md) | what it costs, what it saves, what it refuses to claim |
 | [integration-and-delivery.md](docs/integration-and-delivery.md) | what a real integration needs, and in what order |
 | [engineering-practices.md](docs/engineering-practices.md) | TDD, CI/CD, security, observability — with the artefact for each claim |
