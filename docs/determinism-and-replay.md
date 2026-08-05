@@ -206,7 +206,55 @@ authenticated. The record is evidence of *what*, not of *who*.
 
 ---
 
-## 6. Where to see it
+## 6. Auditing a record, as an act
+
+The checks above are **evidence**. An audit is a person examining them for one
+determination and concluding something — and a conclusion nobody recorded is a
+conversation rather than a finding. The Audit screen is built as that act:
+
+1. **Records ready for audit** — the determinations a person actually decided. A
+   verdict nobody acted on is an opinion; a verdict somebody approved affected an
+   applicant, and that is what an auditor asks about.
+2. **Run the checks** — history unaltered, verdict re-derived, and the recorded
+   outcome shown **side by side** with the re-derived one. A status word is a
+   conclusion; an auditor is entitled to the two things being compared.
+3. **Optionally ask the model again** — a second, paid step, kept separate
+   because it costs a call.
+4. **Conclude** — *holds up* / *holds up, with something to explain* / *does not
+   hold up*. Three, because a reservation and a failure send a reader to
+   different places, and collapsing them teaches people to stop recording
+   reservations.
+5. **Recorded** against the verdict, with the auditor's name, the note, **and
+   the evidence as it stood**. Stored rather than referenced: an audit is a
+   statement about a moment, and re-running the checks a year later may
+   legitimately answer differently — a purged artwork makes a re-read
+   impossible. An audit that silently re-evaluated its own basis would be
+   unreadable as history.
+
+**The system never awards the result.** `audit.recorded` sits alongside
+`decision.recorded` in the actions only a human agent may perform; a model
+attempting one is refused by the same function that stops it deciding a
+submission. A machine signing off on the soundness of its own record is
+precisely what an audit exists to withhold.
+
+The audit is itself appended to the hash-chained history it examined.
+
+### What this signals for production
+
+The prototype demonstrates the mechanism; it does not pretend to be an audit
+regime. What a real one would need next, in the order it would be needed:
+
+| | |
+|---|---|
+| **An authenticated auditor** | The name is declared, like every other name here. An audit trail whose auditor cannot be established is the same gap as a decision whose decider cannot |
+| **Independence** | Nothing stops the person who decided a submission auditing it. Separation of duty exists for policy approval and not yet for this |
+| **Sampling rather than selection** | An auditor choosing which records to examine measures the auditor. A production regime samples, and records what was sampled from |
+| **A retention schedule that follows the determination** | Re-reading expires with the artwork. If re-reading is part of the audit, retention must outlive the decision rather than the job |
+| **Findings that go somewhere** | A recorded `FAILED` currently informs nobody. It should open something |
+
+---
+
+## 7. Where to see it
 
 | | |
 |---|---|

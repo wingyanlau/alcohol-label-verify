@@ -88,7 +88,13 @@ export function mayDecide(agent: Agent): boolean {
 }
 
 /** Actions that constitute a decision, and so require a human agent. */
-export const DECIDING_ACTIONS: readonly string[] = ['decision.recorded', 'policy.rule.enacted']
+export const DECIDING_ACTIONS: readonly string[] = [
+  'decision.recorded',
+  'policy.rule.enacted',
+  // Auditing is deciding. A machine that could sign off on the record's
+  // soundness would be awarding itself the thing an audit exists to withhold.
+  'audit.recorded',
+]
 
 export class AgentNotPermitted extends Error {
   constructor(agent: Agent, action: string) {

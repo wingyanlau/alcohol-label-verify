@@ -88,6 +88,21 @@ class El {
   querySelector(): El | null {
     return null
   }
+  /** The first descendant with this tag, for driving a control in a test. */
+  find(tag: string): El | null {
+    if (this.tagName === tag.toUpperCase()) return this
+    for (const c of this.children) {
+      const hit = c.find(tag)
+      if (hit) return hit
+    }
+    return null
+  }
+  /** Every descendant with this tag, in document order. */
+  findAll(tag: string): El[] {
+    const out: El[] = this.tagName === tag.toUpperCase() ? [this] : []
+    for (const c of this.children) out.push(...c.findAll(tag))
+    return out
+  }
   count(tag: string): number {
     let n = this.tagName === tag.toUpperCase() ? 1 : 0
     for (const c of this.children) n += c.count(tag)
@@ -146,6 +161,7 @@ function boot(
     resetStops?: number | null
     samplesFail?: boolean
     startFails?: boolean
+    noDecisions?: boolean
   } = {},
 ) {
   const items = opts.items ?? corpusItems()
@@ -201,7 +217,8 @@ function boot(
   }
 
   const calls: string[] = []
-  const fetchStub = (url: string, init?: { method?: string }) => {
+  const recordedAudits: Array<Record<string, unknown>> = []
+  const fetchStub = (url: string, init?: { method?: string; body?: unknown }) => {
     calls.push(`${init?.method ?? 'GET'} ${url}`)
     if (url.includes('/decisions')) {
       return Promise.resolve({
@@ -241,6 +258,72 @@ function boot(
               },
             ],
           }),
+      })
+    }
+    if (url.includes('/users')) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({ users: [{ name: 'Dave Mitchell', role: 'Compliance agent' }] }),
+      })
+    }
+    if (url.includes('/audit/records')) {
+      if (opts.noDecisions) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              records: [],
+              note: 'No determination has been recorded yet, so there is nothing to audit.',
+            }),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            note: 'Every determination a person has recorded.',
+            records: [
+              {
+                submission_id: 'sub-1',
+                verdict_id: 'v-1',
+                decided_by: 'Jenny Alvarez',
+                decided_at: '2026-08-05T09:00:00.000Z',
+                decision: 'APPROVED',
+                recommended_outcome: 'CLEAR',
+                reference_code: 'ABCD-1234',
+                source_name: 'L01-fully-compliant.pdf',
+                content_purged_at: null,
+                audits: 0,
+                last_result: null,
+                last_by: null,
+              },
+            ],
+          }),
+      })
+    }
+    if (url.includes('/audit/run/')) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            submissionId: 'sub-1',
+            verdictId: 'v-1',
+            chain: { status: 'ok', events: 42, brokenAt: null },
+            replay: { status: 'identical', differences: [] },
+            sideBySide: {
+              outcome: { recorded: 'CLEAR', rederived: 'CLEAR' },
+              differences: [],
+            },
+          }),
+      })
+    }
+    if (url.includes('/audit/record/')) {
+      recordedAudits.push(JSON.parse(String(init?.body ?? '{}')))
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({ result: 'UPHELD', auditedBy: 'Dave Mitchell', auditedAt: 'now' }),
       })
     }
     if (url.includes('/audit/verify')) {
@@ -455,7 +538,7 @@ function boot(
   const settle = async () => {
     for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 5))
   }
-  return { byId, calls, settle, sockets, snapshot }
+  return { byId, calls, settle, sockets, snapshot, recordedAudits }
 }
 
 describe('the worklist lists what the coordinator sent', () => {
@@ -949,62 +1032,94 @@ describe('the measurement screen (§16)', () => {
   })
 })
 
-describe('the audit screen (NFR-13)', () => {
+describe('auditing a record (NFR-13)', () => {
   /*
-   * The audit chain and replay were reachable only as JSON, so the one
-   * capability that distinguishes this system from a wrapper around a model was
-   * invisible to anyone using it.
+   * This screen reported chain integrity and replay counts across every
+   * verdict, which is a health check rather than an audit. An audit is somebody
+   * examining ONE determination and concluding something about it — and a
+   * conclusion nobody recorded is a conversation.
    */
   const openAudit = async (opts: Parameters<typeof boot>[0] = {}) => {
-    const { byId, settle, calls } = boot(opts)
-    await settle()
-    byId.modeAudit?.click()
-    await settle()
-    return { byId, calls }
+    const b = boot(opts)
+    await b.settle()
+    b.byId.modeAudit?.click()
+    await b.settle()
+    return b
   }
 
-  it('answers both questions, which are different', async () => {
-    // The chain says whether the history was altered. Replay says whether the
-    // stored evidence still produces the stored verdict. Neither implies the
-    // other.
+  it('lists the records a person actually decided', async () => {
+    // Scoped to determinations, because a verdict nobody acted on is an
+    // opinion and an auditor is asking about consequences.
     const { byId } = await openAudit()
     const words = byId.auditBody?.words() ?? ''
-    expect(words).toContain('The history')
-    expect(words).toContain('Re-deriving every verdict')
+    expect(words).toContain('Records ready for audit')
+    expect(words).toContain('L01-fully-compliant.pdf')
+    expect(words).toContain('Jenny Alvarez')
   })
 
-  it('reports the chain unaltered with its event count', async () => {
-    const { byId } = await openAudit()
-    expect(byId.auditBody?.words()).toMatch(/Unaltered — 306 events/)
+  it('says why the list is empty rather than showing nothing', async () => {
+    // "Nothing to audit" and "nobody has decided anything" look identical
+    // otherwise, and only one of them means the system is idle.
+    const { byId } = await openAudit({ noDecisions: true })
+    expect(byId.auditBody?.words()).toMatch(/nothing to audit/i)
   })
 
-  it('says the model is not asked again, and what that costs', async () => {
-    // "No model invoked" read as a boast and prompted the fair question: then
-    // what has been reproduced? It is a LIMIT — the judgement is tested, the
-    // reading is not — and the page has to say so in the same breath.
-    const { byId } = await openAudit()
+  it('shows the two things being compared, side by side', async () => {
+    const { byId, settle } = await openAudit()
+    const run = byId.auditBody?.find('BUTTON')
+    run?.click()
+    await settle()
     const words = byId.auditBody?.words() ?? ''
-    expect(words).toMatch(/model is not asked again/i)
-    expect(words).toMatch(/says nothing about whether the reading was right/i)
+    expect(words).toContain('Side by side')
+    expect(words).toMatch(/Recorded outcome: CLEAR/)
+    expect(words).toMatch(/Re-derived outcome: CLEAR/)
   })
 
-  it('names the check it does NOT perform', async () => {
-    // Putting the same artwork to the same model and comparing would test
-    // perception. The record holds everything that check needs; the deployment
-    // does not run it, and a page claiming reproducibility must not let a
-    // reader assume otherwise.
-    const { byId } = await openAudit()
-    expect(byId.auditBody?.words()).toMatch(/does not yet perform it/i)
-  })
-
-  it('refuses to let the claim overreach', async () => {
-    // It proves the judgement is reproducible. It does not prove the reading
-    // was right — and a page that blurred those two would be claiming the one
-    // thing this system cannot show.
-    const { byId } = await openAudit()
+  it('draws no conclusion of its own', async () => {
+    // The evidence is presented and the result is left blank. A system that
+    // pre-selected an answer would be auditing itself and asking a person to
+    // countersign.
+    const { byId, settle } = await openAudit()
+    byId.auditBody?.find('BUTTON')?.click()
+    await settle()
     const words = byId.auditBody?.words() ?? ''
-    expect(words).toMatch(/says nothing about whether the reading was right/i)
-    expect(words).toMatch(/NOT deterministic/)
+    expect(words).toMatch(/evidence, not a finding/i)
+    expect(words).toContain('Your conclusion')
+  })
+
+  it('refuses to record without a name and a conclusion', async () => {
+    const { byId, settle, recordedAudits } = await openAudit()
+    byId.auditBody?.find('BUTTON')?.click()
+    await settle()
+    // The last button is "Record this audit"; pressing it unfilled must not post.
+    const buttons = byId.auditBody?.findAll('BUTTON') ?? []
+    buttons[buttons.length - 1]?.click()
+    await settle()
+    expect(recordedAudits).toHaveLength(0)
+  })
+
+  it('sends the evidence alongside the conclusion', async () => {
+    // An audit is a statement about a moment. Storing the conclusion without
+    // what it was formed on would leave a later reader unable to weigh it.
+    const { byId, settle, recordedAudits } = await openAudit()
+    byId.auditBody?.find('BUTTON')?.click()
+    await settle()
+
+    const selects = byId.auditBody?.findAll('SELECT') ?? []
+    if (selects[0]) selects[0].value = 'Dave Mitchell'
+    if (selects[1]) selects[1].value = 'UPHELD'
+    const buttons = byId.auditBody?.findAll('BUTTON') ?? []
+    buttons[buttons.length - 1]?.click()
+    await settle()
+
+    expect(recordedAudits).toHaveLength(1)
+    expect(recordedAudits[0]?.auditedBy).toBe('Dave Mitchell')
+    expect(recordedAudits[0]?.result).toBe('UPHELD')
+    expect(recordedAudits[0]?.evidence).toEqual({
+      chainStatus: 'ok',
+      replayStatus: 'identical',
+      rereadStatus: 'not-run',
+    })
   })
 
   it('does not fetch until the tab is opened', async () => {
@@ -1013,6 +1128,6 @@ describe('the audit screen (NFR-13)', () => {
     expect(calls.filter((c) => c.includes('/audit/'))).toEqual([])
     byId.modeAudit?.click()
     await settle()
-    expect(calls.filter((c) => c.includes('/audit/')).length).toBe(2)
+    expect(calls.filter((c) => c.includes('/audit/records')).length).toBe(1)
   })
 })

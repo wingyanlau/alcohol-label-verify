@@ -11,7 +11,8 @@
 
 import { agentRoster } from './agents/roster.js'
 import { compareReadings } from './audit/reread.js'
-import { SYSTEM_AGENT } from './batch/agent.js'
+import { AuditRejected, checkAudit } from './audit/review.js'
+import { AgentNotPermitted, humanAgent, SYSTEM_AGENT } from './batch/agent.js'
 import { appendAudit, readWholeChain, verifyChain } from './batch/audit.js'
 import { MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
 import { BatchTooLarge } from './batch/cap.js'
@@ -1620,6 +1621,163 @@ export default {
       }
 
       return json({ ...detail, replay })
+    }
+
+    // Records that can be audited, and what anyone has concluded about them.
+    //
+    // Scoped to those a PERSON acted on. A verdict nobody decided is an
+    // opinion; a verdict somebody approved is a determination that affected an
+    // applicant, and that is what an auditor, an applicant or a dispute asks
+    // about.
+    if (pathname === '/audit/records' && request.method === 'GET') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+      const { results } = await env.DB.prepare(
+        `SELECT d.submission_id, d.verdict_id, d.decided_by, d.decided_at, d.decision,
+                d.recommended_outcome, s.reference_code, s.source_name,
+                s.content_purged_at,
+                (SELECT COUNT(*) FROM audit_review a WHERE a.verdict_id = d.verdict_id) AS audits,
+                (SELECT a.result FROM audit_review a WHERE a.verdict_id = d.verdict_id
+                  ORDER BY a.audited_at DESC LIMIT 1) AS last_result,
+                (SELECT a.audited_by FROM audit_review a WHERE a.verdict_id = d.verdict_id
+                  ORDER BY a.audited_at DESC LIMIT 1) AS last_by
+           FROM decision d
+           LEFT JOIN submission s ON s.id = d.submission_id
+          ORDER BY d.decided_at DESC
+          LIMIT 100`,
+      ).all()
+      return json({
+        records: results,
+        // Said rather than left to be inferred from an empty list, which reads
+        // as "nothing to audit" when it means "nobody has decided anything".
+        note:
+          results.length === 0
+            ? 'No determination has been recorded yet, so there is nothing to audit. An audit ' +
+              'follows a decision: a verdict nobody acted on is an opinion.'
+            : 'Every determination a person has recorded. Auditing one re-derives the verdict ' +
+              'from the record and puts the filing back to the model, then asks you to conclude.',
+      })
+    }
+
+    // Run the checks for one record and return them side by side.
+    //
+    // It concludes nothing. It gathers what can be established — has the
+    // history been altered, does the verdict still follow from its reading,
+    // does the model still read it the same way — and hands all three to a
+    // person. A machine awarding itself an audit is the thing an audit exists
+    // to withhold.
+    const auditRun = pathname.match(/^\/audit\/run\/([^/]+)$/)
+    if (auditRun && request.method === 'POST') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+      const submissionId = decodeURIComponent(auditRun[1] ?? '')
+
+      const chain = await readWholeChain(env.DB)
+      const brokenAt = await verifyChain(chain)
+
+      let replay: { status: string; differences: readonly string[] } | null = null
+      let stored: Awaited<ReturnType<typeof loadStoredVerdict>> | null = null
+      try {
+        stored = await loadStoredVerdict(env.DB, submissionId)
+        const report = await replayVerdict(stored, await rulesForReplay(env.DB, stored))
+        replay = { status: report.status, differences: report.differences ?? [] }
+      } catch (error) {
+        replay = { status: 'differs', differences: [String(error)] }
+      }
+
+      return json({
+        submissionId,
+        verdictId: stored?.verdictId ?? null,
+        chain: { status: brokenAt === null ? 'ok' : 'broken', events: chain.length, brokenAt },
+        replay,
+        // The stored verdict beside what re-deriving it produced. Side by side
+        // is the point: a status word is a conclusion, and an auditor is
+        // entitled to the two things being compared.
+        sideBySide: {
+          outcome: {
+            recorded: stored?.outcome ?? null,
+            rederived: replay?.status === 'identical' ? (stored?.outcome ?? null) : null,
+          },
+          differences: replay?.differences ?? [],
+        },
+        reread: null,
+        note:
+          'Re-reading the artwork is a separate step, because it costs a model call. ' +
+          'Nothing here is a conclusion — the conclusion is yours to record.',
+      })
+    }
+
+    // Record what a person concluded.
+    const auditRecord = pathname.match(/^\/audit\/record\/([^/]+)$/)
+    if (auditRecord && request.method === 'POST') {
+      if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
+      const submissionId = decodeURIComponent(auditRecord[1] ?? '')
+      try {
+        const body = (await request.json()) as {
+          auditedBy?: string
+          result?: string
+          note?: string
+          evidence?: { chainStatus?: string; replayStatus?: string; rereadStatus?: string }
+        }
+        const auditedBy = String(body.auditedBy ?? '')
+        const agent = humanAgent(auditedBy)
+        const result = checkAudit(agent, auditedBy, String(body.result ?? ''))
+
+        const verdict = await env.DB.prepare(
+          `SELECT id FROM verdict WHERE submission_id = ?1 AND superseded_by IS NULL
+            ORDER BY created_at DESC LIMIT 1`,
+        )
+          .bind(submissionId)
+          .first<{ id: string }>()
+        if (verdict === null) return json({ error: 'not_found' }, 404)
+
+        const now = new Date().toISOString()
+        const id = crypto.randomUUID()
+        await env.DB.prepare(
+          `INSERT INTO audit_review
+             (id, submission_id, verdict_id, audited_by, audited_at, result,
+              chain_status, replay_status, reread_status, note)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (verdict_id, audited_by) DO NOTHING`,
+        )
+          .bind(
+            id,
+            submissionId,
+            verdict.id,
+            auditedBy.trim(),
+            now,
+            result,
+            body.evidence?.chainStatus ?? null,
+            body.evidence?.replayStatus ?? null,
+            body.evidence?.rereadStatus ?? null,
+            (body.note ?? '').trim() || null,
+          )
+          .run()
+
+        // The audit is itself an act, and belongs in the history it examined.
+        await appendAudit(env.DB, {
+          at: now,
+          agent,
+          actor: 'human',
+          action: 'audit.recorded',
+          subjectType: 'verdict',
+          subjectId: verdict.id,
+          detail: [
+            `submission=${submissionId}`,
+            `result=${result}`,
+            `replay=${body.evidence?.replayStatus ?? 'not-run'}`,
+            `reread=${body.evidence?.rereadStatus ?? 'not-run'}`,
+          ].join(';'),
+        })
+
+        return json({ id, submissionId, verdictId: verdict.id, auditedBy, result, auditedAt: now })
+      } catch (error) {
+        if (error instanceof AuditRejected) {
+          return json({ error: 'invalid', field: error.field, reason: error.message }, 400)
+        }
+        if (error instanceof AgentNotPermitted) {
+          return json({ error: 'not_permitted', reason: (error as Error).message }, 403)
+        }
+        return json({ error: 'audit_failed', fault: faultOf(env, error) }, 503)
+      }
     }
 
     // Ask the model again, and compare (§ audit/reread.ts).

@@ -1259,131 +1259,240 @@ export const PAGE_HTML = `<!doctype html>
   }
 
   /**
-   * The audit record, checked rather than described (NFR-13).
+   * Auditing a record — the act, not a dashboard (NFR-13).
    *
-   * Two questions, and they are different. The chain answers *has the history
-   * been altered* — each event commits to the one before it, so a changed row
-   * cannot reproduce the digest that followed it. Replay answers *does the
-   * recorded reading still produce the recorded verdict* — the whole pipeline
-   * re-run from the model's stored output onwards: parsed through the same
-   * contract, compared by the same rules, aggregated the same way.
+   * This screen used to report chain integrity and replay counts across every
+   * verdict, which is a health check: useful, and not an audit. An audit is
+   * somebody examining ONE determination and concluding something about it,
+   * and a conclusion nobody recorded is a conversation.
    *
-   * The model is not asked again, and that is a limit rather than a boast. It
-   * means replay tests the JUDGEMENT and says nothing about the READING.
-   * Checking the reading would mean putting the artwork to the same model and
-   * comparing — a different operation, and one this deployment does not offer.
-   *
-   * Both were reachable only as JSON until now, which meant the one capability
-   * that distinguishes this system was invisible to anyone using it.
+   * So it lists what can be audited — the records a person actually decided —
+   * runs the checks for one on demand, shows the two things being compared
+   * side by side, and asks a human to conclude. The system never awards the
+   * result: a machine signing off on the soundness of its own record is
+   * precisely what an audit exists to withhold.
    */
   var auditLoaded = false
   function loadAudit() {
     if (auditLoaded) return
     auditLoaded = true
     var body = byId('auditBody')
-    body.textContent = 'Checking…'
-    Promise.all([
-      fetch('/audit/verify').then(function (r) { return r.json() }).catch(function () { return null }),
-      // Deliberately more than the default 25: the interesting case is a
-      // verdict judged under a policy set that has since been superseded, and
-      // that only appears once there is history to look back through.
-      fetch('/audit/replay?limit=100').then(function (r) { return r.json() }).catch(function () { return null }),
-    ])
-      .then(function (both) { renderAudit(both[0], both[1]) })
+    body.textContent = 'Loading…'
+    fetch('/audit/records')
+      .then(function (r) { if (!r.ok) throw new Error('unavailable'); return r.json() })
+      .then(function (d) { renderAudit(d) })
       .catch(function () {
         auditLoaded = false
         body.textContent = ''
-        body.appendChild(el('p', 'err', 'The record could not be checked. Please try again in a moment.'))
+        body.appendChild(el('p', 'err', 'The records could not be loaded. Please try again in a moment.'))
       })
   }
 
-  function statusRow(ok, headline, detail) {
-    var row = el('div', 'finding')
-    var line = el('div', 'fstatus ' + (ok === true ? 'ok' : ok === false ? 'bad' : 'muted'))
-    line.appendChild(el('span', null, (ok === true ? '✓' : ok === false ? '✗' : '—') + '  '))
-    line.appendChild(document.createTextNode(headline))
-    row.appendChild(line)
-    if (detail) row.appendChild(el('div', 'dev', detail))
-    return row
-  }
-
-  function renderAudit(chain, replay) {
+  function renderAudit(d) {
     var body = byId('auditBody')
     body.textContent = ''
 
-    // 1. Has the history been altered?
-    var a = el('div')
-    a.appendChild(el('h2', null, 'The history'))
-    if (!chain) {
-      a.appendChild(el('p', 'note', 'The chain could not be read.'))
-    } else {
-      a.appendChild(statusRow(
-        chain.status === 'ok',
-        chain.status === 'ok'
-          ? 'Unaltered — ' + chain.events + ' events, each committing to the one before it'
-          : 'Broken at event ' + chain.brokenAt,
-        'Every recorded act — a job opening, a verdict, a decision, a rule taking force — is hashed together with the digest of the act before it. Change one and nothing after it can reproduce its own digest.'))
-      if (chain.head) {
-        var h = el('div', 'finding')
-        h.appendChild(el('div', 'freq', 'Head of the chain'))
-        h.appendChild(el('div', 'rule', String(chain.head)))
-        h.appendChild(el('div', 'dev', 'Written down elsewhere, this pins the history at this moment: anything appended later extends it, and anything altered before it cannot reproduce it.'))
-        a.appendChild(h)
-      }
+    var records = (d && d.records) || []
+    if (!records.length) {
+      body.appendChild(el('p', 'note', (d && d.note) || 'Nothing to audit yet.'))
+      return
     }
-    body.appendChild(a)
 
-    // 2. Does the stored evidence still produce the stored verdict?
-    var b = el('div')
-    b.appendChild(el('h2', null, 'Re-deriving every verdict'))
-    if (!replay) {
-      b.appendChild(el('p', 'note', 'Replay could not be run.'))
-    } else if (!replay.checked) {
-      b.appendChild(el('p', 'note', 'No verdict has been recorded yet, so there is nothing to re-derive. This is empty because nothing has been checked, not because everything agreed.'))
-    } else {
-      var clean = (replay.differs || 0) === 0 && (replay['record-altered'] || 0) === 0
-      b.appendChild(statusRow(
-        clean,
-        clean
-          ? 'All ' + replay.checked + ' re-derive to the verdict that was stored'
-          : replay.differs + ' no longer re-derive to what was stored',
-        'The whole pipeline re-run from the reading recorded at the time — parsed through the same contract, compared by the same rules, aggregated the same way. The model is not asked again, so this shows the JUDGEMENT is reproducible and says nothing about whether the reading was right.'))
-      b.appendChild(el('p', 'note',
-        'Checking the reading itself is a different operation: put the same artwork to the same model, at the same prompt version, and compare what comes back. That would test whether perception is stable. This deployment records everything such a check would need — the artwork, the model identifier, the prompt version, the sampling parameters — and does not yet perform it.'))
+    body.appendChild(el('h2', null, 'Records ready for audit (' + records.length + ')'))
+    body.appendChild(el('p', 'note', d.note))
 
-      var counts = el('div', 'finding')
-      counts.appendChild(el('div', 'freq', 'Result'))
-      ;[['identical','re-derived exactly'],
-        ['differs','disagreed with what was stored'],
-        ['record-altered','the stored reading itself had changed'],
-        ['not-comparable','judged under rules this deployment can no longer rebuild'],
-        ['not-re-derivable','recorded before an input was kept, so it says so rather than guessing']]
-        .forEach(function (pair) {
-          var n = replay[pair[0]] || 0
-          counts.appendChild(el('div', 'dev', n + ' — ' + pair[1]))
-        })
-      b.appendChild(counts)
+    records.forEach(function (r) {
+      var row = el('div', 'finding')
+      var head = el('div', 'freq')
+      head.textContent = (r.source_name || r.submission_id) + ' — ' + r.decision +
+        ' by ' + r.decided_by + ' on ' + String(r.decided_at).slice(0, 10)
+      row.appendChild(head)
+      if (r.reference_code) row.appendChild(el('div', 'rule', String(r.reference_code)))
 
-      if (replay.findings && replay.findings.length) {
-        replay.findings.slice(0, 10).forEach(function (f) {
-          var row = el('div', 'finding')
-          row.appendChild(el('div', 'fstatus bad', '✗  ' + f.status))
-          row.appendChild(el('div', 'rule', String(f.submissionId || '')))
-          ;(f.differences || []).forEach(function (d) { row.appendChild(el('div', 'dev', d)) })
-          b.appendChild(row)
-        })
+      if (r.audits > 0) {
+        row.appendChild(el('div', 'dev',
+          'Audited: ' + r.last_result + ' by ' + r.last_by +
+          (r.audits > 1 ? ' (' + r.audits + ' audits)' : '')))
       }
-    }
-    body.appendChild(b)
+      if (r.content_purged_at) {
+        row.appendChild(el('div', 'dev',
+          'The filing was deleted under the retention policy on ' +
+          String(r.content_purged_at).slice(0, 10) + ', so it cannot be re-read. The verdict can still be re-derived.'))
+      }
 
-    // 3. Why this is the claim worth making.
-    var c = el('div')
-    c.appendChild(el('h2', null, 'What is deterministic here, and what is not'))
-    c.appendChild(el('p', 'note',
-      'The model reading a label is NOT deterministic: asked twice, it may transcribe differently. That reading is captured verbatim as evidence. Everything after it — comparison, tolerance, the warning check, which rules apply, the outcome — is computed by code that takes no clock, no randomness and no network, so the same reading and the same rules give the same verdict every time.'))
-    c.appendChild(el('p', 'note',
-      'So the claim is not that the AI is deterministic. It is that what the AI said is on the record, and every conclusion drawn from it follows deterministically and can be produced again years later — which is what the six rules enacted on 5 August demonstrated: twenty-five verdicts judged under the previous policy set, all still re-deriving unchanged.'))
-    body.appendChild(c)
+      var out = el('div')
+      var btn = el('button', 'secondary', 'Audit this record')
+      btn.addEventListener('click', function () {
+        btn.disabled = true
+        btn.textContent = 'Checking…'
+        out.textContent = ''
+        fetch('/audit/run/' + encodeURIComponent(r.submission_id), { method: 'POST' })
+          .then(function (x) { return x.json() })
+          .then(function (report) {
+            btn.disabled = false
+            btn.textContent = 'Audit this record'
+            renderAuditReport(out, r, report)
+          })
+          .catch(function () {
+            btn.disabled = false
+            btn.textContent = 'Audit this record'
+            out.appendChild(el('p', 'err', 'The checks could not be run.'))
+          })
+      })
+      row.appendChild(btn)
+      row.appendChild(out)
+      body.appendChild(row)
+    })
+  }
+
+  /** The evidence, side by side, then the conclusion — which is the person's. */
+  function renderAuditReport(out, record, report) {
+    out.textContent = ''
+
+    function check(label, status, ok, detail) {
+      var row = el('div', 'finding')
+      var line = el('div', 'fstatus ' + (ok === true ? 'ok' : ok === false ? 'bad' : 'muted'))
+      line.appendChild(el('span', null, (ok === true ? '✓' : ok === false ? '✗' : '—') + '  '))
+      line.appendChild(document.createTextNode(label + ': ' + status))
+      row.appendChild(line)
+      if (detail) row.appendChild(el('div', 'dev', detail))
+      return row
+    }
+
+    var chainOk = report.chain && report.chain.status === 'ok'
+    out.appendChild(check('The history', chainOk ? 'unaltered' : 'ALTERED', chainOk,
+      report.chain ? report.chain.events + ' events, each committing to the one before it' : ''))
+
+    var rep = report.replay || {}
+    out.appendChild(check('The verdict, re-derived', rep.status || 'not run',
+      rep.status === 'identical' ? true : rep.status === 'differs' ? false : null,
+      'Re-run from the reading recorded at the time — same contract, same rules.'))
+
+    // Side by side, because a status word is a conclusion and an auditor is
+    // entitled to the two things being compared.
+    if (report.sideBySide) {
+      var sbs = el('div', 'finding')
+      sbs.appendChild(el('div', 'freq', 'Side by side'))
+      sbs.appendChild(el('div', 'dev', 'Recorded outcome: ' + (report.sideBySide.outcome.recorded || '—')))
+      sbs.appendChild(el('div', 'dev', 'Re-derived outcome: ' + (report.sideBySide.outcome.rederived || 'did not re-derive')))
+      ;(report.sideBySide.differences || []).forEach(function (x) {
+        sbs.appendChild(el('div', 'dev', '· ' + x))
+      })
+      out.appendChild(sbs)
+    }
+
+    // The re-read is a second, paid step.
+    var rereadStatus = { value: 'not-run' }
+    var rrOut = el('div')
+    var rrBtn = el('button', 'secondary', 'Also ask the model again')
+    rrBtn.addEventListener('click', function () {
+      rrBtn.disabled = true
+      rrBtn.textContent = 'Reading…'
+      fetch('/audit/reread/' + encodeURIComponent(record.submission_id), { method: 'POST' })
+        .then(function (x) { return x.json().then(function (b) { return { ok: x.ok, body: b } }) })
+        .then(function (res) {
+          rrBtn.disabled = false
+          rrBtn.textContent = 'Also ask the model again'
+          rereadStatus.value = res.ok ? (res.body.identical ? 'identical' : 'differs') : (res.body.error || 'failed')
+          renderRereadResult(rrOut, res)
+        })
+        .catch(function () {
+          rrBtn.disabled = false
+          rrBtn.textContent = 'Also ask the model again'
+        })
+    })
+    out.appendChild(rrBtn)
+    out.appendChild(rrOut)
+
+    out.appendChild(renderAuditConclusion(record, report, rereadStatus))
+  }
+
+  /**
+   * The conclusion, which the system does not draw.
+   *
+   * It offers no default and computes no result. The three options are put to a
+   * person with their name against them, exactly as a decision is, because an
+   * audit a machine awarded itself would be worth nothing.
+   */
+  function renderAuditConclusion(record, report, rereadStatus) {
+    var box = el('div', 'decision')
+    box.appendChild(el('h2', null, 'Your conclusion'))
+    box.appendChild(el('p', 'note',
+      'The checks above are evidence, not a finding. Recording an audit says a person looked at them and concluded something — and it is kept against the verdict, in the same history it examined.'))
+
+    var who = document.createElement('select')
+    who.setAttribute('aria-label', 'Who is recording this audit')
+    var waiting = document.createElement('option')
+    waiting.value = ''; waiting.textContent = 'Select who is auditing…'
+    who.appendChild(waiting)
+    box.appendChild(who)
+    box.appendChild(el('p', 'hint', 'Recorded as entered. This prototype does not verify identity.'))
+
+    // The same register the decision control draws on, and the server re-checks
+    // it: a dropdown narrows what can be picked, not what a request can carry.
+    fetch('/users?role=compliance-agent')
+      .then(function (r) { return r.ok ? r.json() : { users: [] } })
+      .then(function (d) {
+        (d.users || []).forEach(function (u) {
+          var o = document.createElement('option')
+          o.value = u.name
+          o.textContent = u.name + ' — ' + u.role
+          who.appendChild(o)
+        })
+      })
+      .catch(function () { /* the server refuses an unrecognised name anyway */ })
+
+    var result = document.createElement('select')
+    ;[['', 'What did you conclude?'],
+      ['UPHELD', 'The record holds up'],
+      ['CONCERNS', 'Holds up, with something to explain'],
+      ['FAILED', 'The record does not hold up']].forEach(function (pair) {
+        var o = el('option', null, pair[1]); o.value = pair[0]; result.appendChild(o)
+      })
+    box.appendChild(result)
+
+    var note = document.createElement('textarea')
+    note.rows = 2
+    note.placeholder = 'Anything a later reader would need to know (optional)'
+    box.appendChild(note)
+
+    var msg = el('p', 'note', '')
+    var save = el('button', null, 'Record this audit')
+    save.addEventListener('click', function () {
+      if (!who.value || !result.value) {
+        msg.textContent = 'Please say who is recording this, and what you concluded.'
+        return
+      }
+      save.disabled = true
+      fetch('/audit/record/' + encodeURIComponent(record.submission_id), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          auditedBy: who.value,
+          result: result.value,
+          note: note.value,
+          evidence: {
+            chainStatus: report.chain ? report.chain.status : null,
+            replayStatus: report.replay ? report.replay.status : null,
+            rereadStatus: rereadStatus.value,
+          },
+        }),
+      })
+        .then(function (x) { return x.json().then(function (b) { return { ok: x.ok, body: b } }) })
+        .then(function (res) {
+          save.disabled = false
+          msg.textContent = res.ok
+            ? 'Recorded — ' + res.body.result + ' by ' + res.body.auditedBy + '.'
+            : (res.body.reason || 'The audit could not be recorded.')
+        })
+        .catch(function () {
+          save.disabled = false
+          msg.textContent = 'The audit could not be recorded.'
+        })
+    })
+    box.appendChild(save)
+    box.appendChild(msg)
+    return box
   }
 
   /**

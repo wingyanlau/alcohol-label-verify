@@ -227,6 +227,22 @@ system already takes.
 
 ---
 
+## 6a. The audit regime is the other half
+
+Everything above is about letting a model do more. The counterweight is what
+checks it, and the prototype now demonstrates the mechanism: a person examines
+one determination against re-derived and re-read evidence, concludes, and the
+conclusion is recorded in the history it examined.
+
+**That mechanism is what a model-based engine would be released into.** Shadow
+mode produces divergences; somebody has to adjudicate them, and an adjudication
+nobody recorded is not evidence. The same table applies — an authenticated
+auditor, independence from the decider, sampling rather than selection — and
+each becomes more load-bearing, not less, once a model's output is what is being
+audited.
+
+---
+
 ## 7. Why stage 4 is not proposed
 
 Unsupervised model judgement on a regulatory decision is not a technical
