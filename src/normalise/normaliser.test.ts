@@ -149,6 +149,45 @@ describe('identifyForm — reject rather than guess (B-D8)', () => {
     )
   })
 
+  it('reads the record off page 1 when the filing IS the form', () => {
+    // A genuinely filed TTB F 5100.31 is the published form: the label affixed
+    // to page 1, item 5 and the applicant's entries above it, and instruction
+    // pages after. There is no separate record page to crop, and cropping page
+    // 2 gets the instructions.
+    const form = identifyForm({ pageCount: 5, pageWidth: 612, pageHeight: 1008 })
+    expect(form.recordPage).toBe(1)
+    expect(form.recordRegion).not.toBeNull()
+  })
+
+  it('still reads the record off page 2 for a two-page submission', () => {
+    // The corpus shape: the form's page 1, and a COLAs Online record page that
+    // carries the fields the paper form has no box for.
+    const form = identifyForm({ pageCount: 2, pageWidth: 612, pageHeight: 1008 })
+    expect(form.recordPage).toBe(2)
+    expect(form.recordRegion).toBeNull()
+  })
+
+  it('accepts the form page on its own', () => {
+    // One page is a plausible filing — the form, with the labels affixed.
+    const form = identifyForm({ pageCount: 1, pageWidth: 612, pageHeight: 1008 })
+    expect(form.recordPage).toBe(1)
+  })
+
+  it('never lets the label into the record read (D4)', () => {
+    // The property, not the numbers. If the record crop reached down into the
+    // affix box, the "record" reading would be taken off the artwork it is
+    // meant to be compared against — and every field would then match itself.
+    // That is a false MATCH on every submission, which is the failure direction
+    // this whole design exists to avoid.
+    const form = identifyForm({ pageCount: 5, pageWidth: 612, pageHeight: 1008 })
+    expect(form.recordPage).toBe(form.labelPage)
+    const record = form.recordRegion
+    expect(record).not.toBeNull()
+    if (record !== null) {
+      expect(record.y0).toBeGreaterThan(form.labelRegion.y1)
+    }
+  })
+
   it('rejects a document with too few pages', () => {
     expect(() => identifyForm({ pageCount: 0, pageWidth: 612, pageHeight: 1008 })).toThrow(
       UnknownFormError,

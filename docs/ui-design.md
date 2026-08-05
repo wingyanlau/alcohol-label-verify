@@ -175,6 +175,19 @@ two functions happen to agree today.
 | Label artwork (page 1, affix box) | Brand name, class/type, alcohol content, net contents, the health warning | Product type |
 | Application record | The same four fields, and **item 5, type of product** | The health warning |
 
+**Where the record is depends on what was filed** (D50). Two shapes, told apart
+by page count:
+
+| Filed as | Record region | Consequence |
+|---|---|---|
+| Form page + a COLAs Online record page (the corpus) | The record page, whole | All four fields have a source |
+| The form on its own (what ttb.gov publishes) | Page 1 **above** the affix box | Item 5 and item 6 have a source; class/type, alcohol content and net contents do not, and report `NOT_SUPPLIED` |
+
+The second map's crop stops 8pt clear of the affix box, and that clearance is
+the D4 boundary rather than tidiness: a record crop reaching into the artwork
+would take the *application* reading off the very label it is about to be
+compared against, and every field would then match itself.
+
 **Two reads, and neither is shown the other** (D4, CT-10). No expected value
 exists until both have answered, so there is nothing for either reading to
 anchor to. This is the property that makes a *match* mean something: a model
@@ -222,12 +235,15 @@ rather fill one in. Without them the single-review path is a file picker that
 refuses every file its visitor owns, which is the state anyone evaluating the
 deployment arrives in.
 
-> **The link outruns the implementation, and knowingly.** A genuinely filled
-> F 5100.31 carries the label and item 5 on page 1; pages 2–5 are instructions.
-> The record region this system crops is page 2, which the corpus supplies as a
-> COLAs Online record and the real form does not. A real filing therefore reads
-> its four comparison fields from an instructions page and reports that nothing
-> could be checked. Closing that gap needs a second region map — see §4.2.
+> **A real filing is checked on what it actually carries** (D50). The form has
+> no box for class/type, alcohol content or net contents — item 15 asks for
+> those only where they are embossed on the container and absent from the
+> labels — so those three report `NOT_SUPPLIED`: *not assessed*, which is true,
+> rather than a pass. What the form does carry is item 5, which selects the
+> governing regulation, and item 6. The regulation checks read the **label**,
+> so every one of them still applies. Nothing is defaulted in to fill the gap:
+> a default would be compared against the label, and agreement with an invented
+> expectation is a false match.
 
 - They are **the corpus files**, not mock-ups: the same documents the batch runs
   on, each with authored ground truth for what it should produce

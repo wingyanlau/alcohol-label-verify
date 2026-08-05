@@ -40,6 +40,9 @@ interface RenderedRegions {
   readonly pageCount: number
   readonly pageWidth: number
   readonly pageHeight: number
+  /** The record crop's size in points — the whole page where it is not cropped. */
+  readonly recordWidthPt: number
+  readonly recordHeightPt: number
   readonly labelPng: string
   readonly recordPng: string
   readonly recordText: string | null
@@ -53,8 +56,8 @@ interface RenderedRegions {
  * deliberately never consulted — a PDF text layer can disagree with the
  * rendering, and compliance concerns what a consumer sees.
  */
-const RENDER_SCRIPT = `
-async (pdfBase64, dpi, region, labelPage, recordPage, pdfjsUrl, workerUrl) => {
+export const RENDER_SCRIPT = `
+async (pdfBase64, dpi, region, labelPage, recordPage, pdfjsUrl, workerUrl, recordRegion) => {
   const pdfjs = await import(pdfjsUrl)
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -78,21 +81,33 @@ async (pdfBase64, dpi, region, labelPage, recordPage, pdfjsUrl, workerUrl) => {
   const first = await doc.getPage(1)
   const unscaled = first.getViewport({ scale: 1 })
 
-  const label = await renderPage(labelPage)
   // PDF coordinates are bottom-left origin; canvas is top-left.
-  const crop = document.createElement('canvas')
-  crop.width = Math.round((region.x1 - region.x0) * scale)
-  crop.height = Math.round((region.y1 - region.y0) * scale)
-  crop.getContext('2d').drawImage(
-    label.canvas,
-    Math.round(region.x0 * scale),
-    Math.round((unscaled.height - region.y1) * scale),
-    crop.width,
-    crop.height,
-    0, 0, crop.width, crop.height,
-  )
+  const cut = (rendered, r) => {
+    const out = document.createElement('canvas')
+    out.width = Math.round((r.x1 - r.x0) * scale)
+    out.height = Math.round((r.y1 - r.y0) * scale)
+    out.getContext('2d').drawImage(
+      rendered.canvas,
+      Math.round(r.x0 * scale),
+      Math.round((unscaled.height - r.y1) * scale),
+      out.width,
+      out.height,
+      0, 0, out.width, out.height,
+    )
+    return out
+  }
 
-  const record = await renderPage(recordPage)
+  const label = await renderPage(labelPage)
+  const crop = cut(label, region)
+
+  // Rendered once when both regions are on the same page, which is the shape
+  // of a form filed on its own: the labels are affixed to page 1 and the
+  // applicant's entries are above them.
+  const record = recordPage === labelPage ? label : await renderPage(recordPage)
+  // Cropped where the map says to. A whole page is right for a separate record
+  // page and wrong for the form itself, where the rest of page 1 is the label
+  // this record is about to be compared against (D4).
+  const recordCanvas = recordRegion ? cut(record, recordRegion) : record.canvas
   let recordText = null
   try {
     const content = await record.page.getTextContent()
@@ -105,8 +120,10 @@ async (pdfBase64, dpi, region, labelPage, recordPage, pdfjsUrl, workerUrl) => {
     pageCount: doc.numPages,
     pageWidth: unscaled.width,
     pageHeight: unscaled.height,
+    recordWidthPt: recordRegion ? recordRegion.x1 - recordRegion.x0 : unscaled.width,
+    recordHeightPt: recordRegion ? recordRegion.y1 - recordRegion.y0 : unscaled.height,
     labelPng: strip(crop.toDataURL('image/png')),
-    recordPng: strip(record.canvas.toDataURL('image/png')),
+    recordPng: strip(recordCanvas.toDataURL('image/png')),
     recordText,
   }
 }
@@ -151,6 +168,7 @@ export function createBrowserNormaliser(opts: BrowserNormaliserOptions): Normali
             1,
             PDFJS_URL,
             PDFJS_WORKER,
+            null,
           ]),
         )) as RenderedRegions
 
@@ -173,6 +191,7 @@ export function createBrowserNormaliser(opts: BrowserNormaliserOptions): Normali
             Math.min(form.recordPage, probe.pageCount),
             PDFJS_URL,
             PDFJS_WORKER,
+            form.recordRegion,
           ]),
         )) as RenderedRegions
 
@@ -190,8 +209,8 @@ export function createBrowserNormaliser(opts: BrowserNormaliserOptions): Normali
             region: 'record',
             image: base64ToArrayBuffer(rendered.recordPng),
             mimeType: 'image/png',
-            widthPx: Math.round((rendered.pageWidth * dpi) / 72),
-            heightPx: Math.round((rendered.pageHeight * dpi) / 72),
+            widthPx: Math.round((rendered.recordWidthPt * dpi) / 72),
+            heightPx: Math.round((rendered.recordHeightPt * dpi) / 72),
             dpi,
           },
           recordTextLayer: rendered.recordText,
