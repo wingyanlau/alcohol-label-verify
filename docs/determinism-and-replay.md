@@ -96,12 +96,20 @@ On **5 August 2026** six rules were enacted: `policySetVersion` 3 → 4, six
 nine.
 
 Twenty-five verdicts already existed, every one of them judged under version 3.
+The deploy's own replay gate reported:
 
 ```
 checked 25 · identical 25 · differs 0 · not-comparable 0 · not-re-derivable 0
 ```
 
 **The rules changed and no past verdict moved.**
+
+> **This is a dated event, not the current state of the deployment.** Staging
+> was reset afterwards to clear an unrelated defect, so the verdicts above no
+> longer exist and the Record tab shows only what has been checked since. The
+> evidence is the CI run for that deploy, which is where the numbers came from.
+> Any future policy change re-demonstrates it, because the property is
+> structural rather than a property of those particular rows.
 
 That is not luck, and it is not because the change was small. It is the
 bitemporal archive doing the one thing it exists for. Selection asks two
