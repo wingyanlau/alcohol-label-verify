@@ -42,7 +42,7 @@ import { POLICY_SET } from './domain/findings.js'
 import { configuredLegibilityFloor } from './domain/legibility.js'
 import type { PolicyRule } from './domain/policy.js'
 import { referenceIsUnverified, warningReference } from './domain/reference.js'
-import { registeredUsers, userMay } from './domain/users.js'
+import { registeredUsers, roleLabelFor, userMay } from './domain/users.js'
 import type { Env, WorkMessage } from './env.js'
 import { checkImageIntake } from './normalise/image.js'
 import { IntakeRejected } from './normalise/normaliser.js'
@@ -1159,7 +1159,15 @@ export default {
       const all = registeredUsers()
       const users = role === null ? all : all.filter((u) => u.roles.includes(role as never))
       return json({
-        users: users.map((u) => ({ id: u.id, name: u.name, title: u.title, roles: u.roles })),
+        // The role, not the job title. What a reviewer scanning a list needs is
+        // what this person is entitled to do, and the rest is colour that makes
+        // a dropdown harder to read.
+        users: users.map((u) => ({
+          id: u.id,
+          name: u.name,
+          role: roleLabelFor(u),
+          roles: u.roles,
+        })),
         note: 'Recognition, not authentication. Nothing here verifies that the person selecting a name is that person (D14, §19.5).',
       })
     }

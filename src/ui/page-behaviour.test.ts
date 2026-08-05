@@ -233,7 +233,8 @@ function boot(opts: { running?: boolean; items?: Item[]; resetStops?: number | n
                 approvedBy: null,
                 approvalInherited: false,
                 quote: 'Alcoholic content shall be stated in terms of percentage',
-                proposedBy: 'claude-opus-5',
+                proposedBy: 'Sarah Peterson — Policy author',
+                draftedBy: 'claude-opus-5',
               },
             ],
             retired: [],
@@ -514,6 +515,22 @@ describe('the policy view (ui-design §2.3)', () => {
     const words = byId.policyBody?.words() ?? ''
     const draft = words.slice(words.indexOf('WINE-ALCOHOL-CONTENT-FORMAT'))
     expect(draft).toContain('NOT APPROVED')
+  })
+
+  it('names the person who proposed a rule, not the tool', async () => {
+    // "proposed by claude-opus-5" named the tool and nobody else, and a tool
+    // cannot be answerable for having judged its own output worth proposing.
+    const { byId } = await openPolicy()
+    const words = byId.policyBody?.words() ?? ''
+    expect(words).toContain('proposed by Sarah Peterson — Policy author')
+  })
+
+  it('keeps the drafting model out of the reviewer’s way', async () => {
+    // Still in the record — the contract requires it and /policy/rules returns
+    // it — but a reviewer deciding whether to approve a rule is not helped by
+    // which model typed it.
+    const { byId } = await openPolicy()
+    expect(byId.policyBody?.words()).not.toContain('claude-opus-5')
   })
 
   it('offers nothing that would write', async () => {

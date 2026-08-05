@@ -59,8 +59,30 @@ export function userMay(name: string, role: UserRole): boolean {
   return userByName(name)?.roles.includes(role) ?? false
 }
 
-/** How a screen should render a name: the person, and what they are. */
+/**
+ * What a role is called on screen.
+ *
+ * Derived from the role rather than from the free-text title, because the role
+ * is the thing that matters where a name appears: what this person is entitled
+ * to do here. Length of service and which filings somebody handles are colour
+ * from the stakeholder register — they belong in `source`, not in a dropdown a
+ * reviewer is scanning.
+ */
+const ROLE_LABEL: Readonly<Record<UserRole, string>> = {
+  'compliance-agent': 'Compliance agent',
+  'policy-approver': 'Policy approver',
+  'policy-author': 'Policy author',
+  administrator: 'Administrator',
+}
+
+/** The role a person is acting in, for display. Their first, where several. */
+export function roleLabelFor(user: RegisteredUser): string {
+  const first = user.roles[0]
+  return first === undefined ? 'No role' : ROLE_LABEL[first]
+}
+
+/** How a screen should render a name: the person, and what they are here. */
 export function describeUser(name: string): string {
   const user = userByName(name)
-  return user === null ? `${name} (not in the register)` : `${user.name} — ${user.title}`
+  return user === null ? `${name} (not in the register)` : `${user.name} — ${roleLabelFor(user)}`
 }

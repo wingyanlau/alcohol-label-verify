@@ -780,7 +780,7 @@ export const PAGE_HTML = `<!doctype html>
         (d.users || []).forEach(function (u) {
           var o = document.createElement('option')
           o.value = u.name
-          o.textContent = u.name + ' — ' + u.title
+          o.textContent = u.name + ' — ' + u.role
           who.appendChild(o)
         })
       })
@@ -995,7 +995,6 @@ export const PAGE_HTML = `<!doctype html>
       bits.push('NOT APPROVED')
     }
     if (r.proposedBy) bits.push('proposed by ' + r.proposedBy)
-    if (r.draftedBy) bits.push('drafted with ' + r.draftedBy)
     foot.textContent = bits.join(' · ')
     wrap.appendChild(foot)
     return wrap

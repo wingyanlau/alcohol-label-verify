@@ -14,7 +14,21 @@ import { describeUser, registeredUsers, userByName, userMay } from './users.js'
 
 describe('who is recognised', () => {
   it('resolves a registered person', () => {
-    expect(userByName('Sarah Peterson')?.title).toMatch(/sponsor/i)
+    expect(userByName('Sarah Peterson')?.id).toBe('sarah-peterson')
+  })
+
+  it('describes somebody by the role they act in, not their job title', () => {
+    // What a reviewer scanning a name needs is what this person is entitled to
+    // do here. Length of service and which filings they handle are colour from
+    // the stakeholder register, and belong in `source`.
+    expect(describeUser('Sarah Peterson')).toBe('Sarah Peterson — Policy author')
+    expect(describeUser('Jenny Alvarez')).toBe('Jenny Alvarez — Compliance agent')
+  })
+
+  it('carries no years of service or filing volume into a display string', () => {
+    for (const u of registeredUsers()) {
+      expect(describeUser(u.name), u.name).not.toMatch(/\d+ (years|months)|bulk|importer/i)
+    }
   })
 
   it('does not resolve a near miss', () => {
