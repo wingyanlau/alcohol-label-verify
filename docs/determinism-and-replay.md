@@ -128,8 +128,8 @@ transaction timeline makes them invisible to a judgement made earlier, without
 anyone having to remember.
 
 **Under a version-numbered policy the same change would have made every prior
-verdict permanently incomparable** — the reason D41 replaced version integers
-with dates.
+verdict permanently incomparable** — the reason rule identity became a date range rather than a
+version number.
 
 ---
 
@@ -166,7 +166,7 @@ Three things it is careful about:
   does not reproduce — a fact for the person deciding, not a finding.
 - **It says when the reader has changed.** If the deployment has been
   reconfigured or the prompt revised, the two readings come from different
-  agents (D29), and a difference then says the reader changed rather than that
+  agents, and a difference then says the reader changed rather than that
   perception drifted. Reporting the comparison without that would attribute a
   configuration change to the model.
 - **It reproduces the pixels the verdict was read from, not merely similar
@@ -177,7 +177,7 @@ Three things it is careful about:
   took: shipped rasters where they exist, a fresh rasterisation otherwise. An
   upload has no shipped raster and is genuinely re-rendered, normalisation
   included.
-- **Retention ends it.** Once the submission has been purged (D32) the answer is
+- **Retention ends it.** Once the submission has been purged the answer is
   `410` with the reason. Impossible by design rather than broken — and replay,
   which needs no pixels, still works.
 
@@ -202,7 +202,7 @@ Whether `27 CFR 5.65` was interpreted correctly is a matter for a compliance
 expert, and the citation and digest are there so one can check.
 
 **It does not prove who acted.** Names on decisions are declared, not
-authenticated (D14). The record is evidence of *what*, not of *who*.
+authenticated. The record is evidence of *what*, not of *who*.
 
 ---
 

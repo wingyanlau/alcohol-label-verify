@@ -42,7 +42,7 @@ Item 5 decides which regulations apply. Read it wrong and the submission is
 judged against the wrong part of the CFR, producing findings that are
 individually well-formed and entirely wrong, with nothing in the output showing
 it. The prototype reads it as a closed classification and fails to *no product
-type* on any ambiguity (D48).
+type* on any ambiguity.
 
 > **Integration requirement:** product type must arrive as data with the
 > application, not be inferred from artwork or free text.
@@ -62,11 +62,11 @@ deployment path is *self-hosted model*, not *different vendor*.
 
 | Needed | Prototype's stand-in | Why it cannot ship as-is |
 |---|---|---|
-| **Identity** | None (D14). Names on decisions are *declared* | An audit trail attributing a decision to an unverified string is not an audit trail. Prerequisite for US-19, US-20 |
-| **Filing date** | Today's date | The rule set applied depends on it (D41). A backdated filing is judged by today's rules, which is wrong and currently invisible |
+| **Identity** | None. Names on decisions are *declared* | An audit trail attributing a decision to an unverified string is not an audit trail. Prerequisite for US-19, US-20 |
+| **Filing date** | Today's date | The rule set applied depends on it. A backdated filing is judged by today's rules, which is wrong and currently invisible |
 | **Application identifier** | A generated reference code | `Q-INT-06` — the record has no COLA/TTB id to join on |
-| **Retention schedule** | Configurable window, demo default | `D32` — how long an agency may hold a submission is a records decision, not ours |
-| **Policy approval workflow** | A reviewed commit to `config/policy-set.json` (D45) | Works, and needs a named approver with an identity to be meaningful |
+| **Retention schedule** | Configurable window, demo default | How long an agency may hold a submission is a records decision, not ours |
+| **Policy approval workflow** | A reviewed commit to `config/policy-set.json` | Works, and needs a named approver with an identity to be meaningful |
 
 ---
 
@@ -138,4 +138,4 @@ Named, because a delivery plan that lists only steps is a wish.
 | **A false pass** | It admits a non-compliant label. The costs are not symmetric with a false flag | `UNREADABLE` outranks everything; uncertainty routes to a human; no defaults are ever compared |
 | **Egress blocked** | It killed half the last pilot's features | Provider seam; stage 3 exists for exactly this |
 | **The record does not exist** | If COLA holds no structured fields, three of four comparisons cannot be made | §1.1 — ask first, build second |
-| **Model drift** | A vendor repoints a stable name and every prior verdict cites a model that no longer exists | Fully-qualified identifiers (D29); a per-job fingerprint; the vendor's own served version recorded |
+| **Model drift** | A vendor repoints a stable name and every prior verdict cites a model that no longer exists | Fully-qualified identifiers; a per-job fingerprint; the vendor's own served version recorded |

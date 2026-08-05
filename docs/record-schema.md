@@ -40,7 +40,7 @@ claim rather than a record — hence the triggers in §6.
 |---|---|
 | `job.kind` | `'batch'` or `'single'`. Added in 0006 because a single review inserted its own job and the batch screen then showed *that* as the current job — an empty worklist replacing 26 results. A screen asking "the newest job" got the wrong answer; the fix was to make the question answerable |
 | `submission.content_digest` | Identifies the bytes, not the file. Two identical filings under different names are one document |
-| `submission.reference_code` | What an agent quotes back (D21). Deliberately not the primary key: a UUID is unreadable over a phone, and a human-quotable code must not become an identifier other systems join on |
+| `submission.reference_code` | What an agent quotes back. Deliberately not the primary key: a UUID is unreadable over a phone, and a human-quotable code must not become an identifier other systems join on |
 | `submission.content_key` | Where the staged PDF lives in R2, and **what the retention sweep keys off**. Left NULL by the single-review path for a while, which meant those uploads were never collected — a retention policy the deployment stated and did not apply |
 | `submission.content_purged_at` | The deletion is recorded, not merely performed. A results screen can then say *"the artwork was deleted on this date under the retention policy"* rather than failing to load an image and looking broken |
 | `submission.attempt_count` | Retries are visible. An item that succeeded on the fourth attempt is not the same evidence as one that succeeded immediately |
@@ -60,14 +60,14 @@ can be re-derived at all.
 
 | Column | Intention |
 |---|---|
-| `region` | `'label'` or `'record'`. Two blind reads, never one over the whole page (B-D1) |
+| `region` | `'label'` or `'record'`. Two blind reads, never one over the whole page |
 | `method` | CHECK-constrained to `'vision'` or `'text-layer'`. The label is **always** pixels: a PDF text layer can disagree with what the page displays, and compliance concerns what a consumer sees |
 | `raw_response` | Retained **verbatim**. Simultaneously the provenance record and the test fixture — the same artefact serves both, which is why a replay needs no model |
-| `model_id` | Fully qualified, never a floating alias (D29). "gemini" would name two different readers identically and call the difference a trend |
+| `model_id` | Fully qualified, never a floating alias. "gemini" would name two different readers identically and call the difference a trend |
 | `prompt_version`, `sampling` | A model is not a stable agent: version, prompt and sampling all move, and each changes what it produces. Identifying the reader means identifying the whole tuple |
 | `raster_dpi` | An `UNREADABLE` may be an artefact of the resolution *this system chose*, not of the artwork. Without it the finding is unattributable |
 | `latency_ms` | Present since 0001 |
-| `prompt_tokens`, `completion_tokens`, `total_tokens` | Added in 0011 (D52). **Nullable, and NULL means *not reported*** — a zero would claim a read was free, and a column of invented zeroes sums to something that looks like a measurement |
+| `prompt_tokens`, `completion_tokens`, `total_tokens` | Added in 0011. **Nullable, and NULL means *not reported*** — a zero would claim a read was free, and a column of invented zeroes sums to something that looks like a measurement |
 
 ---
 
@@ -84,7 +84,7 @@ on is pinned to it.
 Without these a verdict is not re-derivable and NFR-13 fails. They answer *which
 code and which data* produced this.
 
-### The bitemporal binding (D41, D42) — added in 0008
+### The bitemporal binding — added in 0008
 
 | Column | Question it answers |
 |---|---|
@@ -97,8 +97,8 @@ code and which data* produced this.
 `selection_inputs` is the subtle one and it was a real bug. Rebuilding the
 application from `field_verdict` alone loses `productType` — it is not one of
 `FIELDS`, so no field row carries it — and every replay then selected no rules
-and re-derived `CLEAR_CONFIRM_POLICY`. **D26 binds the selection inputs, not just
-the version, for exactly this reason.**
+and re-derived `CLEAR_CONFIRM_POLICY`. **The verdict binds the selection inputs, not just the
+policy version — for exactly this reason.**
 
 ### `warning_legible` — added in 0002
 
@@ -131,7 +131,7 @@ recorded only its conclusion would make them reopen the artwork.
 altered — must localise to `clause_1`, and a boolean over the whole warning
 could not.
 
-### `policy_finding` — the snapshot (D44)
+### `policy_finding` — the snapshot
 
 | Column | Intention |
 |---|---|
@@ -145,7 +145,7 @@ could not.
 
 | Column | Intention |
 |---|---|
-| `decided_by` | A name. **Declared, not authenticated** (D14) — this deployment has no accounts, so the record is evidence of *what*, never of *who* |
+| `decided_by` | A name. **Declared, not authenticated** — this deployment has no accounts, so the record is evidence of *what*, never of *who* |
 | `recommended_outcome` | What the system suggested, stored **beside** what the person chose |
 | `decision` | `APPROVED` / `REJECTED` / `RETURNED`. Returning for better artwork is distinct from rejecting: it is not a finding against the applicant |
 
@@ -164,8 +164,8 @@ against (see `toward-llm-policy.md`).
 |---|---|
 | `seq` | Order, monotonic |
 | `prev_digest`, `digest` | Each event commits to the one before it. Change a row and nothing after it reproduces its own digest |
-| `detail` | Identifiers, classifications, versions — **never content** (D20). A history that cannot be redacted must never carry anything requiring redaction |
-| `actor_kind`, `actor_id` | Added in 0009 (D46). `human` / `model` / `system`, with a qualified identity |
+| `detail` | Identifiers, classifications, versions — **never content**. A history that cannot be redacted must never carry anything requiring redaction |
+| `actor_kind`, `actor_id` | Added in 0009. `human` / `model` / `system`, with a qualified identity |
 
 `actor_kind` and `actor_id` are **deliberately outside the digest**. The chain
 protects what was recorded when it was recorded; adding fields to an existing
@@ -224,7 +224,7 @@ Sixteen, and every one serves a query the system actually makes:
 
 | Index | Query |
 |---|---|
-| `submission_by_reference` | An agent quotes a code (D21) |
+| `submission_by_reference` | An agent quotes a code |
 | `submission_by_digest` | Have we seen these bytes before? |
 | `extraction_by_model` | Which reader produced this — the basis of B-Q4 |
 | `verdict_by_outcome` | Worklist triage |
@@ -238,10 +238,10 @@ Sixteen, and every one serves a query the system actually makes:
 
 | | Why |
 |---|---|
-| Label artwork or extracted values in logs | D20. Content lives in R2 and in `extraction`, both purgeable; logs are not |
+| Label artwork or extracted values in logs | Content lives in R2 and in `extraction`, both purgeable; logs are not |
 | An applicant identifier | Not available (`Q-INT-06`). Inventing one would create a false join |
-| Per-agent productivity counters | D47. The data to compute them exists; withholding the measure is the decision |
-| User accounts | D14. A `users` table would imply an authentication this prototype does not perform |
+| Per-agent productivity counters | The data to compute them exists; withholding the measure is the decision |
+| User accounts | A `users` table would imply an authentication this prototype does not perform |
 
 ---
 
@@ -256,7 +256,7 @@ it found two gaps.*
 |---|---|---|
 | Which model read it | `extraction.provider`, `extraction.model_id` | **Yes** — the provider is rebuilt for the recorded model, if a credential for that vendor is still configured |
 | Which regulations applied | `verdict.valid_on`, `as_of`, the bitemporal archive | **Yes** — `ruleSetAsAt` rebuilds the rule set as it stood |
-| What selection ran on | `verdict.selection_inputs` | **Yes** (D26) |
+| What selection ran on | `verdict.selection_inputs` | **Yes** |
 | At what resolution | `extraction.raster_dpi` | **Yes** |
 | Whether the warning was legible | `verdict.warning_legible` | **Yes** — stored because it cannot be recomputed |
 | **Which instruction was used** | `extraction.prompt_version` | **No** — the version *identifies* the prompt; it does not *contain* it |
@@ -295,9 +295,9 @@ worth running against the schema rather than reasoning about it.
 | 0006 | `job.kind` — single review displacing the batch worklist |
 | 0007 | The bitemporal policy archive |
 | 0008 | Verdicts bind both dates and their selection inputs |
-| 0009 | Agent kind and identity (D46) |
+| 0009 | Agent kind and identity |
 | 0010 | Regulation digest and issue date on each finding |
-| 0011 | Token counts and stage timings (D52) |
+| 0011 | Token counts and stage timings |
 
 Every migration after 0001 exists because a question turned out to be
 unanswerable. That is the honest summary of this schema: it grew where the record

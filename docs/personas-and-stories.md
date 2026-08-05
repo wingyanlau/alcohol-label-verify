@@ -39,12 +39,12 @@ row says whether that was a decision or a shortfall.
 
 | ID | Story | Req | Status | Evidence |
 |---|---|---|---|---|
-| **US-1** | As an agent, I upload a filed submission and get a verdict, so I stop transcribing values by hand | FR-1, FR-2, FR-3 | **Built** | `/review` takes the filed PDF; both regions read blind (D48) |
+| **US-1** | As an agent, I upload a filed submission and get a verdict, so I stop transcribing values by hand | FR-1, FR-2, FR-3 | **Built** | `/review` takes the filed PDF; both regions read blind |
 | **US-2** | As an agent, I see what the label says beside what the application says, so I can adjudicate without reopening the artwork | FR-10 | **Built** | Results panel shows expected and observed per field, plus the crop and the filed document |
 | **US-3** | As Dave, a difference of case or punctuation is not reported as a discrepancy, so the tool does not waste my time | FR-7 | **Built** | `UT-N02` — `STONE'S THROW` matches. `UT-N08` guards the other direction: `Old Tom` ≠ `Old Tom Distillery` |
 | **US-4** | As Jenny, the government warning is checked word for word, including capitalisation | FR-5, FR-6 | **Built** | Guard tests `UT-W05`, `UT-W12`. The statutory text is byte-verified against the eCFR API |
-| **US-5** | As an agent, "could not read it" is plainly different from "read it and it is wrong" | FR-11 | **Built** | `UNREADABLE` outranks every other state (D5); guard tests `UT-G03`, `UT-G04` |
-| **US-6** | As Sarah, a result arrives fast enough that agents keep using it | NFR-1 | **Partial** | The target is stated and now *measured* (D52). Whether it is met is a number on the Measurement screen, not a claim here — and dropping the batch short-circuit (D51) made every submission cost two model calls |
+| **US-5** | As an agent, "could not read it" is plainly different from "read it and it is wrong" | FR-11 | **Built** | `UNREADABLE` outranks every other state; guard tests `UT-G03`, `UT-G04` |
+| **US-6** | As Sarah, a result arrives fast enough that agents keep using it | NFR-1 | **Partial** | The target is stated and now *measured*. Whether it is met is a number on the Measurement screen, not a claim here — and dropping the batch short-circuit made every submission cost two model calls |
 | **US-7** | As Sarah, every review leaves a record I can defend | FR-17, FR-18 | **Built** | Hash-chained `audit_event`; extraction rows keep the raw response; a verdict replays from its own record |
 
 ### P2 — the reason Janet asked for this
@@ -54,26 +54,26 @@ row says whether that was a decision or a shortfall.
 | **US-8** | As Janet, I submit a batch and triage results as they arrive | FR-12, FR-13 | **Built** | 26-item corpus run; live progress over WebSocket; per-item failure isolation |
 | **US-9** | As Janet, the ones needing me are easy to find | FR-9 | **Built** | Worklist puts settled items first under a divider, and marks rows a person has already decided |
 | **US-10** | As an agent, one bad file does not take down the batch | NFR-6 | **Built** | `L26` is a deliberately truncated PDF; it fails alone |
-| **US-11** | As an agent, I record my decision and it is kept against the verdict it answered | §18.5 | **Built** | Decision recorded with the recommendation it agreed or disagreed with; only a human agent may record one (D46) |
+| **US-11** | As an agent, I record my decision and it is kept against the verdict it answered | §18.5 | **Built** | Decision recorded with the recommendation it agreed or disagreed with; only a human agent may record one |
 
 ### P3 — governance, which nobody asked for and the record needs
 
 | ID | Story | Req | Status | Evidence |
 |---|---|---|---|---|
-| **US-12** | As an auditor, I can see which rules a verdict was judged by, as they stood that day | D41, D42, D44 | **Built** | Bitemporal policy archive; replay reconstructs the rule set from the verdict's own two dates |
+| **US-12** | As an auditor, I can see which rules a verdict was judged by, as they stood that day | — | **Built** | Bitemporal policy archive; replay reconstructs the rule set from the verdict's own two dates |
 | **US-13** | As a reviewer, I can read the rules in force and what is awaiting approval | §18.5a | **Built** | Policy screen, read-only |
-| **US-14** | As a reviewer, I can see who and what may act here | D46 | **Built** | Agents screen: human / model / system, with entitlements |
-| **US-15** | As Sarah, I can see what this costs to run | Q-OPS-03 | **Built** | Token counts per read and per model (D52) |
+| **US-14** | As a reviewer, I can see who and what may act here | — | **Built** | Agents screen: human / model / system, with entitlements |
+| **US-15** | As Sarah, I can see what this costs to run | Q-OPS-03 | **Built** | Token counts per read and per model |
 
 ### Not built — and why
 
 | ID | Story | Req | Status | Why |
 |---|---|---|---|---|
-| **US-16** | As an agent, I correct a mistyped expected value and re-run the comparison without re-reading the image (UC-3) | — | **Not built — decision** | The screen no longer takes typed values at all (D48): it reads the filed form. Correction now means correcting the *filing*, which is a COLA operation this prototype does not have. The cheap re-compare that UC-3 promised still exists architecturally — comparison is pure and takes no model — but there is no longer an input to correct |
+| **US-16** | As an agent, I correct a mistyped expected value and re-run the comparison without re-reading the image (UC-3) | — | **Not built — decision** | The screen no longer takes typed values at all: it reads the filed form. Correction now means correcting the *filing*, which is a COLA operation this prototype does not have. The cheap re-compare that UC-3 promised still exists architecturally — comparison is pure and takes no model — but there is no longer an input to correct |
 | **US-17** | As Janet, I export batch results to a spreadsheet | FR-15 | **Not built — shortfall** | Ranked *Could*. Nothing structural prevents it; it did not survive the time available. The data is all in D1 |
 | **US-18** | As Jenny, badly-shot photographs are still read | — | **Partial** | `L09` (angle + glare) reads; `L10` (out of focus) is reported `UNREADABLE`, which is the *correct* behaviour rather than a failure — but Jenny asked for the image to be salvaged, and no deskew or enhancement step exists |
-| **US-19** | As an agent, I sign in, and my decisions are attributable to me | NFR-2 | **Not built — decision** | D14: the prototype is unauthenticated. Names on decisions are **declared, not verified**. The staging gate is a shared credential and a cost control, not a login, and the Agents screen says so on its face |
-| **US-20** | As a compliance manager, I approve a new rule in the interface | §18.5a | **Not built — decision** | A rule takes effect by a reviewed change to `config/policy-set.json` (D45). A button that wrote rules at runtime would be a control with no authorisation behind it, since there is no identity (D14). Six drafted rules currently await a named approval |
+| **US-19** | As an agent, I sign in, and my decisions are attributable to me | NFR-2 | **Not built — decision** | The prototype authenticates nobody. Names on decisions are **declared, not verified**. The staging gate is a shared credential and a cost control, not a login, and the Agents screen says so on its face |
+| **US-20** | As a compliance manager, I approve a new rule in the interface | §18.5a | **Not built — decision** | A rule takes effect by a reviewed change to `config/policy-set.json`. A button that wrote rules at runtime would be a control with no authorisation behind it, since there is no identity. Six drafted rules currently await a named approval |
 
 ---
 

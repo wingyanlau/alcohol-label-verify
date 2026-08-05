@@ -14,7 +14,7 @@ evidence and records what was decided against what it recommended.
 
 The deployment is protected by a username and password. Reading one label calls
 a metered inference API, so an open URL is an unbounded bill — the credential is
-a cost control, not an identity check (D49).
+a cost control, not an identity check.
 
 ---
 
@@ -51,7 +51,7 @@ rules apply.
 
 It answers the first question a reviewer should ask — *how do you know the model
 did not simply agree with the applicant?* It cannot: it is never shown what the
-applicant claimed (D4, guarded structurally by `CT-10`).
+applicant claimed — and `CT-10` asserts it structurally, not behaviourally.
 
 And it is **enforced, not asserted**. Every recorded act names an agent with a
 kind — `human`, `model`, `system` — and the code refuses acts a kind is not
@@ -130,7 +130,7 @@ Five that would change the product if wrong. All nine, with impact:
 | The application record is available as structured data | **Three of four fields cannot be compared.** The paper form has no box for class/type, alcohol content or net contents — discovered by building (`Q-INT-08`), and the first question to ask TTB |
 | Product type arrives as data, not inferred | The wrong body of regulation is applied, and every finding still looks ordinary |
 | One submission carries every field under review | Fields spread across documents are invisible; the most consequential assumption in the design (A2) |
-| The agent is trusted at the network perimeter | No record here is evidence of *who* — attribution is declared, not verified (D14) |
+| The agent is trusted at the network perimeter | No record here is evidence of *who* — attribution is declared, not verified |
 | A vision model is reachable from the deployment | The system cannot function. Marcus's firewall blocked the last vendor's endpoints |
 
 ---

@@ -110,7 +110,7 @@ export const DECIDING_ACTIONS = ['decision.recorded', 'policy.rule.enacted']
 
 That function is the boundary. Letting a model past it means editing code, under
 review, in a commit somebody signs — not flipping a flag. **That is the correct
-amount of friction for the act of letting a machine decide**, and it is why D46
+amount of friction for the act of letting a machine decide**, and it is why the rule
 was built as an invariant rather than a setting.
 
 `policy.rule.enacted` should stay human-only regardless of how good the model
@@ -147,7 +147,7 @@ case, which is the sample that improves a model and the sample you cannot buy.
 ### Two rules for any training run
 
 **A fine-tune creates a new agent.** `provider:model:promptVersion` is the
-identity (D29), so a tuned model is a different reader and every prior verdict
+identity, so a tuned model is a different reader and every prior verdict
 correctly cites the old one. The archive already handles this; nothing needs
 inventing.
 
@@ -201,12 +201,12 @@ The concept exists and is enforced. What a multi-agent service needs:
 
 | Needed | Status |
 |---|---|
-| A stable identity per agent | **Built** — `Agent{kind, id, display}`, fully qualified (D29) |
+| A stable identity per agent | **Built** — `Agent{kind, id, display}`, fully qualified |
 | Attribution of every act | **Built** — `audit_event.actor_kind` / `actor_id` |
 | Entitlements per agent | **Partial** — `mayDecide` and `DECIDING_ACTIONS` are the control surface, but entitlements are code, and human roles are data. A fleet needs them as data |
 | Multiple readers behind one contract | **Built** — two vendors already sit behind `ExtractionProvider` |
 | Inter-agent provenance | **Missing** — the record says an agent acted; it does not say *which agent's output fed which*. A retrieval agent feeding a judging agent needs that edge, or a wrong passage becomes an unattributable wrong finding |
-| Per-agent measurement | **Deliberately withheld** for people (D47). For models it is measurement, not surveillance, and the split is already in the schema |
+| Per-agent measurement | **Deliberately withheld** for people. For models it is measurement, not surveillance, and the split is already in the schema |
 
 Plausible fleet, all of kind `model`, none permitted to decide:
 

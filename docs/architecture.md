@@ -3,7 +3,7 @@
 *The system as it actually runs. `design.md` §6 and §8 describe the **logical**
 design, worked before the platform was chosen and deliberately free of vendor
 names; this describes what those components became on Cloudflare Workers
-(D12/D13). Where the two disagree, this one is the deployment and that one is
+. Where the two disagree, this one is the deployment and that one is
 the intent — and a disagreement is a defect in one of them, not a difference of
 opinion.*
 
@@ -35,7 +35,7 @@ Who talks to the system, and what it talks to.
    └───────────────────────┘      └──────────────────────────────┘
 
    NOT in context, deliberately:
-     COLA (N1) · identity provider (N2, D14) · agency databases (N3)
+     COLA 
 ```
 
 The **only runtime external dependency is the vision model provider.**
@@ -53,7 +53,7 @@ What runs where, on the Cloudflare platform.
    ┌───────────────────────────────────────────────────────────────────┐
    │ Worker  src/index.ts                                              │
    │                                                                   │
-   │  gate (D49) ─▶ routes ─▶ { review · batch · policy · agents ·     │
+   │  the gate   ─▶ routes ─▶ { review · batch · policy · agents ·     │
    │                            measurement · samples · health }       │
    │                                                                   │
    │  holds NO verification logic — it routes, persists and reports    │
@@ -75,8 +75,8 @@ What runs where, on the Cloudflare platform.
 
  ── BUNDLED WITH THE WORKER ──────────────────────────────────────────────
    ASSETS (./testdata)          config/*.json
-   26 corpus submissions,       warning statement (D3), policy set (D45),
-   build-time rasters,          approved models (D29), user register (§19.5)
+   26 corpus submissions,       warning statement, policy set,
+   build-time rasters,          approved models, user register
    authored ground truth
 ```
 
@@ -116,12 +116,12 @@ directory and nowhere else.
    │                │           policy_finding, audit_event (hash-chained)│
    │◀─ verdict ─────│                       │              │              │
    │                │                       │              │              │
-   │─ decision ────▶│  human only (D46) — the code refuses any other kind │
+   │─ decision ────▶│  human only — the code refuses any other kind       │
 ```
 
 **Neither read is shown the other's answer.** No expected value exists until
 both have returned, and an `ExtractionRequest` has nowhere to put one — so
-blindness (D4) holds by the shape of the type, not by anyone remembering. `CT-10`
+blindness holds by the shape of the type, not by anyone remembering. `CT-10`
 asserts it structurally.
 
 ---
@@ -146,7 +146,7 @@ The same verification, reached differently. Janet's 200–300 filings.
    │                         │◀─ startItem ───┼──────────────│
    │                         │                │              │  ┌──────────────┐
    │                         │                │              │──▶ SAME pipeline│
-   │                         │                │              │  │ as §3 (D51)  │
+   │                         │                │              │  │ as in §3     │
    │                         │◀─ completeItem ┼──────────────│◀─┤ two blind    │
    │                         │                │              │  │ reads        │
    │◀════ progress ══════════│                │              │  └──────────────┘
@@ -154,12 +154,12 @@ The same verification, reached differently. Janet's 200–300 filings.
 
 **One item at a time, one message each.** A failure isolates to its submission
 (NFR-6); a rate limit waits in place rather than releasing its slot, so failure
-tracks the artwork rather than queue position (B-D14).
+tracks the artwork rather than queue position.
 
 **Both paths call the same functions.** `rasteriseSubmission` for the pixels and
 `verifySubmission` for the judgement. That is enforced by there being one of
 each, not by two implementations agreeing — the batch used to short-circuit the
-record read and the two paths could disagree about the same file (D51).
+record read and the two paths could disagree about the same file.
 
 ---
 
@@ -168,12 +168,12 @@ record read and the two paths could disagree about the same file (D51).
 | Store | Holds | Lifetime |
 |---|---|---|
 | **D1** | submissions, extractions (with raw response, latency, tokens), verdicts, field verdicts, policy findings, decisions, the bitemporal policy archive, hash-chained `audit_event` | Kept. The audit table is append-only by trigger |
-| **R2** | the filed PDF, the rasterised label crop | Purged by the retention sweep (D32) |
+| **R2** | the filed PDF, the rasterised label crop | Purged by the retention sweep |
 | | *The record crop is not kept — but the filing is, so both regions can be produced again from it for a re-read.* | |
 | **Durable Object** | the live ledger for one job | The job's lifetime |
-| **Config (bundled)** | warning statement, policy set, approved models, user register | Versioned in git; reviewed, never edited at runtime (D45) |
+| **Config (bundled)** | warning statement, policy set, approved models, user register | Versioned in git; reviewed, never edited at runtime |
 
-Logs carry identifiers, classifications and timings — **never content** (D20).
+Logs carry identifiers, classifications and timings — **never content**.
 That rule is why a failure cause names a field rather than quoting it.
 
 ---
@@ -182,11 +182,11 @@ That rule is why a failure cause names a field rather than quoting it.
 
 | Seam | Interface | Bought |
 |---|---|---|
-| **Provider** | `ExtractionProvider` | Two vendors behind one contract; B-Q4 becomes a controlled measurement rather than an argument (D34) |
+| **Provider** | `ExtractionProvider` | Two vendors behind one contract; B-Q4 becomes a controlled measurement rather than an argument |
 | **Normaliser** | `Normaliser` | Browser Rendering today, a library call in a container tomorrow, with nothing above it changing (deployment-path §3) |
-| **Region map** | `FormRegionMap` | A new form is data, not code — and a filing arriving without its record page is a second map, not a second pipeline (D50) |
-| **Policy archive** | `ruleSetAsAt(validOn, asOf)` | A verdict is judged by the rules in force on its filing date, and can be rebuilt years later (D41, D42) |
-| **Agent** | `Agent{kind,id}` | "Only a human decides" is a function the code calls, not a convention (D46) |
+| **Region map** | `FormRegionMap` | A new form is data, not code — and a filing arriving without its record page is a second map, not a second pipeline |
+| **Policy archive** | `ruleSetAsAt(validOn, asOf)` | A verdict is judged by the rules in force on its filing date, and can be rebuilt years later |
+| **Agent** | `Agent{kind,id}` | "Only a human decides" is a function the code calls, not a convention |
 
 ---
 
@@ -206,8 +206,7 @@ enforced in four places that a reviewer can check:
 
 ## 8. Not in the architecture, on purpose
 
-Authentication (D14 — the staging gate is a cost control, not a login),
-COLA integration (N1), a runtime policy editor (D45 — a rule changes by
-reviewed commit), and per-agent productivity measurement (D47).
+Authentication, COLA integration, a runtime policy editor — a rule changes by
+reviewed commit — and per-agent productivity measurement.
 
 Each is a named absence with a decision behind it, not an oversight.

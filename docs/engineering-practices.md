@@ -135,15 +135,15 @@ is a language model, and the output is evidence used in a regulatory decision.
 | **Injection is data, never instruction** | `L13` carries injected text beside a real mismatch; reporting `CLEAR` means it worked | Prompt injection reaching a verdict |
 | **Guards run on bytes, before decoding** | `checkIntake` — magic number, page count, pixel budget, `%%EOF`, `/Encrypt` | A decompression bomb must be refused before it is rendered |
 | **The label is read from pixels, never a text layer** | Rule 5; the text layer is used only for the record | A PDF text layer can disagree with what the page displays |
-| **Logs carry identifiers, never content** | D20; `emit()` | Applicant content leaking into a log that cannot be redacted |
+| **Logs carry identifiers, never content** | `emit()` | Applicant content leaking into a log that cannot be redacted |
 | **Whitelist, not sanitiser** | `sampleFileFor` refuses any id not on the curated list | An id that reaches an asset path is a path taken on trust |
 | **Append-only audit** | SQL triggers; hash-chained events | Silent edit of a decision record |
 | **Secrets never in config** | `wrangler secret put`; the Gemini key travels in a header, not a URL | A URL is captured by anything that logs one |
 
 ### What is *not* secure, stated plainly
 
-- **No authentication** (D14). Names on decisions are declared, not verified.
-- **The staging gate is not a login** (D49). One shared credential, protecting
+- **No authentication**. Names on decisions are declared, not verified.
+- **The staging gate is not a login**. One shared credential, protecting
   cost. It establishes that the caller was given a credential and nothing about
   who they are.
 - **The record page we store contains applicant PII** — name, address, phone,
@@ -161,13 +161,13 @@ Three layers, and one deliberate refusal.
 
 | Layer | What it gives |
 |---|---|
-| **Structured events** | `emit()` — identifiers, classifications, timings. Never content (D20) |
+| **Structured events** | `emit()` — identifiers, classifications, timings. Never content |
 | **Health probes** | `/health`, `/health/inference`, `/health/raster`, `/health/coordinator`, `/health/policy`, plus `/health/extract` and `/health/models` for diagnosing a reader — CI asserts on them rather than printing them |
-| **Measurement** (D52) | Token counts per read and per model; stage timings per verdict; reported against the stated p95 target |
+| **Measurement** | Token counts per read and per model; stage timings per verdict; reported against the stated p95 target |
 | **AI Gateway** | Per-request analytics from the vendor side, with payload logging **off** — the request body is a label image |
 
 **The refusal:** nothing counts what a *person* did. Per-agent throughput is
-deferred (D47) for three reasons that still stand — throughput is not
+deferred for three reasons that still stand — throughput is not
 effectiveness; the costs of a wrong pass and a wrong flag are not symmetric, so
 averaging them would recommend automating exactly the wrong work; and measuring
 named employees is a labour-relations question before a technical one
@@ -178,7 +178,7 @@ decision.
 
 *"Provider returned an empty response"* described a failed type check. The model
 was reading the label perfectly. The wrong sentence cost three rounds of
-debugging, and D38 came out of it: an error names what was observed, not what
+debugging, and the rule that came out of it: an error names what was observed, not what
 was inferred. `ExtractionContractError` carries the raw response on a property
 that never reaches a log, for exactly this.
 
@@ -189,7 +189,7 @@ that never reaches a log, for exactly this.
 - **Get a real agent in front of it sooner.** Everything above is process; none
   of it substitutes for one hour of observed use.
 - **Persist stage timings from the start.** They were computed on every
-  verification and thrown away until D52, so the latency target went unmeasured
+  verification and thrown away, so the latency target went unmeasured
   for most of the build.
 - **Capture token usage from the first provider call.** Same shape of mistake:
   the numbers were in every response and discarded, and the cost question stayed
