@@ -144,25 +144,38 @@ model said at the time instead of asking it again.
 So "no model is invoked" is true, and stating it as though it were the
 achievement misleads. It is a **limit**:
 
-| | Replay | Re-reading — *not built* |
+| | Replay | Re-reading |
 |---|---|---|
 | Tests | The judgement | The perception |
 | Substitutes | The provider, with the recorded response | Nothing — the model is asked again |
 | Answers | *Do these rules still produce this verdict?* | *Does this model still read this label the same way?* |
-| Cost | Nothing | Two model calls per submission |
+| Cost | Nothing | One model call, on demand |
+| Where | The Audit tab, across every verdict | A button on the verdict itself |
 
-**The second check is the one a reader intuitively expects, and this deployment
-does not perform it.** Putting the same artwork to the same model, at the
-recorded prompt version and sampling parameters, and comparing the new reading
-with the stored one would measure whether perception is stable — and would
-detect a vendor repointing a stable name at new weights, which `model_id` alone
-cannot.
+**Both are now available**, and the second is the one a reader intuitively
+expects. `POST /audit/reread/<submissionId>` puts the retained artwork back to
+the model, at the recorded prompt version, and compares field by field with the
+reading the verdict was built on.
 
-Everything that check needs is already in the record: the artwork in R2 for the
-retention window, the fully-qualified model identifier, the prompt version, the
-sampling parameters, and the reading itself. It is not built, and §6 of
-`toward-llm-policy.md` treats stability as a release gate for any model that
-judges — which is where it would have to be measured anyway.
+Three things it is careful about:
+
+- **A difference is not a verdict on the verdict.** Perception is
+  non-deterministic; two readings of the same pixels may legitimately differ.
+  What a difference establishes is that the verdict rests on a reading the model
+  does not reproduce — a fact for the person deciding, not a finding.
+- **It says when the reader has changed.** If the deployment has been
+  reconfigured or the prompt revised, the two readings come from different
+  agents (D29), and a difference then says the reader changed rather than that
+  perception drifted. Reporting the comparison without that would attribute a
+  configuration change to the model.
+- **The label region only.** The label crop is retained for the results panel;
+  the record crop is not, so there is nothing to put back for that half. And
+  once retention has purged the artwork (D32) the answer is `410` with the
+  reason — impossible by design rather than broken.
+
+It also detects the one thing `model_id` cannot: a vendor repointing a stable
+name at new weights. §5 of `toward-llm-policy.md` makes stability a release gate
+for any model that judges, and this is where it would be measured.
 
 ### What follows from that
 

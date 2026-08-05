@@ -145,12 +145,13 @@ photographs.
 **Attribution is declared, not verified.** `decided_by` is a name typed into a
 box.
 
-**Replay proves the verdict, not the reading.** The pipeline re-runs from the
-recorded reading — same contract, same rules, same aggregation — so a verdict
-re-derives exactly. The model is not asked again, which means a misreading is
-reproduced faithfully rather than caught. Re-reading the artwork with the same
-model to test whether perception is stable is a different check, and one this
-deployment does not perform. The claim is not that generative AI is deterministic; it is that
+**Two checks, and they answer different questions.** *Replay* re-runs the
+pipeline from the recorded reading — same contract, same rules, same
+aggregation — so it proves the judgement is reproducible and reproduces a
+misreading faithfully rather than catching it. *Re-reading* puts the artwork
+back to the same model and compares, which is the only way to see whether
+perception is stable. Both are in the product; neither proves the reading was
+*correct*, which needs a labelled sample the corpus cannot supply. The claim is not that generative AI is deterministic; it is that
 **perception is non-deterministic, judgement is deterministic, and the boundary
 between them is written down** — see
 [determinism-and-replay.md](docs/determinism-and-replay.md).

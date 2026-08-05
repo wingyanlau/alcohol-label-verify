@@ -10,6 +10,7 @@
  */
 
 import { agentRoster } from './agents/roster.js'
+import { compareReadings } from './audit/reread.js'
 import { SYSTEM_AGENT } from './batch/agent.js'
 import { appendAudit, readWholeChain, verifyChain } from './batch/audit.js'
 import { MAX_ATTEMPTS, retryDelaySeconds } from './batch/backoff.js'
@@ -39,11 +40,12 @@ import {
 import { loadStoredVerdict, ReplayUnavailableError, replayVerdict } from './batch/replay-load.js'
 import { retentionPolicyText, retentionWindowDays, sweepRetention } from './batch/retention.js'
 import { approvalFor, isApproved } from './domain/approval.js'
-import { ExtractionContractError } from './domain/extraction.js'
+import { ExtractionContractError, parseExtractionResponse } from './domain/extraction.js'
 import { POLICY_SET } from './domain/findings.js'
 import { configuredLegibilityFloor } from './domain/legibility.js'
 import type { PolicyRule } from './domain/policy.js'
 import { referenceIsUnverified, warningReference } from './domain/reference.js'
+import { FIELDS } from './domain/types.js'
 import { registeredUsers, roleLabelFor, userMay } from './domain/users.js'
 import type { Env, WorkMessage } from './env.js'
 import { checkGate, gateChallenge } from './gate.js'
@@ -54,6 +56,7 @@ import { rasteriseSubmission } from './normalise/rasterise.js'
 import { UnknownFormError } from './normalise/regions.js'
 import { archiveHealth, listArchive, reconcileArchive, ruleSetAsAt } from './policy/archive.js'
 import { gatewayFrom } from './providers/gateway.js'
+import { extractJson } from './providers/json.js'
 import { PROMPT_VERSION, promptDigest } from './providers/prompt.js'
 import { createProvider, knownProviderNames, specFor } from './providers/registry.js'
 import { sampleCatalogue, sampleFileFor } from './review/samples.js'
@@ -1583,6 +1586,87 @@ export default {
       }
 
       return json({ ...detail, replay })
+    }
+
+    // Ask the model again, and compare (§ audit/reread.ts).
+    //
+    // POST rather than GET, and not because it writes anything — it writes
+    // nothing. It COSTS: a model call per re-read, against a metered API. A GET
+    // is something a browser prefetches, a crawler follows and a monitor polls,
+    // and none of those should be able to spend an inference budget.
+    //
+    // The label region only, and the response says so. The record crop is not
+    // retained — the label crop is kept for the results panel, the record is
+    // not — so there is nothing to put back to the model for that half.
+    const reread = pathname.match(/^\/audit\/reread\/([^/]+)$/)
+    if (reread && request.method === 'POST') {
+      if (!env.DB || !env.STAGING) return json({ error: 'unavailable' }, 503)
+      const submissionId = decodeURIComponent(reread[1] ?? '')
+
+      const stored = await env.DB.prepare(
+        `SELECT e.raw_response, e.model_id, e.prompt_version, s.job_id
+           FROM extraction e JOIN submission s ON s.id = e.submission_id
+          WHERE e.submission_id = ?1 AND e.region = 'label'
+          ORDER BY e.created_at DESC LIMIT 1`,
+      )
+        .bind(submissionId)
+        .first<{
+          raw_response: string
+          model_id: string | null
+          prompt_version: string | null
+          job_id: string
+        }>()
+      if (stored === null) return json({ error: 'not_found' }, 404)
+
+      const object = await env.STAGING.get(labelImageKey(stored.job_id, submissionId))
+      if (object === null) {
+        // Stated rather than reported as a failure. Content is purged on a
+        // schedule this deployment publishes (D32), and a re-read after that is
+        // impossible by design rather than broken.
+        return json(
+          {
+            error: 'content_purged',
+            reason:
+              'The artwork was deleted under the retention policy, so it cannot be put to ' +
+              'the model again. The verdict and its stored reading are unaffected.',
+          },
+          410,
+        )
+      }
+
+      try {
+        const provider = createProvider(env)
+        const fresh = await provider.extract({
+          region: 'label',
+          image: await object.arrayBuffer(),
+          mimeType: 'image/png',
+          fields: FIELDS,
+          includeWarning: true,
+        })
+        const comparison = compareReadings(
+          'label',
+          parseExtractionResponse(extractJson(stored.raw_response), { includeWarning: true }),
+          fresh.extraction,
+          {
+            recordedModel: stored.model_id ?? 'unrecorded',
+            freshModel: fresh.provenance.modelId,
+            recordedPrompt: stored.prompt_version ?? 'unrecorded',
+            freshPrompt: fresh.provenance.promptVersion,
+          },
+        )
+        return json({
+          submissionId,
+          ...comparison,
+          note:
+            'The label region only — the record crop is not retained. A difference does not ' +
+            'mean either reading is wrong: perception is non-deterministic, and two readings ' +
+            'of the same pixels may legitimately differ. It means the verdict rests on a ' +
+            'reading the model does not reproduce, which is a fact for the person deciding. ' +
+            'Nothing here changes the verdict.',
+        })
+      } catch (error) {
+        return json({ error: 'reread_failed', fault: faultOf(env, error) }, 503)
+      }
     }
 
     const lookup = pathname.match(/^\/reference\/([^/]+)$/)

@@ -867,6 +867,87 @@ export const PAGE_HTML = `<!doctype html>
     return box
   }
 
+  /**
+   * Ask the model again, on demand (audit/reread.ts).
+   *
+   * Placed here, above the decision, because this is where a person is deciding
+   * and this is evidence they may want first: the verdict rests on a reading,
+   * and *does the model still read it that way* is a question replay cannot
+   * answer. It is the difference between telling an applicant "our arithmetic
+   * is consistent" and "we asked again and got the same answer".
+   *
+   * On demand rather than automatic, because each one costs a model call
+   * against a metered API. A panel that re-read every verdict on load would
+   * spend an inference budget on being opened.
+   */
+  function renderReread(d) {
+    var box = el('div', 'decision')
+    box.appendChild(el('h2', null, 'Check the reading'))
+    if (!d.submissionId) return box
+
+    box.appendChild(el('p', 'note',
+      'The verdict above was computed from a reading of this artwork. This puts the same image back to the model and compares what comes back. It changes nothing — it is evidence about the reading, which re-deriving the verdict cannot give you.'))
+
+    var out = el('div')
+    var btn = el('button', 'secondary', 'Ask the model again')
+    btn.addEventListener('click', function () {
+      btn.disabled = true
+      btn.textContent = 'Reading…'
+      out.textContent = ''
+      fetch('/audit/reread/' + encodeURIComponent(d.submissionId), { method: 'POST' })
+        .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b } }) })
+        .then(function (res) {
+          btn.disabled = false
+          btn.textContent = 'Ask the model again'
+          renderRereadResult(out, res)
+        })
+        .catch(function () {
+          btn.disabled = false
+          btn.textContent = 'Ask the model again'
+          out.appendChild(el('p', 'err', 'The model could not be reached. The verdict is unaffected.'))
+        })
+    })
+    box.appendChild(btn)
+    box.appendChild(out)
+    return box
+  }
+
+  function renderRereadResult(out, res) {
+    var b = res.body || {}
+    if (!res.ok) {
+      // A purged artwork is a policy working, not a fault (D32).
+      out.appendChild(el('p', b.error === 'content_purged' ? 'note' : 'err',
+        b.reason || 'The re-read could not be completed. The verdict is unaffected.'))
+      return
+    }
+
+    var line = el('div', 'fstatus ' + (b.identical ? 'ok' : 'warn'))
+    line.appendChild(el('span', null, (b.identical ? '✓' : '!') + '  '))
+    line.appendChild(document.createTextNode(
+      b.identical ? 'The model read it the same way' : 'The model read it differently'))
+    out.appendChild(line)
+
+    if (!b.sameReader) {
+      // Otherwise a configuration change gets attributed to the model (D29).
+      out.appendChild(el('div', 'dev',
+        'Note: this is not the reader that answered originally — ' + b.reader.recordedModel + ' at ' +
+        b.reader.recordedPrompt + ', now ' + b.reader.freshModel + ' at ' + b.reader.freshPrompt +
+        '. A difference here says the reader changed, not that its reading drifted.'))
+    }
+
+    ;(b.fields || []).forEach(function (f) {
+      if (f.same) return
+      var row = el('div', 'dev')
+      row.textContent = f.field + ': was ' + JSON.stringify(f.recorded) + ', now ' + JSON.stringify(f.fresh) +
+        (f.unreadable ? ' (one reading declined to read it)' : '')
+      out.appendChild(row)
+    })
+    if (b.warningStatement && !b.warningStatement.same) {
+      out.appendChild(el('div', 'dev', 'The warning statement transcribed differently.'))
+    }
+    if (b.note) out.appendChild(el('p', 'note', b.note))
+  }
+
   // The agent's decision (§18.5). The system has said everything it can say by
   // this point; this is where a person takes responsibility, and the record of
   // what they chose against what was suggested is the only ground truth this
@@ -1667,6 +1748,7 @@ export const PAGE_HTML = `<!doctype html>
     d.fields.forEach(function (f) { left.appendChild(renderField(f)) })
     left.appendChild(renderWarning(d.warning))
     left.appendChild(renderFindings(d.findings, d.policy))
+    left.appendChild(renderReread(d))
     left.appendChild(renderDecision(d))
     layout.appendChild(left)
 
