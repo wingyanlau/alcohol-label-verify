@@ -141,9 +141,11 @@ describe('the order of the tabs (§4.1)', () => {
 
 describe('finding the way back, and who this is for', () => {
   it('spells the agency out rather than leaving an initialism', () => {
-    // "TTB" is the brief's shorthand. A reviewer outside the domain should not
-    // have to look it up to know what they are looking at.
-    expect(PAGE_HTML).toContain('Alcohol and Tobacco Tax and Trade Bureau')
+    // "TTB" is the brief's shorthand, and the heading is where a reviewer first
+    // meets it. Expanded there, not only in the small print below.
+    expect(PAGE_HTML).toContain('<h1>Alcohol Beverage Label Check</h1>')
+    expect(PAGE_HTML).toContain('Alcohol and Tobacco Tax and Trade Bureau (TTB)')
+    expect(PAGE_HTML).not.toMatch(/<h1>[^<]*TTB/)
   })
 
   it('offers a way back to the demo guide from every screen', () => {

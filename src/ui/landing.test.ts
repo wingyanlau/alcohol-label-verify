@@ -12,8 +12,12 @@ import { describe, expect, it } from 'vitest'
 import { LANDING_HTML } from './landing.js'
 
 describe('the landing page', () => {
-  it('spells the agency out', () => {
-    expect(LANDING_HTML).toContain('Alcohol and Tobacco Tax and Trade Bureau')
+  it('spells the agency out, in the title as well as beneath it', () => {
+    // The heading is the first thing read, and "TTB" there is an initialism a
+    // reviewer outside the domain has to look up before they know what this is.
+    expect(LANDING_HTML).toContain('<h1>Alcohol Beverage Label Check</h1>')
+    expect(LANDING_HTML).toContain('Alcohol and Tobacco Tax and Trade Bureau (TTB)')
+    expect(LANDING_HTML).not.toMatch(/<h1>[^<]*TTB/)
   })
 
   it('explains before it asks', () => {

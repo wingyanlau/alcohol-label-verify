@@ -22,7 +22,7 @@ export const LANDING_HTML = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>TTB Label Check — prototype</title>
+<title>Alcohol Beverage Label Check — prototype</title>
 <style>
   :root {
     --ink: #16161d; --muted: #5b5b66; --rule: #dcdcdc;
@@ -61,9 +61,9 @@ export const LANDING_HTML = `<!doctype html>
 </head>
 <body>
 <main>
-  <h1>TTB Label Check</h1>
-  <p class="sub">Alcohol and Tobacco Tax and Trade Bureau — a prototype that checks an alcohol
-  beverage label against the application it was filed with.</p>
+  <h1>Alcohol Beverage Label Check</h1>
+  <p class="sub">A prototype for the Alcohol and Tobacco Tax and Trade Bureau (TTB): checking a
+  label against the application it was filed with.</p>
 
   <p class="lede">An agent uploads a completed TTB F 5100.31. The label artwork and
   the application record are read as two separate, independent readings, compared

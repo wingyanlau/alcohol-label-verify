@@ -152,7 +152,8 @@ export function gateChallenge(): Response {
         //
         // charset is what stops a non-ASCII PASSWORD being mangled by the
         // browser's own guess at an encoding. It says nothing about the realm.
-        'www-authenticate': 'Basic realm="TTB Label Check (prototype)", charset="UTF-8"',
+        'www-authenticate':
+          'Basic realm="Alcohol Beverage Label Check (prototype)", charset="UTF-8"',
         'content-type': 'text/plain; charset=utf-8',
         'cache-control': 'no-store',
       },

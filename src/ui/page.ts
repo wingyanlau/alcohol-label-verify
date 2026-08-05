@@ -232,8 +232,8 @@ export const PAGE_HTML = `<!doctype html>
   <!-- Region A: product name and the mode switch, and no other chrome (§4.1). -->
   <div class="topbar">
     <div>
-      <h1>TTB Label Check</h1>
-      <p class="brandline">Alcohol and Tobacco Tax and Trade Bureau — label verification prototype ·
+      <h1>Alcohol Beverage Label Check</h1>
+      <p class="brandline">A prototype for the Alcohol and Tobacco Tax and Trade Bureau (TTB) ·
         <a class="backlink" href="/">Demo guide</a></p>
     </div>
     <!-- Two groups, because there are two kinds of thing here (§4.1).

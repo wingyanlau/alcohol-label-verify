@@ -257,7 +257,7 @@ should let somebody read the numbers.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│  A  TTB Label Check    Batch │ Single review                          │
+│  A  Alcohol Beverage Label Check   Batch │ Single review            │
 │                        Audit · Measurement · Agents · Policy        │
 ├────────────────────────────────────────────────────────────────────────┤
 │                                                                        │
@@ -566,7 +566,8 @@ afterthought.*
 
 | Element | Text |
 |---|---|
-| Page title | TTB Label Check |
+| Page title | Alcohol Beverage Label Check |
+| Under it | A prototype for the Alcohol and Tobacco Tax and Trade Bureau (TTB) · Demo guide |
 | Mode switch | Single review · Batch |
 | Panel 1 heading | 1. The application says |
 | Panel 2 heading | 2. The label |
