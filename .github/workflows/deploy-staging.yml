@@ -360,6 +360,39 @@ jobs:
           cat /tmp/reconcile.json
           exit 1
 
+      # Leave the deployment looking like the start of a working day.
+      #
+      # An agent does not arrive to an empty screen and press a button to make
+      # the system check the overnight filings — the filings were checked as
+      # they arrived, and the work is waiting. A demo that opens empty tells the
+      # opposite story to the one the architecture is built on (A10).
+      #
+      # Guarded on emptiness, so this runs after a reset and never again. It
+      # costs a corpus run in inference, which is exactly what it is for, and
+      # nothing when there is already work to see.
+      - name: Seed the worklist if it is empty
+        run: |
+          set -euo pipefail
+          url="https://alcohol-label-verify-staging.wing-lawrence.workers.dev"
+
+          current=$(curl -sS $GATE_AUTH --max-time 30 "$url/batch/current" || echo '{}')
+          job=$(echo "$current" | jq -r '.jobId // empty')
+          if [ -n "$job" ]; then
+            echo "::notice::a job already exists ($job) — leaving the worklist alone"
+            exit 0
+          fi
+
+          echo "no job on this deployment; starting one so a reviewer arrives to prepared work"
+          code=$(curl -sS $GATE_AUTH --max-time 60 -X POST "$url/batch" \
+                   -o /tmp/seed.json -w '%{http_code}') || true
+          if [ "$code" != "200" ]; then
+            # Not fatal. An unseeded demo is worse than a seeded one and better
+            # than a failed deploy; the reviewer can still press the button.
+            echo "::warning::could not seed the worklist (http $code) — the Batch screen will open empty"
+            exit 0
+          fi
+          echo "::notice::seeded: $(jq -c '{jobId, items}' /tmp/seed.json 2>/dev/null || cat /tmp/seed.json)"
+
       # Drift between the reviewed file and the rows is a deployment problem,
       # not a request failure — the rules being enforced would not be the ones
       # anybody approved. /health/policy answers 503 when they disagree.

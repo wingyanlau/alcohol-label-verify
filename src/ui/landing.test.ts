@@ -34,13 +34,22 @@ describe('the landing page', () => {
     expect(flat).toMatch(/Audit what you just decided/i)
   })
 
+  it('opens on prepared work rather than asking the reviewer to start it', () => {
+    // The architecture's own claim, told correctly: filings are checked as they
+    // arrive, so an agent finds the work done. A demo that opens empty and asks
+    // for a button press tells the opposite story.
+    const flat = LANDING_HTML.replace(/\s+/g, ' ')
+    expect(flat).toMatch(/The run is already there/i)
+    expect(flat).toMatch(/does not arrive and press a button/i)
+  })
+
   it('says what to notice, not only what to click', () => {
     // Every interesting property here is easy to walk past — that the system
     // never says "approved", that a refused file fails alone, that the audit
     // draws no conclusion of its own.
     const flat = LANDING_HTML.replace(/\s+/g, ' ')
     expect(flat).toMatch(/never says <em>approved<\/em>/i)
-    expect(flat).toMatch(/fails alone/i)
+    expect(flat).toMatch(/failed alone/i)
     expect(flat).toMatch(/offers no conclusion of its own/i)
   })
 

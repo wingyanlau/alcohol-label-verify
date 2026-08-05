@@ -109,12 +109,18 @@ export const LANDING_HTML = `<!doctype html>
     it belongs to, and the other three still pass. A tool that flagged the whole
     submission would send an agent hunting.</span></li>
 
-    <li><strong>Run the batch.</strong> On <em>Batch</em>, press <em>Check the 26
-    test submissions</em>. Results stream in as they settle.
-    <br><span class="note">Notice: one submission is refused at intake — a
-    truncated file — and it fails alone rather than stopping the run. Notice also
-    that nobody is waiting for this: in service it would already have run as the
-    filings arrived.</span></li>
+    <li><strong>Open the worklist.</strong> Go to <em>Batch</em>. The run is
+    already there — 26 submissions, checked, triaged, waiting.
+    <br><span class="note">Notice: this is the point. An agent does not arrive
+    and press a button to make the system start thinking; the filings were
+    checked as they arrived and the work is sitting there at the beginning of a
+    shift. Notice too that the matched ones are grouped first and the ones
+    needing attention are at the bottom, and that one submission was refused at
+    intake — a truncated file — which failed alone rather than stopping the
+    rest.</span></li>
+    <li><span class="note">If you want to watch it work, press <em>Check the 26
+    test submissions again</em> and the results stream in as they settle. That is
+    the machine's view of the job, not the agent's.</span></li>
 
     <li><strong>Make a determination.</strong> Open an item with problems. Read
     the findings, the values either side, and the regulations that were applied.

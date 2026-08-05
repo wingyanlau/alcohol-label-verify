@@ -123,7 +123,7 @@ It carries four things, in this order:
 |---|---|
 | What the system does | One paragraph, and who holds the determination |
 | **How the five seconds are met** | Filings are checked as they arrive, so nobody waits for a model. The rule behind it: what a person waits for is decoupled from what the pipeline does |
-| **A guided run** | Six steps that ask the reviewer to *do* something — check a submission, check one that fails, run the batch, **make a determination**, audit the record that determination created, and see what it cost |
+| **A guided run** | Six steps that ask the reviewer to *do* something — check a submission, check one that fails, **open a worklist that is already prepared**, make a determination, audit the record that determination created, and see what it cost |
 | What it does not claim | Deterministic AI, an accuracy figure, and who decided — stated publicly, before anyone signs in |
 
 **The guided run is a demo, not a menu.** Listing screens invites a reviewer to
@@ -136,6 +136,14 @@ Each step says **what to notice**, since the interesting properties are all easy
 to walk past: that the system never says *approved*, that a refused file fails
 alone rather than stopping a run, that returning for better artwork is not a
 rejection, and that the audit draws no conclusion of its own.
+
+**The worklist is pre-run, and that is the demonstration.** A deploy onto an
+empty deployment starts a corpus run, so a reviewer arriving finds 26
+submissions checked and triaged rather than a button that makes the system begin
+thinking. An agent does not wait for the overnight filings to be processed; they
+were processed as they arrived. A demo that opens empty tells the opposite story
+to the one the architecture is built on, and the guided run says so at the step
+where it would otherwise be missed.
 
 **It calls nothing and carries no credential or address.** It has to render for
 somebody who has not yet proved they may see anything, and a fetch to a gated
