@@ -1,8 +1,8 @@
 {
   "$comment": "The policy archive: federal label requirements as versioned data. Extracted from the eCFR versioner API, digests included so a later re-extraction can detect that a regulation moved. Rules are superseded, never deleted (D27); nothing is enforced without a named approval. Design: design.md §18.",
-  "policySetVersion": 2,
-  "supersedes": 1,
-  "contentDigest": "c934ed02345c2925",
+  "policySetVersion": 3,
+  "supersedes": 2,
+  "contentDigest": "db001feca5f640ca",
   "$versioning": "contentDigest is sha256 over the canonical JSON of regulations, sourceDocuments and rules, first 16 hex. policySetVersion is a number a person maintains; this is the thing that notices when they forget. The regulations already carry a textDigest so a moved regulation is visible — the set itself had no such tripwire, and an edited set still calling itself version 1 would replay as comparable against rules it was never judged by. policy-set.test.ts pins the pair.",
   "approvedBy": "IT Systems Administrator (role unfilled — prototype)",
   "approvedAt": "2026-08-04",
@@ -402,6 +402,7 @@
         "quote": "“Whisky” or “whiskey” is distilled spirits ... and bottled at not less than 40 percent alcohol by volume (80° proof)",
         "extractedBy": "model",
         "model": "claude-opus-5",
+        "proposedBy": "Sarah Peterson",
         "extractedAt": "2026-08-03"
       },
       "$note": "Still a DRAFT and still unapproved — the contract requires a person, and nobody has signed it. The blocking dependency is gone: designations now resolve to classes via config/class-type-taxonomy.json.",
@@ -431,6 +432,7 @@
         "quote": "Alcoholic content shall be stated in terms of percentage of alcohol by volume, and not otherwise, as provided in either paragraph (b)(1) or (2) of this section: (1) \"Alcohol __ % by volume,\" or similar appropriate phrase; Provided, that if the word \"alcohol\" and/or \"volume\" are abbreviated, they shall be shown as \"alc.\" (alc) and/or \"vol.\" (vol), respectively. ... (2) \"Alcohol __ % to __ % by volume,\" or similar appropriate phrase",
         "extractedBy": "model",
         "model": "claude-opus-5",
+        "proposedBy": "Sarah Peterson",
         "extractedAt": "2026-08-04"
       },
       "$examples": [
@@ -464,6 +466,7 @@
         "quote": "The malt beverage label must include a brand name. If the malt beverage is not sold under a brand name, then the name of the bottler or importer, as applicable, appearing in the name and address statement is treated as the brand name.",
         "extractedBy": "model",
         "model": "claude-opus-5",
+        "proposedBy": "Sarah Peterson",
         "extractedAt": "2026-08-04"
       },
       "$draftNote": "DRAFT: proposed by a model from the cited regulation. A model may propose a rule; only a person may enact one (design §18.5a). Not applied — rulesFor() selects active rules only. To enact: set status \"active\" and record an approval."
@@ -491,6 +494,7 @@
         "quote": "Malt beverage containers must bear a label or labels (as defined in § 7.61(a)) containing the following information: ... (2) Class, type, or other designation, in accordance with subpart I of this part",
         "extractedBy": "model",
         "model": "claude-opus-5",
+        "proposedBy": "Sarah Peterson",
         "extractedAt": "2026-08-04"
       },
       "$draftNote": "DRAFT: proposed by a model from the cited regulation. A model may propose a rule; only a person may enact one (design §18.5a). Not applied — rulesFor() selects active rules only. To enact: set status \"active\" and record an approval."
@@ -519,6 +523,7 @@
         "quote": "(5) Net contents (which may be blown, embossed, or molded into the container as part of the process of manufacturing the container), in accordance with § 7.70.",
         "extractedBy": "model",
         "model": "claude-opus-5",
+        "proposedBy": "Sarah Peterson",
         "extractedAt": "2026-08-04"
       },
       "$draftNote": "DRAFT: proposed by a model from 27 CFR 7.63(a)(5) and 7.70. whenAbsent is \"undetermined\" for the same reason as the distilled spirits rule — the statement may be moulded into the glass, so an absence from the artwork is not a breach. A model may propose a rule; only a person may enact one (§18.5a)."
@@ -547,6 +552,7 @@
         "quote": "The alcohol content statement must be expressed in one of the following formats: (A) \"Alcohol percent by volume\"; (B) \"percent alcohol by volume\"; or (C) \"Alcohol by volume: percent.\" ... Alcohol may be abbreviated as \"alc\"; percent may be represented by the percent symbol \"%\"; alcohol and volume may be separated by a slash \"/\" in lieu of the word \"by\"; and volume may be abbreviated as \"vol\".",
         "extractedBy": "model",
         "model": "claude-opus-5",
+        "proposedBy": "Sarah Peterson",
         "extractedAt": "2026-08-04"
       },
       "$examples": ["4.2% alc/vol", "Alc. 4.0 percent by volume"],

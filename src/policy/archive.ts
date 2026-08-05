@@ -12,6 +12,7 @@ import { appendAudit } from '../batch/audit.js'
 import { sha256Hex } from '../batch/digest.js'
 import { POLICY_SET } from '../domain/findings.js'
 import type { PolicyRule } from '../domain/policy.js'
+import { describeUser } from '../domain/users.js'
 import {
   type ArchivedRule,
   actionEvent,
@@ -137,7 +138,10 @@ export interface ArchiveEntry {
   /** The words it was drawn from, where the rule records any. */
   readonly quote: string | null
   readonly sourceDocument: string | null
+  /** The PERSON who put the rule forward, and what they are. */
   readonly proposedBy: string | null
+  /** The model that drafted it, where one did. Kept beside the person, never instead. */
+  readonly draftedBy: string | null
 }
 
 /**
@@ -212,7 +216,11 @@ export async function listArchive(db: D1Database): Promise<ArchiveEntry[]> {
       approvalInherited: r.approved_by === null && r.status === 'active',
       quote: r.quote,
       sourceDocument: r.source_document_id,
-      proposedBy: rule?.provenance?.model ?? rule?.provenance?.extractedBy ?? null,
+      // The person, and separately the tool. Showing only the model named a
+      // proposal that arrived from no one; showing only the person would hide
+      // that a model read the regulation, which §18.5a exists to prevent.
+      proposedBy: rule?.provenance?.proposedBy ? describeUser(rule.provenance.proposedBy) : null,
+      draftedBy: rule?.provenance?.model ?? null,
     }
   })
 }

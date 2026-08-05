@@ -142,6 +142,8 @@ describe('rules extracted from a supplied document', () => {
       quote: 'The following metric standards of fill are authorized for distilled spirits',
       extractedBy: 'model',
       model: 'gemini-3.5-flash',
+      // A registered policy-author. A model drafts; a person puts it forward.
+      proposedBy: 'Sarah Peterson',
       extractedAt: '2026-08-03',
     },
     ...over,
@@ -155,10 +157,48 @@ describe('rules extracted from a supplied document', () => {
       ],
     })
 
+  it('refuses a model-drafted rule that names no person putting it forward', () => {
+    // A model drafts; a person proposes. Recording the tool and nobody else
+    // leaves a proposal that arrived from no one, and a tool cannot be
+    // answerable for having judged the output worth proposing.
+    const rule = extracted()
+    const provenance = { ...rule.provenance, proposedBy: '' }
+    expect(() => validatePolicySet(withDoc([{ ...rule, provenance }]))).toThrow(/names no proposer/)
+  })
+
+  it('refuses a proposer the register does not know', () => {
+    // A name nobody recognises is not an attribution.
+    const rule = extracted()
+    const provenance = { ...rule.provenance, proposedBy: 'Nobody In Particular' }
+    expect(() => validatePolicySet(withDoc([{ ...rule, provenance }]))).toThrow(
+      /not a registered policy-author/,
+    )
+  })
+
+  it('refuses a rule approved by the person who proposed it', () => {
+    // Separation of duty. A proposal signed off by its own author is not a
+    // review, and D27 asks for a review.
+    const solo = { ...extracted().provenance, proposedBy: 'Sarah Peterson' }
+    expect(() =>
+      validatePolicySet(
+        withDoc([
+          extracted({ provenance: solo, approval: { by: 'Sarah Peterson', at: '2026-08-04' } }),
+        ]),
+      ),
+    ).toThrow(/policy-approver|its own author/)
+  })
+
   it('accepts a model-extracted rule that a person has approved', () => {
     expect(() =>
       validatePolicySet(
-        withDoc([extracted({ approval: { by: 'A. Reviewer', at: '2026-08-03' } })]),
+        withDoc([
+          extracted({
+            approval: {
+              by: 'IT Systems Administrator (role unfilled — prototype)',
+              at: '2026-08-03',
+            },
+          }),
+        ]),
       ),
     ).not.toThrow()
   })
@@ -175,7 +215,7 @@ describe('rules extracted from a supplied document', () => {
 
   it('refuses a rule quoting a document the set does not carry', () => {
     const orphan = extracted({
-      approval: { by: 'A. Reviewer', at: '2026-08-03' },
+      approval: { by: 'IT Systems Administrator (role unfilled — prototype)', at: '2026-08-03' },
       provenance: { ...extracted().provenance, sourceDocument: 'DOC-UNKNOWN' },
     })
     expect(() => validatePolicySet(withDoc([orphan]))).toThrow(/DOC-UNKNOWN/)
@@ -185,7 +225,7 @@ describe('rules extracted from a supplied document', () => {
   // check one rule, which means in practice nobody checks it.
   it('refuses an extraction with no quoted basis', () => {
     const unquoted = extracted({
-      approval: { by: 'A. Reviewer', at: '2026-08-03' },
+      approval: { by: 'IT Systems Administrator (role unfilled — prototype)', at: '2026-08-03' },
       provenance: { ...extracted().provenance, quote: '' },
     })
     expect(() => validatePolicySet(withDoc([unquoted]))).toThrow(/quote/i)
@@ -195,7 +235,7 @@ describe('rules extracted from a supplied document', () => {
   // label pipeline records which model produced a verdict.
   it('refuses a model extraction that does not say which model', () => {
     const anon = extracted({
-      approval: { by: 'A. Reviewer', at: '2026-08-03' },
+      approval: { by: 'IT Systems Administrator (role unfilled — prototype)', at: '2026-08-03' },
       provenance: { ...extracted().provenance, model: undefined },
     })
     expect(() => validatePolicySet(withDoc([anon]))).toThrow(/model/i)
@@ -253,9 +293,29 @@ describe('malformed sets are refused, not repaired', () => {
     ).toThrow(/human or a model/)
   })
 
+  it('refuses an approval by somebody the register does not know', () => {
+    // A name nobody recognises is not an attribution. Before the register this
+    // was indistinguishable from a real approval, because any string passed.
+    expect(() =>
+      validatePolicySet(
+        SET({ rules: [{ ...RULE, approval: { by: 'A Passing Stranger', at: '2026-01-01' } }] }),
+      ),
+    ).toThrow(/not a registered policy-approver/)
+  })
+
+  it('refuses an approval by somebody who may propose but not enact', () => {
+    // Separation of duty. Sarah Peterson is a policy-author, which is
+    // deliberately not a policy-approver.
+    expect(() =>
+      validatePolicySet(
+        SET({ rules: [{ ...RULE, approval: { by: 'Sarah Peterson', at: '2026-01-01' } }] }),
+      ),
+    ).toThrow(/not a registered policy-approver/)
+  })
+
   it('refuses an approval that names nobody', () => {
     expect(() =>
-      validatePolicySet(SET({ rules: [{ ...RULE, approval: { by: '   ', at: '2026-01-01' } }] })),
+      validatePolicySet(SET({ rules: [{ ...RULE, approval: { by: '', at: '2026-01-01' } }] })),
     ).toThrow(/names nobody/)
   })
 })

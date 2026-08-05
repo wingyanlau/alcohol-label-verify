@@ -50,6 +50,7 @@
  * a new shape of check is exactly what should be reviewed rather than
  * configured.
  */
+import { userMay } from './users.js'
 export const CHECK_KINDS = [
   'field-present',
   'format-matches',
@@ -130,8 +131,22 @@ export interface RuleProvenance {
   /** The verbatim words the rule was drawn from. */
   readonly quote: string
   readonly extractedBy: 'human' | 'model'
-  /** Required when `extractedBy` is `model`. Which reader proposed this. */
+  /** Required when `extractedBy` is `model`. Which reader drafted it. */
   readonly model?: string
+  /**
+   * The **person** putting the rule forward for approval. Required when a model
+   * drafted it, and must be a registered `policy-author`.
+   *
+   * A model reading a regulation is a tool being used, and a tool cannot be
+   * answerable for having judged the output worth proposing. Somebody chose to
+   * draft this rule and to put it forward; without this field the record named
+   * the tool and nobody else.
+   *
+   * With `approval` it completes the chain D27 and §18.5a describe between
+   * them: a model drafts, a **person proposes**, a **different person**
+   * approves.
+   */
+  readonly proposedBy?: string
   readonly extractedAt: string
 }
 
@@ -303,6 +318,24 @@ function validateProvenance(
     if (!isRecord(rule.approval) || !nonEmpty(rule.approval.by)) {
       throw new PolicyContractError(`rule "${rule.id}" has an approval that names nobody`)
     }
+    // Enacting is an entitlement, not a matter of filling in a field. A rule
+    // approved by somebody who does not hold the role has not been reviewed by
+    // anyone who could review it (D27).
+    if (!userMay(String(rule.approval.by), 'policy-approver')) {
+      throw new PolicyContractError(
+        `rule "${rule.id}" is approved by "${String(rule.approval.by)}", who is not a ` +
+          'registered policy-approver.',
+      )
+    }
+    // Separation of duty. A proposal signed off by the person who made it is
+    // not a review, and a review is what D27 asks for.
+    const proposer = (rule.provenance as { proposedBy?: unknown } | undefined)?.proposedBy
+    if (proposer !== undefined && proposer === rule.approval.by) {
+      throw new PolicyContractError(
+        `rule "${rule.id}" is approved by the same person who proposed it. An approval ` +
+          'by its own author is not a review.',
+      )
+    }
   }
 
   const p = rule.provenance
@@ -331,6 +364,24 @@ function validateProvenance(
   }
 
   if (p.extractedBy === 'model') {
+    // A model drafts; a PERSON puts it forward. Recording the tool and nobody
+    // else leaves a proposal that arrived from no one — and a model cannot be
+    // answerable for having judged the output worth proposing.
+    //
+    // With the approval below, this completes the chain D27 and §18.5a describe
+    // between them: a model drafts, a person proposes, a person approves.
+    if (!nonEmpty(p.proposedBy)) {
+      throw new PolicyContractError(
+        `rule "${rule.id}" was drafted by a model and names no proposer. Set ` +
+          'provenance.proposedBy to whoever is answerable for putting it forward.',
+      )
+    }
+    if (!userMay(String(p.proposedBy), 'policy-author')) {
+      throw new PolicyContractError(
+        `rule "${rule.id}" is proposed by "${String(p.proposedBy)}", who is not a ` +
+          'registered policy-author. A name nobody recognises is not an attribution.',
+      )
+    }
     // Which reader proposed it, for the same reason a verdict records which
     // model produced it: an unattributed reading cannot be re-examined when
     // that reader turns out to have been wrong about something else.

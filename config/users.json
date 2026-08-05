@@ -1,0 +1,53 @@
+{
+  "$comment": "The people this deployment recognises, and what each is entitled to do. Names appear throughout the record — who approved a rule, who proposed one, who decided a submission — and until now every one of them was a free string. A free string cannot be checked, so 'Sarah Peterson' and 'sarah peterson' and a typo were three different people, and a name nobody recognises was indistinguishable from one everybody does. Roles are what the policy contract checks against: proposing a rule and enacting one are different entitlements, and the difference is the whole of D27. Reviewed like every other config file (D45) rather than editable at runtime — D14 leaves the prototype unauthenticated, so a runtime user admin would be a control with no gate behind it. THIS IS NOT AUTHENTICATION. It says who is recognised and what they may do; it does not verify that whoever typed a name is that person. Design §19.5.",
+  "configVersion": 1,
+  "$roles": {
+    "compliance-agent": "Reviews submissions and records decisions (approve, reject, return). The persona the interface is designed for (§2.1).",
+    "policy-approver": "Enacts a rule — the named human approval D27 requires before anything reaches force. The role ui-design §2.3 records as the notable gap.",
+    "policy-author": "Puts a rule forward for approval. May draft with a model; is answerable for proposing it. Cannot enact their own proposal.",
+    "administrator": "Approves which models may read a label (config/approved-models.json, D29)."
+  },
+  "users": [
+    {
+      "id": "sarah-peterson",
+      "name": "Sarah Peterson",
+      "title": "Programme sponsor, label modernisation",
+      "roles": ["policy-author"],
+      "source": "Stakeholder register SRC-2 — the sponsor whose interests set the brief.",
+      "registeredOn": "2026-08-04"
+    },
+    {
+      "id": "it-systems-administrator",
+      "name": "IT Systems Administrator (role unfilled — prototype)",
+      "title": "IT Systems Administrator",
+      "roles": ["policy-approver", "administrator"],
+      "source": "The role named in project-reference §2.3 as holding the approval gate. Unfilled: no individual has been identified, and the record says so rather than inventing one.",
+      "registeredOn": "2026-08-01"
+    },
+    {
+      "id": "dave-mitchell",
+      "name": "Dave Mitchell",
+      "title": "Compliance agent, 28 years",
+      "roles": ["compliance-agent"],
+      "source": "Stakeholder register SRC-4 — the veteran whose objection to false discrepancies shaped the tolerance rules.",
+      "registeredOn": "2026-08-04"
+    },
+    {
+      "id": "jenny-alvarez",
+      "name": "Jenny Alvarez",
+      "title": "Compliance agent, 8 months",
+      "roles": ["compliance-agent"],
+      "source": "Stakeholder register SRC-5 — works from a printed checklist; the warning-statement layout follows her review order.",
+      "registeredOn": "2026-08-04"
+    },
+    {
+      "id": "janet-okafor",
+      "name": "Janet Okafor",
+      "title": "Compliance agent, bulk importer filings",
+      "roles": ["compliance-agent"],
+      "source": "Stakeholder register SRC-2 — handles 200-300 filings at once; the batch path exists for her.",
+      "registeredOn": "2026-08-04"
+    }
+  ],
+  "$separationOfDuty": "A policy-author is deliberately not a policy-approver. Sarah Peterson may propose a rule and may not enact it; the administrator may enact and does not propose. That separation is what makes an approval mean something — a proposal signed off by the person who made it is not a review, and D27 asks for a review. The contract enforces it (see policy.ts)."
+}

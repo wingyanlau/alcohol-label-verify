@@ -42,6 +42,7 @@ import { POLICY_SET } from './domain/findings.js'
 import { configuredLegibilityFloor } from './domain/legibility.js'
 import type { PolicyRule } from './domain/policy.js'
 import { referenceIsUnverified, warningReference } from './domain/reference.js'
+import { registeredUsers, userMay } from './domain/users.js'
 import type { Env, WorkMessage } from './env.js'
 import { checkImageIntake } from './normalise/image.js'
 import { IntakeRejected } from './normalise/normaliser.js'
@@ -897,6 +898,18 @@ export default {
         recommendedOutcome: detail.outcome,
         note,
       }
+      // Re-checked here, always. A dropdown narrows what an agent can pick; it
+      // does not constrain what a request can carry, and §4.5 is that client
+      // validation exists for responsiveness and never for correctness.
+      if (!userMay(input.decidedBy, 'compliance-agent')) {
+        return json(
+          {
+            error: 'rejected',
+            reason: `"${input.decidedBy}" is not a registered compliance agent. A decision must name somebody entitled to make it.`,
+          },
+          422,
+        )
+      }
       try {
         checkDecision(input)
       } catch (error) {
@@ -1131,6 +1144,24 @@ export default {
         actor: 'deploy',
       })
       return json(report)
+    }
+
+    // Who this deployment recognises, for a form to offer rather than a box to
+    // type into (design §19.5).
+    //
+    // A dropdown is NOT authentication and must not be mistaken for it: picking
+    // a name from a list is no more verified than typing one. What it buys is
+    // that the name is one the register knows, spelled the way the register
+    // spells it — so "who decided this" has an answer that can be joined to
+    // something, which a free string never could.
+    if (pathname === '/users' && request.method === 'GET') {
+      const role = new URL(request.url).searchParams.get('role')
+      const all = registeredUsers()
+      const users = role === null ? all : all.filter((u) => u.roles.includes(role as never))
+      return json({
+        users: users.map((u) => ({ id: u.id, name: u.name, title: u.title, roles: u.roles })),
+        note: 'Recognition, not authentication. Nothing here verifies that the person selecting a name is that person (D14, §19.5).',
+      })
     }
 
     // The archive, for a person to read (ui-design §2.3, "Policy owner").

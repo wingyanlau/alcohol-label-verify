@@ -757,10 +757,34 @@ export const PAGE_HTML = `<!doctype html>
 
     box.appendChild(el('p', 'note', d.recommendation || ''))
 
-    var who = document.createElement('input')
-    who.type = 'text'; who.id = 'decidedBy'; who.placeholder = 'Your name'
-    who.setAttribute('aria-label', 'Your name')
+    // A list rather than a box. A typed name could be a colleague, a typo, or
+    // nobody — three states the record could not tell apart, and the whole
+    // value of "who decided this" is that it names a specific person.
+    //
+    // It is NOT authentication, and the hint below says so rather than letting
+    // a dropdown imply a login (§19.5).
+    var who = document.createElement('select')
+    who.id = 'decidedBy'
+    who.setAttribute('aria-label', 'Who is deciding')
+    var waiting = document.createElement('option')
+    waiting.value = ''; waiting.textContent = 'Select who is deciding…'
+    who.appendChild(waiting)
     box.appendChild(who)
+    box.appendChild(el('p', 'hint', 'Recorded as entered. This prototype does not verify identity.'))
+
+    // Only agents entitled to decide. The server re-checks it — a dropdown
+    // narrows what can be picked, not what a request can carry (§4.5).
+    fetch('/users?role=compliance-agent')
+      .then(function (r) { return r.ok ? r.json() : { users: [] } })
+      .then(function (d) {
+        (d.users || []).forEach(function (u) {
+          var o = document.createElement('option')
+          o.value = u.name
+          o.textContent = u.name + ' — ' + u.title
+          who.appendChild(o)
+        })
+      })
+      .catch(function () { /* the server refuses an unrecognised name anyway */ })
 
     var note = document.createElement('textarea')
     note.id = 'decisionNote'; note.rows = 2
@@ -971,6 +995,7 @@ export const PAGE_HTML = `<!doctype html>
       bits.push('NOT APPROVED')
     }
     if (r.proposedBy) bits.push('proposed by ' + r.proposedBy)
+    if (r.draftedBy) bits.push('drafted with ' + r.draftedBy)
     foot.textContent = bits.join(' · ')
     wrap.appendChild(foot)
     return wrap
