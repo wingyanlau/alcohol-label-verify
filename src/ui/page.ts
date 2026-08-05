@@ -222,14 +222,14 @@ export const PAGE_HTML = `<!doctype html>
          a line of chrome. -->
     <div class="nav">
       <div class="modes" role="tablist" aria-label="What to check">
-        <button id="modeSingle" type="button" class="mode" role="tab" aria-selected="true">Single review</button>
-        <button id="modeBatch" type="button" class="mode" role="tab" aria-selected="false">Batch</button>
+        <button id="modeBatch" type="button" class="mode" role="tab" aria-selected="true">Batch</button>
+        <button id="modeSingle" type="button" class="mode" role="tab" aria-selected="false">Single review</button>
       </div>
       <div class="refs" role="tablist" aria-label="How this system is governed">
-        <button id="modePolicy" type="button" class="ref" role="tab" aria-selected="false">Policy</button>
-        <button id="modeAgents" type="button" class="ref" role="tab" aria-selected="false">Agents</button>
         <button id="modeAudit" type="button" class="ref" role="tab" aria-selected="false">Audit</button>
         <button id="modeMeasure" type="button" class="ref" role="tab" aria-selected="false">Measurement</button>
+        <button id="modeAgents" type="button" class="ref" role="tab" aria-selected="false">Agents</button>
+        <button id="modePolicy" type="button" class="ref" role="tab" aria-selected="false">Policy</button>
       </div>
     </div>
   </div>
@@ -754,24 +754,28 @@ export const PAGE_HTML = `<!doctype html>
 
   bootstrap()
 
-  // Single review is the landing mode: it is the interactive path an agent
-  // reaches for, and the batch screen is the demonstration. The bootstrap may
-  // still switch to batch if a job is already running, which is the one case
-  // where the other screen matters more.
+  // The worklist is the landing screen, because it is what an agent arrives to.
+  //
+  // Single review used to be, on the reasoning that it is the interactive path
+  // and batch is the demonstration. That had it backwards: filings are checked
+  // as they arrive, so the ordinary start of a shift is a queue of prepared
+  // work, and single review is the exception — one case an agent has in front
+  // of them right now. Opening on the exception told the wrong story about how
+  // the five-second requirement is met.
   // Four screens now, so the argument is a name rather than a boolean — it was
   // showMode(true|false), which stopped being able to say which screen the
   // moment there were more than two.
   var SCREENS = [
-    { mode: 'single', section: 'single', tab: 'modeSingle' },
     { mode: 'batch', section: 'batchHome', tab: 'modeBatch' },
-    { mode: 'policy', section: 'policy', tab: 'modePolicy' },
-    { mode: 'agents', section: 'agents', tab: 'modeAgents' },
+    { mode: 'single', section: 'single', tab: 'modeSingle' },
     { mode: 'audit', section: 'audit', tab: 'modeAudit' },
     { mode: 'measure', section: 'measure', tab: 'modeMeasure' },
+    { mode: 'agents', section: 'agents', tab: 'modeAgents' },
+    { mode: 'policy', section: 'policy', tab: 'modePolicy' },
   ]
 
   singleInit()
-  showMode('single')
+  showMode('batch')
 
   // ---- Detail view (ui-design §5-§7) --------------------------------------
 

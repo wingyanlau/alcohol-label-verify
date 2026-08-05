@@ -162,8 +162,8 @@ endpoint would 401 and leave the page half-built for exactly that visitor.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│  A  TTB Label Check      Single │ Batch    Policy · Agents · Audit ·   │
-│                                             Measurement             │
+│  A  TTB Label Check    Batch │ Single review                          │
+│                        Audit · Measurement · Agents · Policy        │
 ├────────────────────────────────────────────────────────────────────────┤
 │                                                                        │
 │  ┌── B ───────────────────────────────────────────────────────────┐    │
@@ -196,20 +196,28 @@ endpoint would 401 and leave the page half-built for exactly that visitor.
 | C | Primary action | Always visible without scrolling at 1280×800 and above |
 | D | Clear | Secondary, and deliberately smaller |
 
-**Two navigation groups, not one row of buttons.** *Single review* and *Batch*
+**Two navigation groups, not one row of buttons.** *Batch* and *Single review*
 are the work — an agent is in one or the other all day — and they are a tab
-strip. *Policy*, *Agents*, *Audit* and *Measurement* are reference: what governs
-the system, who may act, whether the record holds, and what it cost. They sit
+strip. *Audit*, *Measurement*, *Agents* and *Policy* are reference. They sit
 apart and quieter, because they are read occasionally and never in the middle of
 checking a label. Four equal buttons in a row made the choice look like four
 equal jobs.
 
-| Screen | Answers |
-|---|---|
-| **Policy** | Which rules are in force, from when, approved by whom |
-| **Agents** | Who and what may act here, and what each may do |
-| **Audit** | Has the history been altered, and does every verdict still follow from its reading |
-| **Measurement** | What it cost and how long it took, against the stated target |
+**Batch is first, and is the landing screen.** Single review used to be, on the
+reasoning that it is the interactive path while batch is the demonstration. That
+had it backwards. Filings are checked as they arrive, so the ordinary start of a
+shift is a queue of prepared work; single review is the *exception* — one case an
+agent has in front of them right now. Opening on the exception told the wrong
+story about how the five-second requirement is met.
+
+| Screen | Answers | |
+|---|---|---|
+| **Batch** | The work waiting for me | The work |
+| **Single review** | This one case, now | |
+| **Audit** | Does a determination still hold up, and what did I conclude | Reference, ordered by how often it is needed |
+| **Measurement** | What it cost and how long it took, against the stated target | |
+| **Agents** | Who and what may act here, and what each may do | |
+| **Policy** | Which rules are in force, from when, approved by whom | |
 
 *Audit* is named for the act rather than the noun. "Record" could mean the audit
 trail, one submission's record, or the act of recording; a reader goes there to

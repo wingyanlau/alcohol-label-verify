@@ -101,3 +101,40 @@ describe('a failed start says what failed (D38)', () => {
     expect(PAGE_HTML).toContain('The check could not be started. Nothing was saved.')
   })
 })
+
+describe('the order of the tabs (§4.1)', () => {
+  /*
+   * Order is a claim about what the tool is for, so it is pinned rather than
+   * left to whoever edits the markup next.
+   *
+   * The worklist comes first because it is what an agent arrives to: filings
+   * are checked as they arrive, so the ordinary start of a shift is a queue of
+   * prepared work. Single review is the exception — one case in front of them
+   * right now — and opening on the exception told the wrong story about how the
+   * five-second requirement is met.
+   */
+  const positionOf = (id: string) => PAGE_HTML.indexOf(`id="${id}"`)
+
+  it('puts the worklist before single review', () => {
+    expect(positionOf('modeBatch')).toBeGreaterThan(-1)
+    expect(positionOf('modeBatch')).toBeLessThan(positionOf('modeSingle'))
+  })
+
+  it('lands on the worklist', () => {
+    expect(PAGE_HTML).toContain("showMode('batch')")
+  })
+
+  it('orders the reference screens by how often they are needed', () => {
+    // Audit and Measurement answer questions about work just done; Agents and
+    // Policy explain the standing arrangement and are read far less often.
+    const order = ['modeAudit', 'modeMeasure', 'modeAgents', 'modePolicy'].map(positionOf)
+    expect(order.every((n) => n > -1)).toBe(true)
+    expect([...order].sort((a, b) => a - b)).toEqual(order)
+  })
+
+  it('keeps the work and the reference screens in separate groups', () => {
+    // Four equal buttons in a row made the choice look like four equal jobs.
+    expect(PAGE_HTML).toContain('aria-label="What to check"')
+    expect(PAGE_HTML).toContain('aria-label="How this system is governed"')
+  })
+})
