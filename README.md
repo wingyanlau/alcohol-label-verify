@@ -29,9 +29,9 @@ a cost control, not an identity check (D49).
 4. **Batch** runs all 26 bundled submissions and streams results as they settle.
 5. **Policy** and **Agents** show what governs the system: the rules in force
    with their dates and approvers, and who or what may act.
-6. **Record** re-derives every verdict this deployment holds, from what was
-   stored, with no model invoked — and checks the audit chain has not been
-   altered.
+6. **Audit** re-runs the pipeline for every verdict this deployment holds,
+   from the reading recorded at the time, and checks the audit chain has not
+   been altered.
 7. **Measurement** reports what it cost and how long it took, against the
    5-second target the brief set.
 
@@ -145,10 +145,12 @@ photographs.
 **Attribution is declared, not verified.** `decided_by` is a name typed into a
 box.
 
-**Replay proves the verdict, not the reading.** A stored verdict re-derives
-exactly from the record without calling a model. That does not prove the reading
-was correct — a question about the model, which the corpus addresses and cannot
-settle. The claim is not that generative AI is deterministic; it is that
+**Replay proves the verdict, not the reading.** The pipeline re-runs from the
+recorded reading — same contract, same rules, same aggregation — so a verdict
+re-derives exactly. The model is not asked again, which means a misreading is
+reproduced faithfully rather than caught. Re-reading the artwork with the same
+model to test whether perception is stable is a different check, and one this
+deployment does not perform. The claim is not that generative AI is deterministic; it is that
 **perception is non-deterministic, judgement is deterministic, and the boundary
 between them is written down** — see
 [determinism-and-replay.md](docs/determinism-and-replay.md).

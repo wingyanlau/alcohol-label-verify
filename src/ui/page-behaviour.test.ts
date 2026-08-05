@@ -949,16 +949,16 @@ describe('the measurement screen (§16)', () => {
   })
 })
 
-describe('the record screen (NFR-13)', () => {
+describe('the audit screen (NFR-13)', () => {
   /*
    * The audit chain and replay were reachable only as JSON, so the one
    * capability that distinguishes this system from a wrapper around a model was
    * invisible to anyone using it.
    */
-  const openRecord = async (opts: Parameters<typeof boot>[0] = {}) => {
+  const openAudit = async (opts: Parameters<typeof boot>[0] = {}) => {
     const { byId, settle, calls } = boot(opts)
     await settle()
-    byId.modeRecord?.click()
+    byId.modeAudit?.click()
     await settle()
     return { byId, calls }
   }
@@ -967,29 +967,43 @@ describe('the record screen (NFR-13)', () => {
     // The chain says whether the history was altered. Replay says whether the
     // stored evidence still produces the stored verdict. Neither implies the
     // other.
-    const { byId } = await openRecord()
-    const words = byId.recordBody?.words() ?? ''
+    const { byId } = await openAudit()
+    const words = byId.auditBody?.words() ?? ''
     expect(words).toContain('The history')
     expect(words).toContain('Re-deriving every verdict')
   })
 
   it('reports the chain unaltered with its event count', async () => {
-    const { byId } = await openRecord()
-    expect(byId.recordBody?.words()).toMatch(/Unaltered — 306 events/)
+    const { byId } = await openAudit()
+    expect(byId.auditBody?.words()).toMatch(/Unaltered — 306 events/)
   })
 
-  it('says the replay invoked no model, which is the whole claim', async () => {
-    const { byId } = await openRecord()
-    expect(byId.recordBody?.words()).toMatch(/no model invoked/i)
+  it('says the model is not asked again, and what that costs', async () => {
+    // "No model invoked" read as a boast and prompted the fair question: then
+    // what has been reproduced? It is a LIMIT — the judgement is tested, the
+    // reading is not — and the page has to say so in the same breath.
+    const { byId } = await openAudit()
+    const words = byId.auditBody?.words() ?? ''
+    expect(words).toMatch(/model is not asked again/i)
+    expect(words).toMatch(/says nothing about whether the reading was right/i)
+  })
+
+  it('names the check it does NOT perform', async () => {
+    // Putting the same artwork to the same model and comparing would test
+    // perception. The record holds everything that check needs; the deployment
+    // does not run it, and a page claiming reproducibility must not let a
+    // reader assume otherwise.
+    const { byId } = await openAudit()
+    expect(byId.auditBody?.words()).toMatch(/does not yet perform it/i)
   })
 
   it('refuses to let the claim overreach', async () => {
     // It proves the judgement is reproducible. It does not prove the reading
     // was right — and a page that blurred those two would be claiming the one
     // thing this system cannot show.
-    const { byId } = await openRecord()
-    const words = byId.recordBody?.words() ?? ''
-    expect(words).toMatch(/does not prove the reading was right/i)
+    const { byId } = await openAudit()
+    const words = byId.auditBody?.words() ?? ''
+    expect(words).toMatch(/says nothing about whether the reading was right/i)
     expect(words).toMatch(/NOT deterministic/)
   })
 
@@ -997,7 +1011,7 @@ describe('the record screen (NFR-13)', () => {
     const { byId, settle, calls } = boot()
     await settle()
     expect(calls.filter((c) => c.includes('/audit/'))).toEqual([])
-    byId.modeRecord?.click()
+    byId.modeAudit?.click()
     await settle()
     expect(calls.filter((c) => c.includes('/audit/')).length).toBe(2)
   })

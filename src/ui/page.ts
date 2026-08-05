@@ -228,7 +228,7 @@ export const PAGE_HTML = `<!doctype html>
       <div class="refs" role="tablist" aria-label="How this system is governed">
         <button id="modePolicy" type="button" class="ref" role="tab" aria-selected="false">Policy</button>
         <button id="modeAgents" type="button" class="ref" role="tab" aria-selected="false">Agents</button>
-        <button id="modeRecord" type="button" class="ref" role="tab" aria-selected="false">Record</button>
+        <button id="modeAudit" type="button" class="ref" role="tab" aria-selected="false">Audit</button>
         <button id="modeMeasure" type="button" class="ref" role="tab" aria-selected="false">Measurement</button>
       </div>
     </div>
@@ -255,15 +255,16 @@ export const PAGE_HTML = `<!doctype html>
     <div id="agentsBody"></div>
   </section>
 
-  <!-- The audit record, and whether it still holds (NFR-13).
-       The most consequential capability here was reachable only as JSON, so
-       the one thing that distinguishes this system was invisible to anyone
-       using it. -->
-  <section id="record" class="hidden">
-    <h1>Record</h1>
-    <p class="lede">Every verdict can be produced again from what was stored — without the model, the artwork,
-      or the run that made it. This page checks that, now, against every verdict this deployment holds.</p>
-    <div id="recordBody"></div>
+  <!-- Auditing the record: has the history been altered, and do the verdicts
+       still hold (NFR-13)?
+       Named for the act rather than the noun. "Record" could mean the audit
+       trail, one submission's record, or the act of recording; a reader comes
+       here to CHECK something, and the endpoints behind it are /audit/*. -->
+  <section id="audit" class="hidden">
+    <h1>Audit</h1>
+    <p class="lede">Two checks, run now against everything this deployment holds: whether the recorded
+      history has been altered, and whether every verdict still follows from the reading that produced it.</p>
+    <div id="auditBody"></div>
   </section>
 
   <!-- What this deployment has done, and what it cost (§16, D52). Read only.
@@ -765,7 +766,7 @@ export const PAGE_HTML = `<!doctype html>
     { mode: 'batch', section: 'batchHome', tab: 'modeBatch' },
     { mode: 'policy', section: 'policy', tab: 'modePolicy' },
     { mode: 'agents', section: 'agents', tab: 'modeAgents' },
-    { mode: 'record', section: 'record', tab: 'modeRecord' },
+    { mode: 'audit', section: 'audit', tab: 'modeAudit' },
     { mode: 'measure', section: 'measure', tab: 'modeMeasure' },
   ]
 
@@ -1155,18 +1156,23 @@ export const PAGE_HTML = `<!doctype html>
    * Two questions, and they are different. The chain answers *has the history
    * been altered* — each event commits to the one before it, so a changed row
    * cannot reproduce the digest that followed it. Replay answers *does the
-   * stored evidence still produce the stored verdict* — re-derived through the
-   * same comparison the live path uses, and **without invoking a model**, which
-   * is the sentence the whole page exists to earn.
+   * recorded reading still produce the recorded verdict* — the whole pipeline
+   * re-run from the model's stored output onwards: parsed through the same
+   * contract, compared by the same rules, aggregated the same way.
+   *
+   * The model is not asked again, and that is a limit rather than a boast. It
+   * means replay tests the JUDGEMENT and says nothing about the READING.
+   * Checking the reading would mean putting the artwork to the same model and
+   * comparing — a different operation, and one this deployment does not offer.
    *
    * Both were reachable only as JSON until now, which meant the one capability
    * that distinguishes this system was invisible to anyone using it.
    */
-  var recordLoaded = false
-  function loadRecord() {
-    if (recordLoaded) return
-    recordLoaded = true
-    var body = byId('recordBody')
+  var auditLoaded = false
+  function loadAudit() {
+    if (auditLoaded) return
+    auditLoaded = true
+    var body = byId('auditBody')
     body.textContent = 'Checking…'
     Promise.all([
       fetch('/audit/verify').then(function (r) { return r.json() }).catch(function () { return null }),
@@ -1175,9 +1181,9 @@ export const PAGE_HTML = `<!doctype html>
       // that only appears once there is history to look back through.
       fetch('/audit/replay?limit=100').then(function (r) { return r.json() }).catch(function () { return null }),
     ])
-      .then(function (both) { renderRecord(both[0], both[1]) })
+      .then(function (both) { renderAudit(both[0], both[1]) })
       .catch(function () {
-        recordLoaded = false
+        auditLoaded = false
         body.textContent = ''
         body.appendChild(el('p', 'err', 'The record could not be checked. Please try again in a moment.'))
       })
@@ -1193,8 +1199,8 @@ export const PAGE_HTML = `<!doctype html>
     return row
   }
 
-  function renderRecord(chain, replay) {
-    var body = byId('recordBody')
+  function renderAudit(chain, replay) {
+    var body = byId('auditBody')
     body.textContent = ''
 
     // 1. Has the history been altered?
@@ -1233,7 +1239,9 @@ export const PAGE_HTML = `<!doctype html>
         clean
           ? 'All ' + replay.checked + ' re-derive to the verdict that was stored'
           : replay.differs + ' no longer re-derive to what was stored',
-        'Recomputed from the stored reading through the same comparison the live path uses — with no model invoked. What this proves is that the JUDGEMENT is reproducible. It does not prove the reading was right; that is a question about the model.'))
+        'The whole pipeline re-run from the reading recorded at the time — parsed through the same contract, compared by the same rules, aggregated the same way. The model is not asked again, so this shows the JUDGEMENT is reproducible and says nothing about whether the reading was right.'))
+      b.appendChild(el('p', 'note',
+        'Checking the reading itself is a different operation: put the same artwork to the same model, at the same prompt version, and compare what comes back. That would test whether perception is stable. This deployment records everything such a check would need — the artwork, the model identifier, the prompt version, the sampling parameters — and does not yet perform it.'))
 
       var counts = el('div', 'finding')
       counts.appendChild(el('div', 'freq', 'Result'))
@@ -1455,7 +1463,7 @@ export const PAGE_HTML = `<!doctype html>
     })
     if (mode === 'policy') loadPolicy()
     if (mode === 'agents') loadAgents()
-    if (mode === 'record') loadRecord()
+    if (mode === 'audit') loadAudit()
     if (mode === 'measure') loadMeasurement()
   }
 

@@ -64,13 +64,13 @@ directory and the modules there could not reach a network if they tried.
 
 ## 3. Two questions, and they are different
 
-The Record screen answers both, and conflating them is the commonest mistake in
+The Audit screen answers both, and conflating them is the commonest mistake in
 talking about audit trails.
 
 | Question | Answered by | What a failure means |
 |---|---|---|
 | **Has the history been altered?** | The hash chain. Each event is hashed with the digest of the event before it | A row was changed after the fact. The record is untrustworthy |
-| **Does the stored evidence still produce the stored verdict?** | Replay. Re-derived through the same comparison the live path uses, with no model invoked | The rules moved, or the stored reading did. Both are serious and they are distinguished |
+| **Does the recorded reading still produce the recorded verdict?** | Replay. The whole pipeline re-run from the model's stored output onwards — same contract, same rules, same aggregation | The rules moved, or the stored reading did. Both are serious and they are distinguished |
 
 Neither implies the other. A perfectly intact chain can hold a verdict that no
 longer re-derives, because the *rules* changed underneath it. A verdict that
@@ -106,7 +106,7 @@ checked 25 · identical 25 · differs 0 · not-comparable 0 · not-re-derivable 
 
 > **This is a dated event, not the current state of the deployment.** Staging
 > was reset afterwards to clear an unrelated defect, so the verdicts above no
-> longer exist and the Record tab shows only what has been checked since. The
+> longer exist and the Audit tab shows only what has been checked since. The
 > evidence is the CI run for that deploy, which is where the numbers came from.
 > Any future policy change re-demonstrates it, because the property is
 > structural rather than a property of those particular rows.
@@ -133,14 +133,42 @@ with dates.
 
 ---
 
-## 5. What this does *not* prove
+## 5. What replay is, exactly — and the check it is not
 
-Stated plainly, because a page like this is where overreach happens.
+**Replay re-runs the whole pipeline from the recorded reading onwards.** The
+stored raw response is parsed through the same extraction contract, compared by
+the same rules, checked against the same warning reference, and aggregated the
+same way. Only one thing is substituted: the provider, which returns what the
+model said at the time instead of asking it again.
 
-**It does not prove the reading was correct.** Replay re-derives the verdict from
-the stored reading. If the model misread `45%` as `40%`, replay reproduces that
-misreading faithfully and reports `identical`. Whether the model reads correctly
-is a question about the model, which the corpus addresses and cannot settle.
+So "no model is invoked" is true, and stating it as though it were the
+achievement misleads. It is a **limit**:
+
+| | Replay | Re-reading — *not built* |
+|---|---|---|
+| Tests | The judgement | The perception |
+| Substitutes | The provider, with the recorded response | Nothing — the model is asked again |
+| Answers | *Do these rules still produce this verdict?* | *Does this model still read this label the same way?* |
+| Cost | Nothing | Two model calls per submission |
+
+**The second check is the one a reader intuitively expects, and this deployment
+does not perform it.** Putting the same artwork to the same model, at the
+recorded prompt version and sampling parameters, and comparing the new reading
+with the stored one would measure whether perception is stable — and would
+detect a vendor repointing a stable name at new weights, which `model_id` alone
+cannot.
+
+Everything that check needs is already in the record: the artwork in R2 for the
+retention window, the fully-qualified model identifier, the prompt version, the
+sampling parameters, and the reading itself. It is not built, and §6 of
+`toward-llm-policy.md` treats stability as a release gate for any model that
+judges — which is where it would have to be measured anyway.
+
+### What follows from that
+
+**It does not prove the reading was correct.** If the model misread `45%` as
+`40%`, replay reproduces that misreading faithfully and reports `identical`. The
+verdict is reproducible; the perception behind it is not re-examined.
 
 **It does not prove the rules are right.** It proves they were applied
 consistently, and that the ones applied are the ones a named person approved.
@@ -156,7 +184,7 @@ authenticated (D14). The record is evidence of *what*, not of *who*.
 
 | | |
 |---|---|
-| **Record** tab | Chain integrity and replay across every verdict, live |
+| **Audit** tab | Chain integrity and replay across every verdict, live |
 | `GET /audit/verify` | The chain, with its head digest |
 | `GET /audit/replay?limit=100` | Re-derivation, by status |
 | `GET /reference/<code>` | One verdict, from the code an agent quoted |

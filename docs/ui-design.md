@@ -122,7 +122,8 @@ Everything needed for one review fits on one screen at legible size.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│  A  TTB Label Check                          Single │ Batch │ Policy   │
+│  A  TTB Label Check      Single │ Batch    Policy · Agents · Audit ·   │
+│                                             Measurement             │
 ├────────────────────────────────────────────────────────────────────────┤
 │                                                                        │
 │  ┌── B ───────────────────────────────────────────────────────────┐    │
@@ -154,6 +155,25 @@ Everything needed for one review fits on one screen at legible size.
 | B | The filed submission | One upload. No typed fields |
 | C | Primary action | Always visible without scrolling at 1280×800 and above |
 | D | Clear | Secondary, and deliberately smaller |
+
+**Two navigation groups, not one row of buttons.** *Single review* and *Batch*
+are the work — an agent is in one or the other all day — and they are a tab
+strip. *Policy*, *Agents*, *Audit* and *Measurement* are reference: what governs
+the system, who may act, whether the record holds, and what it cost. They sit
+apart and quieter, because they are read occasionally and never in the middle of
+checking a label. Four equal buttons in a row made the choice look like four
+equal jobs.
+
+| Screen | Answers |
+|---|---|
+| **Policy** | Which rules are in force, from when, approved by whom |
+| **Agents** | Who and what may act here, and what each may do |
+| **Audit** | Has the history been altered, and does every verdict still follow from its reading |
+| **Measurement** | What it cost and how long it took, against the stated target |
+
+*Audit* is named for the act rather than the noun. "Record" could mean the audit
+trail, one submission's record, or the act of recording; a reader goes there to
+**check** something.
 
 **Why the typed panel is gone.** The agent was copying five values off the form
 in front of them into five boxes. That is a transcription step, and it was never
