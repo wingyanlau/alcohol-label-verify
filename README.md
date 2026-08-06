@@ -18,7 +18,7 @@ a cost control, not an identity check.
 
 ---
 
-## Try it in three minutes
+## Try it
 
 1. Open the deployment. **Single review** is the landing screen.
 2. Under *Demo examples*, download one — start with **Fully compliant**, then
@@ -40,7 +40,7 @@ with authored ground truth for what it should produce.
 
 ---
 
-## The governing principle
+## Governing principle
 
 > **The model reads. The rules compare. The human decides.**
 
@@ -56,15 +56,15 @@ applicant claimed — and `CT-10` asserts it structurally, not behaviourally.
 And it is **enforced, not asserted**. Every recorded act names an agent with a
 kind — `human`, `model`, `system` — and the code refuses acts a kind is not
 entitled to. A model cannot record a decision; neither a model nor a deployment
-can enact a rule. It found a real hole on its first run.
+can enact a rule.
 
 ---
 
-## Why the prototype does more than match
+## Beyond matching
 
-Most of an agent's work is matching, and matching is straightforward. The harder
-part of a compliance determination is defending the answer. A verdict on a real
-filing needs three properties:
+Most of an agent's work is matching, and matching is straightforward. Defending
+the answer is the harder part. A verdict on a real filing needs three
+properties:
 
 - **Explainable** — which rule was applied, which values it compared, and which
   regulation it cites.
@@ -73,20 +73,17 @@ filing needs three properties:
 - **Attributable** — a named person made the determination, and the record shows
   who.
 
-Without those, the tool is a demo. With them, it produces evidence a compliance
-division can rely on. That is what the hash-chained audit, the versioned
-reference data, the bitemporal policy archive, and the agent-kind boundary are
-for. The comparison itself takes under a millisecond; the rest of the system is
-what makes the comparison usable.
+The hash-chained audit, the versioned reference data, the bitemporal policy
+archive and the agent-kind boundary are what provide them. The comparison itself
+takes under a millisecond; the rest of the system is what makes the comparison
+usable.
 
-**The scope was a deliberate choice.** A prototype did not need this much depth,
-and building it took longer than a minimal version would have (documented in
-[docs/exploration-session.md](docs/exploration-session.md)). The goal was to
-answer a harder question than "can a model read a label," which it can. The real
-question is what it would take to trust one on a federal determination, and the
-answer lies in the parts that are usually skipped. What was left out is stated,
-not hidden: authentication, COLA integration, and a runtime rule editor are all
-deferred on purpose, each with its reasoning recorded.
+**On scope.** A prototype did not need this much depth, and building it took
+longer than a minimal version would have (documented in
+[docs/exploration-session.md](docs/exploration-session.md)). A model can read a
+label; the question worth spending the time on was what it would take to rely on
+one for a federal determination. Authentication, COLA integration and a runtime
+rule editor are deferred, each with its reasoning recorded.
 
 Accessibility follows the same principle. The core review screen is intentionally
 plain — one clear action, large type, high contrast — so the least confident
@@ -95,7 +92,7 @@ agent on a team that is half over 50 can use it. On a federal system, that is a
 
 ---
 
-## Architecture at a glance
+## Architecture
 
 ```
    agent ──▶ Worker ──▶ Browser Rendering ──▶ two blind reads ──▶ pure rules
@@ -127,7 +124,7 @@ Full context, container and sequence diagrams: **[docs/architecture.md](docs/arc
 
 ---
 
-## How the code is organized
+## Code layout
 
 The layout follows one rule: the verification logic is kept apart from the
 platform, so the rules can be tested offline and re-run years later.
@@ -167,7 +164,7 @@ nowhere else.
 
 ---
 
-## What is built, and what is not
+## What is built
 
 Twenty stories across four priorities — **[docs/personas-and-stories.md](docs/personas-and-stories.md)**
 has each one with its evidence.
@@ -186,7 +183,7 @@ matrix is in `test-plan.md` §12.
 
 ---
 
-## Cost and latency, measured
+## Cost and latency
 
 From a corpus run on 2026-08-05, reported by the system's own Measurement
 screen. Full analysis: **[docs/value-case.md](docs/value-case.md)**.
@@ -202,7 +199,7 @@ screen. Full analysis: **[docs/value-case.md](docs/value-case.md)**.
 **The slow reads are not the degraded scans.** Two record reads one token apart
 took 15.2 s and 3.9 s — the same work at four times the latency. That points to a
 metered free tier rather than the design, and 25 samples cannot settle a p95
-either way. The value case says as much, rather than declaring the target failed.
+either way.
 
 **What a person waits for is kept separate from what the pipeline does.** This is
 a structural choice. The checking will get longer over time, but the agent's wait
@@ -210,7 +207,7 @@ is only the time to load a prepared result, and new pipeline stages run on the
 asynchronous side. A predictable three seconds is more useful here than a time
 that is usually fast and occasionally fifteen.
 
-**These numbers matter on only one of the two paths.** The five-second
+**These numbers apply to one of the two paths.** The five-second
 requirement came from a vendor pilot that took 30–40 seconds *while an agent sat
 waiting*. The fix is not a faster model: batch checks a filing **as it arrives**,
 so an agent opens a worklist of prepared recommendations and never waits for
@@ -220,9 +217,9 @@ the assumptions below.
 
 ---
 
-## Assumptions that matter
+## Assumptions
 
-Five that would change the product if wrong. All nine, with impact:
+Six that would change the product if wrong. All ten, with impact:
 `docs/design.md` §4.2.
 
 | | If it is wrong |
@@ -236,7 +233,7 @@ Five that would change the product if wrong. All nine, with impact:
 
 ---
 
-## Limitations, stated
+## Limitations
 
 **No accuracy percentage is claimed.** The corpus is synthetic and was authored
 alongside the system, so a percentage from it measures agreement with my own
@@ -257,24 +254,22 @@ perception is stable. Both are in the product; neither proves the reading was
 between them is written down** — see
 [determinism-and-replay.md](docs/determinism-and-replay.md).
 
-**The clearest limitation is how much of the reasoning is recoverable.** What the
-system decided is fully recoverable; what it decided *by* is only partly so. The
+**How much of the reasoning is recoverable.** What the system decided is fully
+recoverable; what it decided *by* is only partly so. The
 rules are now readable on screen, but a finding pins its regulation by digest
 rather than quoting it, and the nine original rules carry no source quote (the six
 enacted on 5 August do). Producing the passage a rule rests on, with the
 provisions that qualify it, is a retrieval problem: the kind of task a model is
-good at, and the one this system has deliberately not used a model for. It would
-assist *review of the rules* rather than decide compliance, so it stays on the
-right side of the principle. That is the direction this prototype points toward
-and deliberately did not take.
+good at, and the one this system does not use a model for. It would assist
+*review of the rules* rather than decide compliance, so it stays on the right
+side of the principle. It is not built.
 
 ---
 
-## The path to production
+## Path to production
 
-The prototype is built so that moving to production means replacing components at
-defined seams, rather than rewriting the system. The parts that are hardest to
-get right are already in place. What would change:
+Moving to production means replacing components at defined seams rather than
+rewriting the system. What would change:
 
 **Inference behind the firewall.** TTB's network blocks outbound connections to
 ML endpoints, which is what broke much of the last vendor pilot. This prototype
@@ -358,7 +353,7 @@ pipeline)
 
 ---
 
-## The documents
+## Documents
 
 Worked before the code, and the specification rather than background.
 
