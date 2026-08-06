@@ -7,7 +7,10 @@ Prototype that checks alcohol label artwork against its TTB application and
 verifies the statutory health warning. It produces evidence for a compliance
 agent — it does not approve or reject.
 
-**Live:** https://alcohol-label-verify.wing-lawrence.workers.dev
+**Deployed to staging only.** The address is not published here: this repository
+is public, and checking one label calls a metered inference API, so an
+advertised address is an unbounded bill. The credential travels with the link,
+to whoever is meant to have it.
 
 ## Required Reading
 

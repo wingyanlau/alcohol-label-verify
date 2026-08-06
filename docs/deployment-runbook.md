@@ -7,9 +7,9 @@ first and a container later.*
 | Field | Value |
 |---|---|
 | Status | Current as of 2026-08-03 |
-| Environments | `staging` and `production`, with disjoint resources |
-| Staging | https://alcohol-label-verify-staging.wing-lawrence.workers.dev — every merge to `main` |
-| Production | https://alcohol-label-verify.wing-lawrence.workers.dev — a push to `prod` |
+| Environments | `staging` only. `production` is configured but **not deployed** |
+| Staging | Deployed on every merge to `main`. Address not published — this repository is public and inference is metered |
+| Production | **Deleted 2026-08-06.** It was serving without a gate — no secrets were set, and the gate opens when unconfigured (D49) — while its address sat in a public file. It held no data: the D1 was never migrated. `env.production` and `deploy-production.yml` remain, so a push to `prod` would recreate it; **set the gate secrets before that happens**, or it returns open |
 
 ---
 

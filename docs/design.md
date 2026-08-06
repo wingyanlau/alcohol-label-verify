@@ -1967,7 +1967,7 @@ artefact rather than pursued, since the container runs there unmodified.
 
 | | |
 |---|---|
-| URL | **https://alcohol-label-verify.wing-lawrence.workers.dev** |
+| URL | Not published — this repository is public, and an advertised address that calls a metered inference API is an unbounded bill (D49). Staging only; the credential travels with the link |
 | Platform | Cloudflare Workers (D31) |
 | Content staging | R2 — `alcohol-label-verify-staging` |
 | Durable record | D1 — `alcohol-label-verify` (`ac8a691b…`), schema v1 |

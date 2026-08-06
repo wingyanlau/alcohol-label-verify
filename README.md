@@ -113,6 +113,18 @@ rules can be tested without a network and re-run years later.
 
 Full context, container and sequence diagrams: **[docs/architecture.md](docs/architecture.md)**
 
+### Built with
+
+| | | Why this one |
+|---|---|---|
+| Language | TypeScript 5.9, strict | `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` — the second is what keeps "not asked" and "asked, nothing there" from collapsing into one value in the record |
+| Runtime | Cloudflare Workers, Node 22 for tooling | Deploys in seconds and the free tier carries a prototype; §15 states what changes for a government tenancy |
+| Platform | D1 · R2 · Queues · Durable Objects · Browser Rendering | One vendor, and `deployment-path.md` §6 records what each would cost to leave |
+| Inference | Two adapters behind one seam — Workers AI and Gemini | Neither vendor is in the domain. Swapping one is a constructor argument, which is how the corpus can be run under both as a controlled comparison |
+| Testing | Vitest, `@cloudflare/vitest-pool-workers` | The rules are pure, so most of the suite needs no account and no network |
+| Linting | Biome 2 | One tool for format and lint; `quality-check` gates every commit |
+| Corpus | Python + headless Chrome, build-time only | 26 submissions with authored ground truth, including adversarial ones. Not a runtime dependency |
+
 ---
 
 ## How the code is organized
@@ -314,7 +326,7 @@ and Browser Rendering.
 
 ```bash
 npm ci
-npm run quality-check     # lint, typecheck, 819 tests with coverage
+npm run quality-check     # lint, typecheck, ~940 tests with coverage
 npm run dev               # local worker
 ```
 
@@ -367,7 +379,7 @@ Worked before the code, and the specification rather than background.
 
 | | |
 |---|---|
-| [design.md](docs/design.md) | requirements, verification logic, provenance, 52 logged decisions |
+| [design.md](docs/design.md) | requirements, verification logic, provenance, 51 logged decisions |
 | [test-plan.md](docs/test-plan.md) | §3 is the executable spec: ~130 cases with inputs and expected outcomes |
 | [ui-design.md](docs/ui-design.md) | screens, states, every string |
 | [batch-backend-design.md](docs/batch-backend-design.md) | job orchestration and platform mapping |
