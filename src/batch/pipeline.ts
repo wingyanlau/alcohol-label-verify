@@ -358,9 +358,17 @@ export async function processItem(
       // date from the application.
       {
         provider,
-        // The scale behind the §16.22 figures (D53) — the same value the
-        // rasteriser was given, so a millimetre means what it says.
-        rasterDpi: Number(env.RASTER_DPI),
+        // The scale behind the §16.22 figures (D53), taken from the pixels
+        // that were actually measured rather than from configuration.
+        //
+        // This path has two sources of pixels — a live rasterisation at
+        // `env.RASTER_DPI`, and the shipped corpus rasters at
+        // `LABEL_RASTER.dpi`. They agree at 300 today, and reading the
+        // configured value would be right until the day they did not: the
+        // corpus regenerated at a different resolution would yield millimetres
+        // that are confidently, invisibly wrong. The measurement travels with
+        // the thing measured, as the legibility score travels with its floor.
+        rasterDpi: normalised.label.dpi,
         now: () => Date.now(),
         submittedOn: filedOn,
         asOf: judgedAt,
