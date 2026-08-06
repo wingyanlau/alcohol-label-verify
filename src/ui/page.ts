@@ -163,14 +163,22 @@ export const PAGE_HTML = `<!doctype html>
   .finding .rule { color: var(--muted); font-size: 14px; margin-top: 4px;
                    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .advisory { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 14px; }
-  .advisory-item { display: flex; gap: 10px; align-items: baseline; padding: 5px 0; }
+  /* The marker is drawn rather than inherited: a flex row is not a list-item,
+     so the browser's own bullet disappears the moment the row is laid out. */
+  .advisory-list { list-style: none; margin: 0; padding: 0; }
+  .advisory-item { position: relative; padding: 6px 0 6px 20px; }
+  .advisory-item::before { content: "•"; position: absolute; left: 4px; top: 6px;
+    color: var(--muted); }
+  .advisory-line { display: flex; gap: 10px; align-items: baseline; }
+  .advisory .req { flex: 1 1 auto; }
   /* Pushed to the trailing edge so the checks read as a column, not a ragged list. */
   .advisory .cite { color: var(--muted); font-size: 14px; margin-left: auto;
     padding-left: 12px; white-space: nowrap; }
   /* Indented under its check, and never styled as a verdict — it is evidence
      the agent weighs, not a finding the system reached (D53). */
-  .advisory .measured { color: var(--muted); font-size: 14px;
-    margin: -2px 0 6px 28px; }
+  /* Aligned with the requirement it sits under, not indented again — the list
+     item already carries the indent that separates it from the bullet. */
+  .advisory .measured { color: var(--muted); font-size: 14px; margin: 3px 0 0 0; }
   .advisory .measured.over { color: var(--warn); }
   .banner { background: #fdf6e3; border: 1px solid #ecdca6; border-radius: 6px; padding: 10px 14px; font-size: 15px; color: var(--warn); margin-bottom: 16px; }
   .err { color: var(--bad); margin-top: 12px; }
@@ -1163,20 +1171,29 @@ export const PAGE_HTML = `<!doctype html>
       // agent's judgement is captured by the decision itself (D54).
       var adv = el('div', 'advisory')
       adv.appendChild(el('p', 'note', 'Formatting requirements, for reference. TTB does not routinely review type size, characters per inch or contrasting background — that duty sits with the applicant:'))
+      // A real list, for the reason §13 gives: a screen reader announces six
+      // items, and a sighted reader gets a marker per requirement. The
+      // checkbox used to supply that anchor, and removing it left six
+      // sentences running together as a paragraph.
+      var list = el('ul', 'advisory-list')
       w.advisory.forEach(function (a) {
-        var row = el('div', 'advisory-item')
-        row.appendChild(document.createTextNode(a.text))
-        if (a.citation) { var c = el('span', 'cite'); c.textContent = a.citation; row.appendChild(c) }
-        adv.appendChild(row)
-        // The figure sits under the requirement it informs. This is the part
-        // worth having: it replaces an agent squinting at artwork with a
-        // number, and says it is an estimate.
+        var item = el('li', 'advisory-item')
+        var line = el('div', 'advisory-line')
+        line.appendChild(el('span', 'req', a.text))
+        if (a.citation) line.appendChild(el('span', 'cite', a.citation))
+        item.appendChild(line)
+        // The figure sits under the requirement it informs, inside the same
+        // item, so it reads as belonging to that line rather than to the list.
+        // This is the part worth having: it replaces an agent squinting at
+        // artwork with a number, and says it is an estimate.
         if (a.measurement) {
-          var m = el('div', 'measured' + (a.measurement.meets === false ? ' over' : ''))
-          m.textContent = a.measurement.text
-          adv.appendChild(m)
+          item.appendChild(
+            el('div', 'measured' + (a.measurement.meets === false ? ' over' : ''), a.measurement.text),
+          )
         }
+        list.appendChild(item)
       })
+      adv.appendChild(list)
       box.appendChild(adv)
     }
     return box

@@ -197,6 +197,10 @@ describe('the formatting requirements are reference, not a form (D54)', () => {
     // figure are the reason the block exists at all.
     expect(PAGE_HTML).toContain('Formatting requirements, for reference')
     expect(PAGE_HTML).toContain('advisory-item')
+    // A real list, so the requirements scan as six items rather than as one
+    // paragraph — the anchor the checkbox used to supply.
+    expect(PAGE_HTML).toContain("el('ul', 'advisory-list')")
+    expect(PAGE_HTML).toContain("el('li', 'advisory-item')")
     expect(PAGE_HTML).toContain('measured')
   })
 })
