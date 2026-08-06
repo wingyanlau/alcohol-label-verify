@@ -7,9 +7,9 @@ first and a container later.*
 | Field | Value |
 |---|---|
 | Status | Current as of 2026-08-03 |
-| Environments | `staging` only. `production` is configured but **not deployed** |
+| Environments | `staging` only. `production` has been removed — worker, workflow and `env.production` config |
 | Staging | Deployed on every merge to `main`. Address not published — this repository is public and inference is metered |
-| Production | **Deleted 2026-08-06.** It was serving without a gate — no secrets were set, and the gate opens when unconfigured (D49) — while its address sat in a public file. It held no data: the D1 was never migrated. `env.production` and `deploy-production.yml` remain, so a push to `prod` would recreate it; **set the gate secrets before that happens**, or it returns open |
+| Production | **Deleted 2026-08-06.** It was serving without a gate — no secrets were set, and the gate opens when unconfigured (D49) — while its address sat in a public file. It held no data: the D1 was never migrated. `env.production` and `deploy-production.yml` were removed with it, so nothing can recreate it by accident. Re-creating one means re-adding both — and **setting the gate secrets before the first deploy**, or it returns open |
 
 ---
 
@@ -22,8 +22,13 @@ commands in §4 and nothing else.*
 |---|---|---|---|
 | Cloudflare account | `Wing.lawrence@gmail.com's Account` | see `wrangler whoami` — deliberately not committed | pre-existing |
 
-**Production** (`--env production`) — the resources created during setup, now
-addressed by name rather than by default:
+**Production — deleted 2026-08-06.** The worker is gone, and with it
+`deploy-production.yml` and `env.production`, so nothing can redeploy it. The
+table below is kept as the record of what was created, and because **three
+resources outlived the worker and are now orphaned**: the D1, both queues and
+the R2 bucket still exist on the account. They are empty or unused — the D1 was
+never migrated — and are left rather than deleted so this history stays
+checkable. Delete them when the account is next tidied:
 
 | Resource | Name | Identifier | Created |
 |---|---|---|---|
@@ -68,8 +73,7 @@ npx wrangler whoami
 npx wrangler r2 bucket list
 npx wrangler d1 list
 npx wrangler queues list
-npx wrangler secret list --env staging     # expect: MODEL_API_KEY
-npx wrangler secret list --env production  # expect: empty
+npx wrangler secret list --env staging     # expect: MODEL_API_KEY, POC_USER_*
 npx wrangler deployments list
 ```
 
@@ -159,8 +163,8 @@ dashboard.
 | Setting | Value | Why it is what it is |
 |---|---|---|
 | `compatibility_date` | `2026-08-01` | Pinned. A floating runtime date changes behaviour beneath a recorded audit trail — the same reasoning as D29 |
-| `MODEL_PROVIDER` | `gemini` (staging), `workers-ai` (production) | Deliberately different. Both adapters use the same instruction and prompt version, so the two environments differ in one variable — who is reading — which is what makes B-Q4 measurable |
-| `MODEL_ID` | `gemini-2.5-flash-002` (staging), `@cf/meta/llama-4-scout-17b-16e-instruct` (production) | Both pinned. The service **refuses to start** on a floating alias, and what floats differs by vendor: Cloudflare by `-latest` suffix, Google by omitting the version (D29) |
+| `MODEL_PROVIDER` | `gemini` | Staging is the only environment. It read `workers-ai` in production, and the pair was what made B-Q4 measurable — one instruction, one prompt version, two readers. Removing production removed that comparison; running the corpus under each provider is now a deliberate act rather than a by-product of deploying |
+| `MODEL_ID` | `gemini-2.5-flash-002` | Pinned. The service **refuses to start** on a floating alias, and what floats differs by vendor: Cloudflare by `-latest` suffix, Google by omitting the version (D29) |
 | `RASTER_DPI` | `300` | Set by the smallest text under verification. Recorded per extraction, since `UNREADABLE` may be an artefact of resolution |
 | `EXTRACT_CONCURRENCY` | `5` | Governed by the provider's rate limit, not platform capacity |
 | `MAX_BATCH_ITEMS` | `300` | Peak-season filing size, and a spend bound |

@@ -166,7 +166,7 @@ npm run dev              # Local worker
 npm test                 # Full suite
 npm run quality-check    # Lint + typecheck + tests with coverage
 npm run lint:fix         # Auto-fix
-npm run deploy:staging   # Or :production — there is no bare `deploy`
+npm run deploy:staging   # Staging is the only environment; there is no bare `deploy`
 npm run migrate:staging  # D1, --remote. Runs before a deploy, never after
 npm run tail:staging     # Live logs
 npm run corpus           # Rebuild the 26 test submissions
@@ -252,11 +252,14 @@ test-plan §12: every Must-priority requirement maps to a passing test.
 
 ## Deployment
 
-- **Staging is `main`**: every merge migrates, deploys and health-checks
-  `alcohol-label-verify-staging`. Production is a push to `prod`
-- Environments are disjoint — separate worker, D1, R2 bucket and queues — so a
-  staging run can never write to the production record
-- Manual fallback: `npm run migrate:<env> && npm run deploy:<env>`, in that order
+- **Staging is `main`**, and the only environment: every merge migrates,
+  deploys and health-checks `alcohol-label-verify-staging`
+- **There is no production.** It was deleted along with its workflow and config
+  once this repository went public: it served without a gate, because no
+  secrets were set on it and the gate opens when unconfigured (D49), while its
+  address sat in this file. Re-creating one means re-adding `env.production`
+  and a workflow, and **setting the gate secrets before the first deploy**
+- Manual fallback: `npm run migrate:staging && npm run deploy:staging`, in that order
 - Health: `/health`, `/health/inference`, `/health/coordinator`,
   `/health/raster`. CI asserts on these rather than printing them, including
   `bytes > 0` on the raster probe; `modelApiKey: false` is correct under
