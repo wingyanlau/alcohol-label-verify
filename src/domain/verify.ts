@@ -24,10 +24,13 @@ import type { PolicyFinding } from './evaluate.js'
 import type { ExtractionProvenance, ExtractionProvider } from './extraction.js'
 import type { PolicyBinding } from './findings.js'
 import { assessPolicy } from './findings.js'
+import { parseQuantity } from './parse.js'
 import type { PolicyRule, PolicySet } from './policy.js'
 import type { WarningReference } from './reference.js'
 import type { ApplicationData, Extraction, FieldVerdict, Outcome, WarningVerdict } from './types.js'
 import { FIELDS } from './types.js'
+import type { TypographyMeasurement } from './typography.js'
+import { measureWarningTypography } from './typography.js'
 import { verifyWarning } from './warning.js'
 
 export interface RegionImage {
@@ -88,6 +91,8 @@ export interface VerifyResult {
   readonly appliedRules: readonly PolicyRule[]
   readonly application: ApplicationData
   readonly labelExtraction: Extraction
+  /** The §16.22 figures, as evidence for the advisory checks (D53). */
+  readonly typography: TypographyMeasurement
   readonly provenance: {
     readonly label: ExtractionProvenance
     readonly record: ExtractionProvenance | null
@@ -99,6 +104,15 @@ export interface VerifyResult {
 export interface VerifyOptions {
   readonly provider: ExtractionProvider
   readonly warningRef?: WarningReference
+  /**
+   * What the images were rendered at, for the §16.22 measurements (D53).
+   *
+   * Supplied by the caller for the same reason as the clock: it is deployment
+   * configuration, and a default here would produce millimetres from a DPI
+   * nobody chose. Absent means the measurements are withheld — which is a
+   * smaller loss than a plausible figure with an invented scale behind it.
+   */
+  readonly rasterDpi?: number | null
   /**
    * The clock. **Required**, and that is the point.
    *
@@ -201,6 +215,9 @@ export async function verifySubmission(
       mimeType: input.label.mimeType,
       fields: FIELDS,
       includeWarning: true,
+      // Measured where the warning is read, and only there. Pixels only — the
+      // scale is applied later, from data the model never sees (D53).
+      includeGeometry: true,
     }),
     needsRecordExtraction
       ? opts.provider.extract({
@@ -211,6 +228,8 @@ export async function verifySubmission(
           includeWarning: false,
           // Item 5 is asked for here and nowhere else (D25).
           includeProductType: true,
+          // Item 19 likewise: the artwork does not state its own reduction.
+          includeReduction: true,
         })
       : Promise.resolve(null),
   ])
@@ -253,6 +272,15 @@ export async function verifySubmission(
     appliedRules: assessment.applied,
     application,
     labelExtraction: labelResult.extraction,
+    // Computed here because this is the only place all four inputs meet: the
+    // label's geometry, the record's item 19, the container volume, and the
+    // DPI the caller rendered at. Advisory evidence, never a finding (D53).
+    typography: measureWarningTypography({
+      geometry: labelResult.extraction.warningGeometry ?? null,
+      dpi: opts.rasterDpi ?? null,
+      labelReduction: recordResult?.extraction.labelReduction ?? null,
+      netContentsMl: parseQuantity(application.netContents ?? '')?.milliliters ?? null,
+    }),
     provenance: {
       label: labelResult.provenance,
       record: recordResult?.provenance ?? null,

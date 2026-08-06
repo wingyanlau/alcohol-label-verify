@@ -358,6 +358,9 @@ export async function processItem(
       // date from the application.
       {
         provider,
+        // The scale behind the §16.22 figures (D53) — the same value the
+        // rasteriser was given, so a millimetre means what it says.
+        rasterDpi: Number(env.RASTER_DPI),
         now: () => Date.now(),
         submittedOn: filedOn,
         asOf: judgedAt,

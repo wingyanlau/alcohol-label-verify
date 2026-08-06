@@ -38,6 +38,7 @@ import { configuredLegibilityFloor } from '../domain/legibility.js'
 import { referenceIsUnverified, warningReference } from '../domain/reference.js'
 import type { ApplicationData, FieldName } from '../domain/types.js'
 import { FIELD_LABELS, FIELDS } from '../domain/types.js'
+import { advisoryMeasurement } from '../domain/typography.js'
 import type { VerifyResult } from '../domain/verify.js'
 import { verifySubmission } from '../domain/verify.js'
 import { ruleSetAsAt } from '../policy/archive.js'
@@ -165,7 +166,20 @@ export interface ReviewResult {
       observed: string | null
       deviation: string | null
     }>
-    readonly advisory: ReadonlyArray<{ id: string; text: string; citation: string }>
+    /**
+     * The formatting rules the agent confirms, each with any figure the
+     * pipeline could produce for it (D53).
+     *
+     * `measurement` is null wherever nothing was measured — no geometry came
+     * back, no scale was configured, or the check is one no instrument informs.
+     * Null is the ordinary state, not an error.
+     */
+    readonly advisory: ReadonlyArray<{
+      id: string
+      text: string
+      citation: string
+      measurement: { text: string; meets: boolean | null } | null
+    }>
     readonly referenceUnverified: boolean
   }
   readonly labelImageUrl: string
@@ -198,7 +212,7 @@ export async function reviewOne(
     /** Where the uploaded PDF can be fetched, when the caller kept one. */
     sourceUrl?: string | undefined
     sourceName: string
-    env: { LEGIBILITY_FLOOR?: string }
+    env: { LEGIBILITY_FLOOR?: string; RASTER_DPI?: string }
     /**
      * The archive, when one is reachable. Absent means fall back to the
      * reviewed file — which is what a test does, and what this path did before
@@ -239,6 +253,9 @@ export async function reviewOne(
     // label in front of them, not working a backlog.
     {
       provider: opts.provider,
+      // Absent in a test, which withholds the figures rather than inventing a
+      // scale for them (D53).
+      rasterDpi: opts.env.RASTER_DPI === undefined ? null : Number(opts.env.RASTER_DPI),
       now: () => Date.now(),
       submittedOn: filedOn,
       asOf: judgedAt,
@@ -311,7 +328,15 @@ export async function reviewOne(
           deviation: s?.deviation ?? null,
         }
       }),
-      advisory: ref.advisoryChecks.map((a) => ({ id: a.id, text: a.text, citation: a.citation })),
+      advisory: ref.advisoryChecks.map((a) => ({
+        id: a.id,
+        text: a.text,
+        citation: a.citation,
+        // Attached to the check it informs, not shown as a finding. The agent
+        // still confirms — TTB does not routinely review these, so an
+        // automatic failure would be stricter than the agency itself (D53).
+        measurement: advisoryMeasurement(a.id, result.typography),
+      })),
       referenceUnverified: referenceIsUnverified(ref),
     },
     labelImageUrl: opts.labelImageUrl,

@@ -63,6 +63,18 @@ function result(overrides: Partial<VerifyResult> = {}): VerifyResult {
       alcoholContent: '45%',
       netContents: null,
     },
+    // Nothing measured: this fixture carries no warning geometry, which is the
+    // state every verdict recorded before D53 is in.
+    typography: {
+      typeSizeMm: null,
+      minimumTypeSizeMm: null,
+      typeSizeMeets: null,
+      charactersPerInch: null,
+      maxCharactersPerInch: null,
+      densityMeets: null,
+      reductionPercent: 100,
+      estimated: true,
+    },
     labelExtraction: {
       fields: {
         brandName: { raw: 'OLD TOM DISTILLERY', confidence: 1, unreadable: false },

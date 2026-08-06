@@ -340,3 +340,74 @@ describe('CT-12 — the product type is classified, never guessed', () => {
     expect(label.productType).toBeUndefined()
   })
 })
+
+describe('CT-13 — item 19, the declared label reduction (D53)', () => {
+  const withReduction = (labelReduction: unknown) => ({ ...wellFormed, labelReduction })
+  const parse = (body: unknown) =>
+    parseExtractionResponse(body, { includeWarning: false, includeReduction: true })
+
+  it('CT-13a — the percentage is read as printed, not interpreted', () => {
+    // The model transcribes; `parseReductionPercent` interprets. Splitting
+    // them keeps the model doing perception and the arithmetic testable.
+    expect(parse(withReduction('50%')).labelReduction).toBe('50%')
+    expect(parse(withReduction('reduced to 75 percent')).labelReduction).toBe(
+      'reduced to 75 percent',
+    )
+  })
+
+  it('CT-13b — nothing stated at item 19 is null, meaning actual size', () => {
+    expect(parse(withReduction(null)).labelReduction).toBeNull()
+    expect(parse(wellFormed).labelReduction).toBeNull()
+  })
+
+  it('CT-13c — a non-string is refused rather than coerced', () => {
+    // A number here would be ambiguous in the one way that matters: 50 could
+    // be the percentage or the reduction, and the two are inverses.
+    expect(() => parse(withReduction(50))).toThrow(ExtractionContractError)
+  })
+
+  it('CT-13d — the template echoed back is not a reading (CT-11)', () => {
+    expect(() => parse(withReduction('<percentage, or null>'))).toThrow(ExtractionContractError)
+  })
+
+  it('CT-13e — not asked for means absent', () => {
+    expect(parseExtractionResponse(wellFormed).labelReduction).toBeUndefined()
+  })
+})
+
+describe('CT-14 — warning geometry, for the §16.22 measurements (D53)', () => {
+  const withGeometry = (warningGeometry: unknown) => ({ ...wellFormed, warningGeometry })
+  const parse = (body: unknown) =>
+    parseExtractionResponse(body, { includeWarning: true, includeGeometry: true })
+
+  const sound = { capHeightPx: 21, longestLineCharacters: 62, longestLineWidthPx: 540 }
+
+  it('CT-14a — the three measurements are carried through', () => {
+    expect(parse(withGeometry(sound)).warningGeometry).toEqual(sound)
+  })
+
+  it('CT-14b — a measurement that cannot be a length is dropped, not zeroed', () => {
+    // Zero would flow into the arithmetic and produce 0.00 mm, which reads as
+    // a measured failure rather than an absent measurement.
+    const g = parse(withGeometry({ ...sound, capHeightPx: 0 })).warningGeometry
+    expect(g?.capHeightPx).toBeNull()
+    expect(g?.longestLineCharacters).toBe(62)
+  })
+
+  it('CT-14c — a negative or non-numeric measurement is dropped', () => {
+    for (const bad of [-4, 'twenty', null, {}]) {
+      const g = parse(withGeometry({ ...sound, capHeightPx: bad })).warningGeometry
+      expect(g?.capHeightPx, String(bad)).toBeNull()
+    }
+  })
+
+  it('CT-14d — a missing or malformed block is null, not a partial reading', () => {
+    expect(parse(withGeometry(null)).warningGeometry).toBeNull()
+    expect(parse(withGeometry('21px')).warningGeometry).toBeNull()
+    expect(parse(wellFormed).warningGeometry).toBeNull()
+  })
+
+  it('CT-14e — not asked for means absent', () => {
+    expect(parseExtractionResponse(wellFormed).warningGeometry).toBeUndefined()
+  })
+})

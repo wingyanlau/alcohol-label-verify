@@ -18,6 +18,7 @@ import { approverFor, citationFor } from '../domain/findings.js'
 import { referenceIsUnverified, warningReference } from '../domain/reference.js'
 import type { FieldName, Outcome } from '../domain/types.js'
 import { FIELD_LABELS, FIELDS } from '../domain/types.js'
+import { advisoryMeasurement, parseTypography } from '../domain/typography.js'
 import { isDecision, isDisagreement } from './decision.js'
 import { referenceCodeFor } from './reference-code.js'
 import { productTypeFrom } from './replay-load.js'
@@ -150,6 +151,8 @@ interface VerdictRecord {
   selected_rule_ids: string | null
   submitted_on: string | null
   selection_inputs: string | null
+  /** The §16.22 figures as shown when this verdict was written (D53). */
+  typography: string | null
 }
 interface FindingRecord {
   rule_id: string
@@ -228,7 +231,7 @@ export async function loadSubmissionDetail(
   const verdict = await db
     .prepare(
       `SELECT id, outcome, policy_set_version, selected_rule_ids, submitted_on,
-              selection_inputs
+              selection_inputs, typography
          FROM verdict
         WHERE submission_id = ? AND superseded_by IS NULL
         ORDER BY created_at DESC LIMIT 1`,
@@ -237,7 +240,16 @@ export async function loadSubmissionDetail(
     .first<VerdictRecord>()
 
   const ref = warningReference()
-  const advisory = ref.advisoryChecks.map((a) => ({ id: a.id, text: a.text, citation: a.citation }))
+  // The figures the verdict was written with, replayed onto the checks they
+  // inform. Parsed defensively: a row from before this column existed, or one
+  // whose JSON is unreadable, yields no figures rather than a broken screen.
+  const measured = parseTypography(verdict?.typography ?? null)
+  const advisory = ref.advisoryChecks.map((a) => ({
+    id: a.id,
+    text: a.text,
+    citation: a.citation,
+    measurement: measured === null ? null : advisoryMeasurement(a.id, measured),
+  }))
   const referenceUnverified = referenceIsUnverified(ref)
 
   if (verdict === null) {

@@ -111,10 +111,17 @@ describe('UT-W — statutory text', () => {
 })
 
 describe('FR-6a — advisory formatting checks', () => {
-  it('surfaces the rules that cannot be verified from an image', () => {
+  it('surfaces the formatting rules the system does not decide, each citing its own section', () => {
     const v = verifyWarning(REQUIRED)
     expect(v.advisory.length).toBeGreaterThan(0)
-    for (const check of v.advisory) expect(check.citation).toContain('16.22')
+    // Part 16 throughout — but not all of it is 16.22, which this test used to
+    // assert. Separateness is stated in 16.21 beside the statement itself, so
+    // citing it to 16.22 sent an agent to a section not containing the
+    // requirement (D53). The citation is the point of an advisory check: it is
+    // the only thing that makes the question answerable.
+    for (const check of v.advisory) expect(check.citation).toMatch(/^27 CFR 16\.(21|22)/)
+    expect(v.advisory.find((c) => c.id === 'separateness')?.citation).toBe('27 CFR 16.21')
+    expect(v.advisory.find((c) => c.id === 'header_bold')?.citation).toContain('16.22(a)(2)')
   })
 
   it('includes the non-bold-remainder rule no stakeholder mentioned (§3.6)', () => {

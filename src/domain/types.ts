@@ -196,4 +196,49 @@ export interface Extraction {
    * finding downstream would look perfectly ordinary.
    */
   readonly productType?: string | null
+  /**
+   * Item 19, the declared label reduction — as printed, not interpreted.
+   *
+   * Applicants must shrink oversized labels to fit the affix box and state the
+   * percentage here. Any millimetre measured off the artwork is a measurement
+   * of the *form*, and without this it under-measures every reduced label —
+   * producing a false discrepancy against a compliant one, which is the
+   * direction that costs an agent's trust (N4).
+   *
+   * Carried as the printed string so the model transcribes and
+   * `parseReductionPercent` interprets. The split keeps perception in the model
+   * and the arithmetic somewhere it can be unit-tested.
+   *
+   * Record region only. `null` means nothing was stated, which means actual
+   * size; `undefined` means it was not asked for.
+   */
+  readonly labelReduction?: string | null
+  /**
+   * Where the warning statement sits, in the pixels of the image that was read.
+   *
+   * Label region only. Enables the §16.22(b) and (a)(4) measurements (D53) —
+   * observation, never judgement: the model is told nothing about millimetres
+   * or thresholds, so it cannot anchor on the answer (D4).
+   */
+  readonly warningGeometry?: WarningGeometry | null
+}
+
+/**
+ * The measurements §16.22 needs, in the coordinate space of the read image.
+ *
+ * Pixels rather than millimetres, deliberately. The conversion needs the raster
+ * DPI and the item 19 reduction, and neither is knowable to a model looking at
+ * an image — asking for millimetres would be asking it to invent a scale.
+ *
+ * Each field is independently nullable because a model may locate the block and
+ * still be unable to count characters. A partial geometry yields a partial set
+ * of figures, which is better than discarding the one that was measurable.
+ */
+export interface WarningGeometry {
+  /** Height of a capital letter in the warning — the "type size" of 16.22(b). */
+  readonly capHeightPx: number | null
+  /** Characters on the densest line, for 16.22(a)(4). */
+  readonly longestLineCharacters: number | null
+  /** The width that line occupies. */
+  readonly longestLineWidthPx: number | null
 }

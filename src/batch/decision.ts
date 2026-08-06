@@ -53,6 +53,14 @@ export interface DecisionRecord {
   /** What the system recommended, as it stood when they decided. */
   readonly recommendedOutcome: Outcome
   readonly note: string | null
+  /**
+   * The §16.22 checks the agent confirmed by eye (D53).
+   *
+   * Null means the question was never put — a decision from before the column
+   * existed. An empty array means it was put and nothing was confirmed, which
+   * is permitted and is exactly the fact an audit wants to see.
+   */
+  readonly advisoryConfirmed: readonly string[] | null
 }
 
 /** The decision differs from what the system suggested. */
@@ -75,6 +83,38 @@ export class DecisionRejected extends Error {
     super(message)
     this.name = 'DecisionRejected'
   }
+}
+
+/**
+ * Which advisory checks the agent confirmed — narrowed, never enforced (D53).
+ *
+ * The §16.22 formatting rules are the agent's to confirm by eye, and this
+ * records what they ticked. It does not, and must not, gate the decision.
+ * Requiring five ticks per submission produces a reflex within a shift, and a
+ * reflex manufactures a record of checks nobody performed — which is worse than
+ * an empty record, because it reads as evidence. Storing the answer instead
+ * turns the checklist into a measurement: an approval with nothing confirmed is
+ * visible to an audit, and a confirmation rate of four percent is a finding
+ * about the checklist rather than about the agent.
+ *
+ * An unrecognised id is dropped rather than refused. The realistic cause is a
+ * stale tab — a check renamed in the reference data while a screen was open —
+ * and refusing a determination over that would be the checklist blocking a
+ * decision, which is the one thing it may not do.
+ *
+ * Sorted and de-duplicated so two records of the same act compare equal.
+ */
+export function confirmedAdvisory(
+  ids: readonly string[] | null,
+  known: readonly string[],
+): string[] | null {
+  // Null is "was never asked" — a decision recorded before the column existed.
+  // An empty array is "confirmed nothing", which is a different fact.
+  if (ids === null) return null
+  const permitted = new Set(known)
+  return [...new Set(ids.filter((id): id is string => typeof id === 'string'))]
+    .filter((id) => permitted.has(id))
+    .sort()
 }
 
 /**
@@ -144,8 +184,8 @@ export async function recordDecision(db: D1Database, record: DecisionRecord): Pr
     .prepare(
       `INSERT INTO decision
          (id, submission_id, verdict_id, decided_by, decided_at, decision,
-          recommended_outcome, note)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          recommended_outcome, note, advisory_confirmed)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       record.id,
@@ -156,6 +196,7 @@ export async function recordDecision(db: D1Database, record: DecisionRecord): Pr
       record.decision,
       record.recommendedOutcome,
       record.note,
+      record.advisoryConfirmed === null ? null : JSON.stringify(record.advisoryConfirmed),
     )
     .run()
 

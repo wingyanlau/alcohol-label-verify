@@ -154,3 +154,27 @@ describe('finding the way back, and who this is for', () => {
     expect(PAGE_HTML).toMatch(/href="\/"[^>]*>\s*Demo guide|>Demo guide</)
   })
 })
+
+describe('the re-read belongs to the audit, and nowhere else', () => {
+  /*
+   * It was offered twice: beside the decision, and inside the audit. Beside the
+   * decision it asked the wrong person the wrong question — an agent judging a
+   * label against an application is not adjudicating whether the model is
+   * reproducible, and the panel said so itself, which is the tell. It also
+   * spent a metered call at the moment attention was scarcest.
+   */
+  it('offers it only from the audit', () => {
+    // Three occurrences, all one button: its label, and the two paths that
+    // restore that label once the call settles or fails. Counting them is not
+    // the point — every one carrying the audit's wording is, because the
+    // decision screen's button was the bare phrase.
+    const triggers = PAGE_HTML.match(/[A-Za-z ]*ask the model again/gi) ?? []
+    expect(triggers.length).toBeGreaterThan(0)
+    for (const t of triggers) expect(t.trim()).toBe('Also ask the model again')
+  })
+
+  it('does not offer one beside the decision', () => {
+    expect(PAGE_HTML).not.toContain('Check the reading')
+    expect(PAGE_HTML).not.toContain('renderReread(')
+  })
+})

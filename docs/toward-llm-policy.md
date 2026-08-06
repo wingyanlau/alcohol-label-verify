@@ -179,6 +179,92 @@ will learn the easy cases first, and those two are where a regression would hide
 
 ---
 
+## 4a. The perception gap is instrumentation, not model quality
+
+§4 argues most of the *reasoning* gap is context rather than weights. The same
+holds one layer down, and the §16.22 formatting checks (D53) are the worked
+example: five things the system could not establish, which looked like a case
+for a stronger vision model and mostly were not.
+
+**Pixels have no units.** A model asked whether the warning statement is at
+least 2 mm is being asked to do metrology by eye. A larger model does it more
+confidently and no more correctly, because the information is absent from its
+input — the millimetre lives in the PDF's coordinate space, not in the image.
+That is the shape of most perception gaps here: not "the model cannot tell",
+but "nobody gave it the scale".
+
+So the levers, cheapest and most reliable first:
+
+| Lever | What it is | Where it applies |
+|---|---|---|
+| **1. Deterministic instrumentation** | No model at all. Raster scale from PDF points, luminance sampling for contrast, counting characters per inch | Type size, characters per inch, contrast ratio |
+| **2. A skill the reader may call** | The model does not need to be better — it needs to **return geometry**. A bounding box for the warning block, per-line boxes, then arithmetic outside the model | Anything needing *where* and *how big* |
+| **3. A stronger vision model** | Genuinely better perception | **Bold only.** Relative stroke weight is perception, not measurement, and no instrument supplies it |
+
+The ordering matters because it is the reverse of the instinct. The expensive,
+least certain lever was the first one reached for, and it is the right answer to
+exactly one of the five.
+
+### What a "skill" means here, concretely
+
+The `ExtractionProvider` seam already abstracts vendors. A skill is a tool the
+reader may invoke whose **output is recorded as an observation like any other** —
+which keeps it inside the governing principle: the model reads, the rules
+compare. A geometry skill returns a box; the rules turn the box into millimetres
+and compare it against §16.22(b). The model never learns what the threshold is,
+so D4 survives.
+
+Two obligations come with it, and skipping either would undo the record:
+
+- **A tool is a reader, so it is fingerprinted like one.** D29 requires fully
+  qualified model identifiers because a floating alias silently changes what
+  produced a verdict. A tool version changes it identically. `provider:model:
+  promptVersion` becomes `provider:model:promptVersion:toolset`, or the archive
+  claims reproducibility it no longer has.
+- **A tool's output is evidence and must be as inspectable as a reading.** A
+  bounding box that is quietly wrong produces a confident millimetre figure that
+  is wrong in a way nothing catches — worse than the model declining, because it
+  arrives with the authority of arithmetic.
+
+### Two limits, and only one of them is permanent
+
+**What today's model cannot do is not a property of models.** Everything above
+describes one prototype reader — a single vision model, one prompt version, no
+tools. Stroke weight and spatial geometry are things a *different* model may
+well do well, and nothing here has measured whether one does. `B-Q4` already
+records that five vision models are available and that which reads best is a
+measurement not yet made; this section adds what to measure them on.
+
+So read the preceding tables as a **requirements list and a baseline**, not a
+verdict on the technology:
+
+| Capability required | Baseline today | Graded against |
+|---|---|---|
+| Report relative stroke weight (bold vs not) | Not attempted | Corpus item 8 — warning body set in bold, authored ground truth |
+| Return a bounding box for the warning block | Not attempted | Measured mm vs the label as authored |
+| Return per-line boxes and character counts | Not attempted | §16.22(a)(4) — 40 / 25 / 12 cpi |
+
+Each row is a candidate model's entrance exam. A model that clears them moves
+work off the checklist; one that does not is why the checklist exists. That is a
+measurement anyone can re-run, not a judgement about model quality.
+
+**What no model changes** is a different kind of limit, and it is worth keeping
+separate so a future capability is not mistaken for closing it:
+
+- **No threshold exists.** §16.22(a)(1) requires "readily legible" on a
+  "contrasting background" and names no number. A contrast ratio is computable
+  to three decimal places and still cannot say whether the regulation is met.
+  Precision is not authority, and a figure judged against an invented bar is the
+  failure this design refuses.
+- **It is not in the artwork.** §16.22(c) firmly-affixed is a property of the
+  physical article. No reader, however good, can see it.
+
+And per D53 the *determination* stays with a person on all of them regardless,
+because TTB states it does not routinely review them either. A better model
+changes what evidence the agent is handed — not who decides.
+
+---
+
 ## 5. Metrics that would justify release — and accuracy is not one
 
 A single accuracy number is the wrong instrument, because the two errors differ

@@ -23,7 +23,7 @@
  * defensively downstream would turn a broken provider into a compliance finding.
  */
 
-import type { Extraction, FieldName, ObservedField } from './types.js'
+import type { Extraction, FieldName, ObservedField, WarningGeometry } from './types.js'
 import { FIELDS, FORM_PRODUCT_TYPES } from './types.js'
 
 /** Which region of a submission an extraction covers. */
@@ -58,6 +58,23 @@ export interface ExtractionRequest {
    * anything outside that set is a bad read rather than an unusual product.
    */
   readonly includeProductType?: boolean
+  /**
+   * Whether to read item 19, the declared label reduction — record region only.
+   *
+   * Asked of the record and never of the label, for the same reason as item 5:
+   * the artwork does not state it, so asking there would invite the model to
+   * infer a scale from the picture and then measure against its own inference.
+   */
+  readonly includeReduction?: boolean
+  /**
+   * Whether to measure the warning statement's geometry — label region only.
+   *
+   * Pixels only, and the prompt says so explicitly. A model asked for
+   * millimetres would supply them, because it is disinclined to leave a slot
+   * empty (§8.3.2), and the figure would be a guess wearing a unit. The scale
+   * comes from `raster_dpi` and item 19, neither of which the model is shown.
+   */
+  readonly includeGeometry?: boolean
 }
 
 /** Provenance the provider must report back, for the audit record (§8.7.1). */
@@ -230,6 +247,8 @@ export function parseExtractionResponse(
     readonly fields?: readonly FieldName[]
     readonly includeWarning?: boolean
     readonly includeProductType?: boolean
+    readonly includeReduction?: boolean
+    readonly includeGeometry?: boolean
   } = {},
 ): Extraction {
   const wanted = opts.fields ?? FIELDS
@@ -260,8 +279,59 @@ export function parseExtractionResponse(
     }
   }
 
-  if (opts.includeProductType !== true) return { fields, warningStatement }
-  return { fields, warningStatement, productType: readProductType(value.productType) }
+  // Spread rather than assigned, so a key that was never asked for stays
+  // absent. `undefined` and `null` say different things here — "not asked" and
+  // "asked, nothing there" — and collapsing them would let a reading that never
+  // looked for item 19 be treated as one that found no reduction declared.
+  return {
+    fields,
+    warningStatement,
+    ...(opts.includeProductType === true
+      ? { productType: readProductType(value.productType) }
+      : {}),
+    ...(opts.includeReduction === true
+      ? { labelReduction: readLabelReduction(value.labelReduction) }
+      : {}),
+    ...(opts.includeGeometry === true
+      ? { warningGeometry: readWarningGeometry(value.warningGeometry) }
+      : {}),
+  }
+}
+
+/**
+ * Item 19, kept as printed.
+ *
+ * Refuses a number rather than accepting it, and the reason is specific: `50`
+ * could mean "reduced to 50%" or "reduced by 50%", which are inverses. A string
+ * carries the applicant's own words to `parseReductionPercent`, where the
+ * reading is testable; a bare number would silently pick one meaning.
+ */
+function readLabelReduction(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null
+  if (typeof raw !== 'string') {
+    throw new ExtractionContractError('labelReduction must be a string or null')
+  }
+  rejectTemplateEcho('labelReduction', raw)
+  return raw.trim() === '' ? null : raw
+}
+
+/**
+ * The warning's geometry, with each measurement standing or falling alone.
+ *
+ * A non-positive or non-numeric measurement becomes null rather than being
+ * carried through. Zero is the one worth naming: it would flow into the
+ * arithmetic and render as `0.00 mm`, which reads as a measured failure of the
+ * regulation rather than as a measurement that was never made.
+ */
+function readWarningGeometry(raw: unknown): WarningGeometry | null {
+  if (!isRecord(raw)) return null
+  const measure = (v: unknown): number | null =>
+    typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null
+  return {
+    capHeightPx: measure(raw.capHeightPx),
+    longestLineCharacters: measure(raw.longestLineCharacters),
+    longestLineWidthPx: measure(raw.longestLineWidthPx),
+  }
 }
 
 /**

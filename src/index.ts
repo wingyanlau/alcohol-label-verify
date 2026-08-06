@@ -22,6 +22,7 @@ import {
   agreementByOutcome,
   alreadyDecided,
   checkDecision,
+  confirmedAdvisory,
   DecisionRejected,
   decisionsForJob,
   isDisagreement,
@@ -1029,6 +1030,14 @@ export default {
         decision: input.decision,
         recommendedOutcome: detail.outcome,
         note,
+        // Recorded, never required (D53). A request that carries no list at
+        // all is one from a client that never asked — distinct from an agent
+        // who was asked and confirmed nothing, which is a permitted answer and
+        // the one an audit most wants to be able to see.
+        advisoryConfirmed: confirmedAdvisory(
+          Array.isArray(body.advisoryConfirmed) ? (body.advisoryConfirmed as string[]) : null,
+          warningReference().advisoryChecks.map((a) => a.id),
+        ),
       })
 
       // `agreed` is computed here rather than left to the page. The browser had
@@ -1734,7 +1743,7 @@ export default {
       if (!env.DB) return json({ error: 'unavailable', reason: 'no DB binding' }, 503)
       const { results } = await env.DB.prepare(
         `SELECT d.submission_id, d.verdict_id, d.decided_by, d.decided_at, d.decision,
-                d.recommended_outcome, s.reference_code, s.source_name,
+                d.recommended_outcome, d.advisory_confirmed, s.reference_code, s.source_name,
                 s.content_purged_at,
                 (SELECT COUNT(*) FROM audit_review a WHERE a.verdict_id = d.verdict_id) AS audits,
                 (SELECT a.result FROM audit_review a WHERE a.verdict_id = d.verdict_id
@@ -2008,7 +2017,13 @@ export default {
             mimeType: image.mimeType,
             fields: FIELDS,
             includeWarning: isLabel,
-            ...(isLabel ? {} : { includeProductType: true }),
+            // Mirrors the original read exactly, so an audit re-runs the same
+            // request rather than a simplified one. Neither key participates in
+            // the comparison — it covers fields and the warning only — so this
+            // cannot manufacture a difference; it keeps the two reads alike.
+            ...(isLabel
+              ? { includeGeometry: true }
+              : { includeProductType: true, includeReduction: true }),
           })
           comparisons.push(
             compareReadings(
@@ -2016,6 +2031,8 @@ export default {
               parseExtractionResponse(extractJson(row.raw_response), {
                 includeWarning: isLabel,
                 includeProductType: !isLabel,
+                includeReduction: !isLabel,
+                includeGeometry: isLabel,
               }),
               fresh.extraction,
               {

@@ -283,7 +283,9 @@ describe('a filed form, checked as one PDF', () => {
     const allowed = [
       'fields',
       'image',
+      'includeGeometry',
       'includeProductType',
+      'includeReduction',
       'includeWarning',
       'mimeType',
       'region',
@@ -291,10 +293,24 @@ describe('a filed form, checked as one PDF', () => {
     for (const request of asked) {
       expect(Object.keys(request).filter((k) => !allowed.includes(k))).toEqual([])
     }
+    // Every `include*` is a switch, never a value. This is the assertion that
+    // matters once the allowlist grows: a key added to carry a threshold — the
+    // minimum type size, the permitted density — would satisfy the list above
+    // and defeat the point of it. A boolean cannot anchor a reading (D53, D4).
+    for (const request of asked) {
+      for (const [key, value] of Object.entries(request)) {
+        if (key.startsWith('include')) expect(typeof value, key).toBe('boolean')
+      }
+    }
     // And item 5 is asked of the record alone: no label states "Distilled
     // spirits", so asking there would let the artwork choose the regulation.
     expect(asked.find((r) => r.region === 'label')?.includeProductType).not.toBe(true)
     expect(asked.find((r) => r.region === 'record')?.includeProductType).toBe(true)
+    // Item 19 the same, and geometry only where the warning is actually read.
+    expect(asked.find((r) => r.region === 'label')?.includeReduction).not.toBe(true)
+    expect(asked.find((r) => r.region === 'record')?.includeReduction).toBe(true)
+    expect(asked.find((r) => r.region === 'label')?.includeGeometry).toBe(true)
+    expect(asked.find((r) => r.region === 'record')?.includeGeometry).not.toBe(true)
   })
 
   it('compares the label against what the record said, not against typing', async () => {

@@ -18,7 +18,7 @@ import { FIELD_LABELS } from '../domain/types.js'
  * Recorded per extraction (§8.7.1): a verdict is only re-derivable if the
  * prompt that produced its reading is identifiable.
  */
-export const PROMPT_VERSION = 'label-extract@2'
+export const PROMPT_VERSION = 'label-extract@3'
 
 /**
  * The instruction.
@@ -48,8 +48,14 @@ export function digestedPromptText(): string {
     fields: ['brandName', 'classType', 'alcoholContent', 'netContents'],
   } as const
   return [
-    buildPrompt({ ...base, region: 'label', includeWarning: true }),
-    buildPrompt({ ...base, region: 'record', includeWarning: false, includeProductType: true }),
+    buildPrompt({ ...base, region: 'label', includeWarning: true, includeGeometry: true }),
+    buildPrompt({
+      ...base,
+      region: 'record',
+      includeWarning: false,
+      includeProductType: true,
+      includeReduction: true,
+    }),
   ].join('\n--- record ---\n')
 }
 
@@ -92,6 +98,19 @@ Return JSON of exactly this shape:
     request.includeProductType
       ? ',\n  "productType": "<Wine | Distilled spirits | Malt beverages, or null>"'
       : ''
+  }${
+    request.includeReduction
+      ? ',\n  "labelReduction": "<item 19 reduction, exactly as printed, or null>"'
+      : ''
+  }${
+    request.includeGeometry
+      ? `,
+  "warningGeometry": {
+    "capHeightPx": <height of one capital letter, in pixels, or null>,
+    "longestLineCharacters": <characters on the longest warning line, or null>,
+    "longestLineWidthPx": <width of that line, in pixels, or null>
+  }`
+      : ''
   }
 }
 
@@ -115,6 +134,24 @@ ${
   return null. Do not infer it from the brand, the class, the alcohol
   content or anything else — a guess here selects the wrong body of
   regulation, and every check that follows would look correct.\n`
+    : ''
+}${
+  request.includeReduction
+    ? `- LABEL REDUCTION. Item 19 states whether the labels were reduced to fit,
+  and by what percentage. Copy it exactly as printed. If item 19 is blank or
+  says nothing about reduction, return null — do not write "none" or "0".
+  Report the printed words; do not convert them to a number.\n`
+    : ''
+}${
+  request.includeGeometry
+    ? `- WARNING GEOMETRY. Measure, in the pixels of THIS image:
+  the height of one capital letter in the government warning, the number of
+  characters on its longest line, and the width that line occupies.
+  Report pixels only. Do not convert to millimetres, points or inches, and do
+  not state whether any size is adequate — you do not know what this image was
+  rendered at, so any such figure would be invented.
+  Return null for any of the three you cannot measure. A null is expected and
+  correct; an estimate is not.\n`
     : ''
 }- Return JSON only. No commentary.`
 }

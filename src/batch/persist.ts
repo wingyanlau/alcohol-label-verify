@@ -102,6 +102,14 @@ export interface VerdictRow {
   readonly extractMs: number
   readonly compareMs: number
   readonly totalMs: number
+  /**
+   * The §16.22 figures as they were shown, or null where none were taken.
+   *
+   * Snapshotted for the reason the applied rules are (D44): an audit needs
+   * what the deciding agent saw, and recomputing later would answer a
+   * different question with today's code.
+   */
+  readonly typography: string | null
 }
 
 export interface PolicyFindingRow {
@@ -267,6 +275,12 @@ export function buildPersistPlan(
       extractMs: Math.round(result.timings.extractMs),
       compareMs: Math.round(result.timings.compareMs),
       totalMs: Math.round(result.timings.totalMs),
+      // Null when nothing was measured, so a reader cannot mistake an absent
+      // measurement for one that found nothing wrong.
+      typography:
+        result.typography.typeSizeMm === null && result.typography.charactersPerInch === null
+          ? null
+          : JSON.stringify(result.typography),
     },
     fields: fieldRows(result.fields),
     warning: warningRows(result.warning),
@@ -348,8 +362,8 @@ export async function persistResult(
             policy_version, aggregation_version, extraction_ids, created_at,
             warning_legible, policy_set_version, selected_rule_ids,
             selection_inputs, submitted_on, valid_on, as_of,
-            extract_ms, compare_ms, total_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            extract_ms, compare_ms, total_ms, typography)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         plan.verdict.id,
@@ -371,6 +385,7 @@ export async function persistResult(
         plan.verdict.extractMs,
         plan.verdict.compareMs,
         plan.verdict.totalMs,
+        plan.verdict.typography,
       ),
   )
 

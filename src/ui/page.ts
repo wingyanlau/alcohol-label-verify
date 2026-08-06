@@ -164,6 +164,14 @@ export const PAGE_HTML = `<!doctype html>
                    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .advisory { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 14px; }
   .advisory label { display: flex; gap: 10px; align-items: flex-start; padding: 5px 0; }
+  /* Pushed to the trailing edge so the checks read as a column, not a ragged list. */
+  .advisory .cite { color: var(--muted); font-size: 14px; margin-left: auto;
+    padding-left: 12px; white-space: nowrap; }
+  /* Indented under its check, and never styled as a verdict — it is evidence
+     the agent weighs, not a finding the system reached (D53). */
+  .advisory .measured { color: var(--muted); font-size: 14px;
+    margin: -2px 0 6px 28px; }
+  .advisory .measured.over { color: var(--warn); }
   .banner { background: #fdf6e3; border: 1px solid #ecdca6; border-radius: 6px; padding: 10px 14px; font-size: 15px; color: var(--warn); margin-bottom: 16px; }
   .err { color: var(--bad); margin-top: 12px; }
 
@@ -895,50 +903,19 @@ export const PAGE_HTML = `<!doctype html>
   }
 
   /**
-   * Ask the model again, on demand (audit/reread.ts).
+   * The re-read's result, rendered for the audit.
    *
-   * Placed here, above the decision, because this is where a person is deciding
-   * and this is evidence they may want first: the verdict rests on a reading,
-   * and *does the model still read it that way* is a question replay cannot
-   * answer. It is the difference between telling an applicant "our arithmetic
-   * is consistent" and "we asked again and got the same answer".
+   * This used to be reachable from two places: here, beside the decision, and
+   * from the audit. Offering it beside the decision asked the wrong person the
+   * wrong question. An agent deciding a submission is judging the label against
+   * the application; *does the model still read it the same way* is a question
+   * about the system, and the answer changes nothing they are deciding — the
+   * panel said so itself, twice, which is the tell that it did not belong
+   * there. It also spent a metered call at the moment attention was scarcest.
    *
-   * On demand rather than automatic, because each one costs a model call
-   * against a metered API. A panel that re-read every verdict on load would
-   * spend an inference budget on being opened.
+   * So the re-read is a step of the audit and only that: a second, paid check a
+   * reviewer runs deliberately when examining a determination already made.
    */
-  function renderReread(d) {
-    var box = el('div', 'decision')
-    box.appendChild(el('h2', null, 'Check the reading'))
-    if (!d.submissionId) return box
-
-    box.appendChild(el('p', 'note',
-      'The verdict above was computed from a reading of this artwork. This puts the same image back to the model and compares what comes back. It changes nothing — it is evidence about the reading, which re-deriving the verdict cannot give you.'))
-
-    var out = el('div')
-    var btn = el('button', 'secondary', 'Ask the model again')
-    btn.addEventListener('click', function () {
-      btn.disabled = true
-      btn.textContent = 'Reading…'
-      out.textContent = ''
-      fetch('/audit/reread/' + encodeURIComponent(d.submissionId), { method: 'POST' })
-        .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b } }) })
-        .then(function (res) {
-          btn.disabled = false
-          btn.textContent = 'Ask the model again'
-          renderRereadResult(out, res)
-        })
-        .catch(function () {
-          btn.disabled = false
-          btn.textContent = 'Ask the model again'
-          out.appendChild(el('p', 'err', 'The model could not be reached. The verdict is unaffected.'))
-        })
-    })
-    box.appendChild(btn)
-    box.appendChild(out)
-    return box
-  }
-
   function renderRereadResult(out, res) {
     var b = res.body || {}
     if (!res.ok) {
@@ -1088,6 +1065,23 @@ export const PAGE_HTML = `<!doctype html>
     return box
   }
 
+  /**
+   * Which §16.22 checks were ticked when the button was pressed.
+   *
+   * Always sent, even when empty — the empty array is the answer "asked, and
+   * confirmed nothing", which is a permitted decision and precisely the fact
+   * worth having. Sending nothing would be indistinguishable from a client
+   * that never asked.
+   */
+  function tickedAdvisory() {
+    var boxes = document.querySelectorAll('[data-advisory]')
+    var ids = []
+    for (var i = 0; i < boxes.length; i++) {
+      if (boxes[i].checked) ids.push(boxes[i].getAttribute('data-advisory'))
+    }
+    return ids
+  }
+
   function submitDecision(d, decision, button) {
     var err = byId('decisionErr')
     err.classList.add('hidden')
@@ -1099,7 +1093,8 @@ export const PAGE_HTML = `<!doctype html>
         submissionId: d.submissionId,
         decision: decision,
         decidedBy: byId('decidedBy').value.trim(),
-        note: byId('decisionNote').value
+        note: byId('decisionNote').value,
+        advisoryConfirmed: tickedAdvisory()
       })
     }).then(function (r) {
       return r.json().then(function (body) { return { ok: r.ok, body: body } })
@@ -1161,12 +1156,25 @@ export const PAGE_HTML = `<!doctype html>
     })
     if (w.advisory && w.advisory.length) {
       var adv = el('div', 'advisory')
-      adv.appendChild(el('p', 'note', 'Please check these by eye — they cannot be verified from an image:'))
+      adv.appendChild(el('p', 'note', 'Confirm these by eye. TTB states it does not routinely review type size, characters per inch or contrasting background — that duty sits with the applicant:'))
       w.advisory.forEach(function (a) {
         var lab = el('label')
         var cb = document.createElement('input'); cb.type = 'checkbox'
+        // Tagged so the decision can record which of these a person actually
+        // confirmed. Nothing here gates the decision — an approval with none
+        // ticked is permitted, stored, and visible to an audit (D53).
+        cb.setAttribute('data-advisory', a.id)
         lab.appendChild(cb); lab.appendChild(document.createTextNode(a.text))
+        if (a.citation) { var c = el('span', 'cite'); c.textContent = a.citation; lab.appendChild(c) }
         adv.appendChild(lab)
+        // The figure sits under the check it informs, never in place of it.
+        // Its class carries whether it clears the bound so the agent can see
+        // which way it points without reading the sentence.
+        if (a.measurement) {
+          var m = el('div', 'measured' + (a.measurement.meets === false ? ' over' : ''))
+          m.textContent = a.measurement.text
+          adv.appendChild(m)
+        }
       })
       box.appendChild(adv)
     }
@@ -1471,6 +1479,24 @@ export const PAGE_HTML = `<!doctype html>
         sbs.appendChild(el('div', 'dev', '· ' + x))
       })
       out.appendChild(sbs)
+    }
+
+    // What the deciding agent confirmed by eye, and what they did not.
+    //
+    // Never phrased as a failing. The checks are advisory, nothing required
+    // them, and TTB does not routinely review these either — so an approval
+    // with none ticked is a legitimate decision, not a breach. What it IS is a
+    // fact an auditor is entitled to, and the reason the column exists: shown
+    // across enough records it says whether the checklist is doing anything.
+    if (record.advisory_confirmed !== null && record.advisory_confirmed !== undefined) {
+      var confirmed = []
+      try { confirmed = JSON.parse(record.advisory_confirmed) || [] } catch (e) { confirmed = [] }
+      var ac = el('div', 'finding')
+      ac.appendChild(el('div', 'freq', 'Formatting checks confirmed by eye'))
+      ac.appendChild(el('div', 'dev', confirmed.length === 0
+        ? 'None. The agent was asked and confirmed none — permitted, and recorded.'
+        : confirmed.join(', ')))
+      out.appendChild(ac)
     }
 
     // The re-read is a second, paid step.
@@ -2068,7 +2094,6 @@ export const PAGE_HTML = `<!doctype html>
     d.fields.forEach(function (f) { left.appendChild(renderField(f)) })
     left.appendChild(renderWarning(d.warning))
     left.appendChild(renderFindings(d.findings, d.policy))
-    left.appendChild(renderReread(d))
     left.appendChild(renderDecision(d))
     layout.appendChild(left)
 

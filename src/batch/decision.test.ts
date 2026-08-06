@@ -12,6 +12,7 @@ import type { Outcome } from '../domain/types.js'
 import {
   alreadyDecided,
   checkDecision,
+  confirmedAdvisory,
   DecisionRejected,
   isDecision,
   isDisagreement,
@@ -235,5 +236,51 @@ describe('the decision history (ui-design §2.3)', () => {
     // Distinct from "everything agreed", which is what an empty list reads as
     // if the caller does not say otherwise.
     expect(await listDecisions(rows([]))).toEqual([])
+  })
+})
+
+describe('the advisory checks are recorded, never enforced (D53)', () => {
+  const known = ['header_bold', 'type_size', 'legibility']
+
+  it('keeps what the agent actually confirmed', () => {
+    expect(confirmedAdvisory(['type_size', 'header_bold'], known)).toEqual([
+      'header_bold',
+      'type_size',
+    ])
+  })
+
+  it('accepts a decision with nothing confirmed', () => {
+    // The whole point. Five compulsory ticks per submission become a reflex
+    // within a shift, and a reflex manufactures a record of checks nobody
+    // performed — which is worse than an empty one, because it looks like
+    // evidence. An unconfirmed approval is visible to an audit instead.
+    expect(confirmedAdvisory([], known)).toEqual([])
+  })
+
+  it('distinguishes "confirmed nothing" from "was never asked"', () => {
+    // Null is a decision recorded before the column existed. Collapsing the
+    // two would turn every historical decision into an attested omission.
+    expect(confirmedAdvisory(null, known)).toBeNull()
+  })
+
+  it('drops an id this deployment does not recognise, rather than refusing', () => {
+    // The realistic case is a stale tab: a check was renamed in the reference
+    // data while an agent had the screen open. Refusing the determination over
+    // that would be the checklist blocking a decision, which is exactly what
+    // D53 says it must never do.
+    expect(confirmedAdvisory(['type_size', 'removed_check'], known)).toEqual(['type_size'])
+  })
+
+  it('is order-stable and free of duplicates, so two records compare', () => {
+    expect(confirmedAdvisory(['type_size', 'type_size', 'header_bold'], known)).toEqual([
+      'header_bold',
+      'type_size',
+    ])
+  })
+
+  it('ignores anything that is not a string', () => {
+    expect(confirmedAdvisory([1, null, 'type_size'] as unknown as string[], known)).toEqual([
+      'type_size',
+    ])
   })
 })

@@ -755,12 +755,16 @@ failures are more specific.
 │                                                                         │
 │  ─────────────────────────────────────────────────────────────────      │
 │                                                                         │
-│  Please check these by eye — they cannot be verified from an image:      │
+│  Confirm these by eye. TTB does not routinely review them either:       │
 │                                                                         │
-│    ☐  "GOVERNMENT WARNING:" is in bold type                             │
-│    ☐  The rest of the warning is NOT in bold                            │
-│    ☐  Type size meets the minimum for this container size               │
-│    ☐  The warning is separate from other label text                     │
+│    ☐  "GOVERNMENT WARNING:" is in bold type        16.22(a)(2)          │
+│    ☐  The rest of the warning is NOT in bold       16.22(a)(2)          │
+│    ☐  Type size meets the container minimum        16.22(b)             │
+│         estimated 2.03 mm, against the 2 mm minimum                     │
+│    ☐  The warning is separate from other text      16.21                │
+│    ☐  Legible, contrasting, not compressed         16.22(a)(1),(3)-(4)  │
+│         estimated 29 characters per inch, against 25                    │
+│    ☐  Cannot be removed without water or solvent   16.22(c)             │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 

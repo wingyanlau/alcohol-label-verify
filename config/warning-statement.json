@@ -32,29 +32,38 @@
     {
       "id": "header_bold",
       "text": "\"GOVERNMENT WARNING:\" is in bold type",
-      "citation": "27 CFR 16.22"
+      "citation": "27 CFR 16.22(a)(2)",
+      "note": "Required in both directions by (a)(2): capital letters AND bold type. The capitals are checked automatically; the bold is not. Stroke weight is the one item here no measurement supplies — it is perception, not metrology (D53)."
     },
     {
       "id": "remainder_not_bold",
       "text": "The rest of the warning is NOT in bold type",
-      "citation": "27 CFR 16.22",
+      "citation": "27 CFR 16.22(a)(2)",
       "note": "Raised by no stakeholder. The regulation constrains over-emphasis as well as under-emphasis."
     },
     {
       "id": "type_size",
       "text": "Type size meets the minimum for this container size (up to 237 mL: 1 mm; over 237 mL to 3 L: 2 mm; over 3 L: 3 mm)",
-      "citation": "27 CFR 16.22",
-      "note": "Depends on net contents, so it cannot be evaluated from artwork alone."
+      "citation": "27 CFR 16.22(b)",
+      "note": "Measurable in principle — net contents is application-record data, and the form's coordinate space gives the scale — but any measurement must be corrected by the reduction percentage declared in item 19, or it under-measures every label shrunk to fit the affix box (D53)."
     },
     {
       "id": "separateness",
       "text": "The warning is separate and apart from other label information",
-      "citation": "27 CFR 16.22"
+      "citation": "27 CFR 16.21",
+      "note": "Cited to 16.21, not 16.22: the separateness requirement sits in the mandatory-information section, alongside the statement itself."
     },
     {
       "id": "legibility",
       "text": "Readily legible, on a contrasting background, characters not compressed",
-      "citation": "27 CFR 16.22"
+      "citation": "27 CFR 16.22(a)(1), (a)(3)-(4)",
+      "note": "Legibility and contrast state no threshold, so no figure is offered — a computed ratio judged against an invented bar would carry more authority than the regulation grants it. Compression is different: (a)(4) sets 40, 25 and 12 characters per inch at 1, 2 and 3 mm."
+    },
+    {
+      "id": "firmly_affixed",
+      "text": "The label cannot be removed without thorough application of water or other solvents",
+      "citation": "27 CFR 16.22(c)",
+      "note": "Applies only where the label is not an integral part of the container. A property of the physical article, so no image can establish it — the one item here that no pipeline could ever close (D53)."
     }
   ]
 }

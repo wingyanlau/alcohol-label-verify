@@ -329,6 +329,8 @@ export function createGeminiProvider(opts: GeminiOptions): Provider {
         fields: request.fields,
         includeWarning: request.includeWarning,
         includeProductType: request.includeProductType === true,
+        includeReduction: request.includeReduction === true,
+        includeGeometry: request.includeGeometry === true,
       })
 
       return {

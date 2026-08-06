@@ -67,6 +67,8 @@ export function createReplayProvider(recorded: readonly RecordedExtraction[]): E
           fields: request.fields,
           includeWarning: request.includeWarning,
           includeProductType: request.includeProductType === true,
+          includeReduction: request.includeReduction === true,
+          includeGeometry: request.includeGeometry === true,
         }),
         rawResponse: row.rawResponse,
         provenance: {
