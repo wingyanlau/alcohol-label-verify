@@ -163,7 +163,7 @@ export const PAGE_HTML = `<!doctype html>
   .finding .rule { color: var(--muted); font-size: 14px; margin-top: 4px;
                    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .advisory { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 14px; }
-  .advisory label { display: flex; gap: 10px; align-items: flex-start; padding: 5px 0; }
+  .advisory-item { display: flex; gap: 10px; align-items: baseline; padding: 5px 0; }
   /* Pushed to the trailing edge so the checks read as a column, not a ragged list. */
   .advisory .cite { color: var(--muted); font-size: 14px; margin-left: auto;
     padding-left: 12px; white-space: nowrap; }
@@ -1051,6 +1051,16 @@ export const PAGE_HTML = `<!doctype html>
     var err = el('p', 'inline-err hidden'); err.id = 'decisionErr'
     box.appendChild(err)
 
+    // What the three buttons mean, where they are pressed.
+    //
+    // The distinction between rejecting and returning is the entire reason
+    // there are three, and it was explained only in the landing page's guided
+    // run — read once by an evaluator, and never again by an agent. It also
+    // answers the question the label invites: "Return" reads as an action, and
+    // this prototype performs none.
+    box.appendChild(el('p', 'hint',
+      'Approve or reject the label on what the evidence shows. Return it when the filing could not be assessed — an unreadable scan, artwork cut off — which is not a finding against the applicant. Determinations are recorded here; this prototype sends nothing to the applicant.'))
+
     var row = el('div', 'decision-actions')
     ;[['APPROVED', 'Approve'], ['REJECTED', 'Reject'], ['RETURNED', 'Return for better artwork']]
       .forEach(function (pair) {
@@ -1065,23 +1075,6 @@ export const PAGE_HTML = `<!doctype html>
     return box
   }
 
-  /**
-   * Which §16.22 checks were ticked when the button was pressed.
-   *
-   * Always sent, even when empty — the empty array is the answer "asked, and
-   * confirmed nothing", which is a permitted decision and precisely the fact
-   * worth having. Sending nothing would be indistinguishable from a client
-   * that never asked.
-   */
-  function tickedAdvisory() {
-    var boxes = document.querySelectorAll('[data-advisory]')
-    var ids = []
-    for (var i = 0; i < boxes.length; i++) {
-      if (boxes[i].checked) ids.push(boxes[i].getAttribute('data-advisory'))
-    }
-    return ids
-  }
-
   function submitDecision(d, decision, button) {
     var err = byId('decisionErr')
     err.classList.add('hidden')
@@ -1093,8 +1086,7 @@ export const PAGE_HTML = `<!doctype html>
         submissionId: d.submissionId,
         decision: decision,
         decidedBy: byId('decidedBy').value.trim(),
-        note: byId('decisionNote').value,
-        advisoryConfirmed: tickedAdvisory()
+        note: byId('decisionNote').value
       })
     }).then(function (r) {
       return r.json().then(function (body) { return { ok: r.ok, body: body } })
@@ -1155,21 +1147,30 @@ export const PAGE_HTML = `<!doctype html>
       box.appendChild(s)
     })
     if (w.advisory && w.advisory.length) {
+      // Reference, not a form (D54).
+      //
+      // These were checkboxes, and a checkbox is a promise: it looks like
+      // something that must be done before proceeding. Nothing required them,
+      // so the control lied about itself — and it could express only "yes",
+      // leaving an agent who SAW a formatting breach nowhere to put it.
+      // Enforcing them instead would have been worse: TTB does not routinely
+      // review these, so compelling an attestation invents an obligation the
+      // agency does not impose, and six compelled ticks a submission become a
+      // reflex that manufactures evidence.
+      //
+      // So this states the requirements and what was measured, and asks for
+      // nothing. When the measurement is good enough to be a finding, the
+      // agent's judgement is captured by the decision itself (D54).
       var adv = el('div', 'advisory')
-      adv.appendChild(el('p', 'note', 'Confirm these by eye. TTB states it does not routinely review type size, characters per inch or contrasting background — that duty sits with the applicant:'))
+      adv.appendChild(el('p', 'note', 'Formatting requirements, for reference. TTB does not routinely review type size, characters per inch or contrasting background — that duty sits with the applicant:'))
       w.advisory.forEach(function (a) {
-        var lab = el('label')
-        var cb = document.createElement('input'); cb.type = 'checkbox'
-        // Tagged so the decision can record which of these a person actually
-        // confirmed. Nothing here gates the decision — an approval with none
-        // ticked is permitted, stored, and visible to an audit (D53).
-        cb.setAttribute('data-advisory', a.id)
-        lab.appendChild(cb); lab.appendChild(document.createTextNode(a.text))
-        if (a.citation) { var c = el('span', 'cite'); c.textContent = a.citation; lab.appendChild(c) }
-        adv.appendChild(lab)
-        // The figure sits under the check it informs, never in place of it.
-        // Its class carries whether it clears the bound so the agent can see
-        // which way it points without reading the sentence.
+        var row = el('div', 'advisory-item')
+        row.appendChild(document.createTextNode(a.text))
+        if (a.citation) { var c = el('span', 'cite'); c.textContent = a.citation; row.appendChild(c) }
+        adv.appendChild(row)
+        // The figure sits under the requirement it informs. This is the part
+        // worth having: it replaces an agent squinting at artwork with a
+        // number, and says it is an estimate.
         if (a.measurement) {
           var m = el('div', 'measured' + (a.measurement.meets === false ? ' over' : ''))
           m.textContent = a.measurement.text
@@ -1481,23 +1482,11 @@ export const PAGE_HTML = `<!doctype html>
       out.appendChild(sbs)
     }
 
-    // What the deciding agent confirmed by eye, and what they did not.
-    //
-    // Never phrased as a failing. The checks are advisory, nothing required
-    // them, and TTB does not routinely review these either — so an approval
-    // with none ticked is a legitimate decision, not a breach. What it IS is a
-    // fact an auditor is entitled to, and the reason the column exists: shown
-    // across enough records it says whether the checklist is doing anything.
-    if (record.advisory_confirmed !== null && record.advisory_confirmed !== undefined) {
-      var confirmed = []
-      try { confirmed = JSON.parse(record.advisory_confirmed) || [] } catch (e) { confirmed = [] }
-      var ac = el('div', 'finding')
-      ac.appendChild(el('div', 'freq', 'Formatting checks confirmed by eye'))
-      ac.appendChild(el('div', 'dev', confirmed.length === 0
-        ? 'None. The agent was asked and confirmed none — permitted, and recorded.'
-        : confirmed.join(', ')))
-      out.appendChild(ac)
-    }
+    // Nothing renders the confirmed-checks column, and that is deliberate
+    // rather than an omission: the checklist that fed it is gone (D54), so no
+    // row will ever carry a value. A panel that can only render blank is worse
+    // than none — an auditor would take its absence for a fault. The column
+    // stays as the record of a reversal; the surface for it does not.
 
     // The re-read is a second, paid step.
     var rereadStatus = { value: 'not-run' }

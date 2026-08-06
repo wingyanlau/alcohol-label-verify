@@ -178,3 +178,25 @@ describe('the re-read belongs to the audit, and nowhere else', () => {
     expect(PAGE_HTML).not.toContain('renderReread(')
   })
 })
+
+describe('the formatting requirements are reference, not a form (D54)', () => {
+  /*
+   * They were checkboxes. A checkbox is a promise that something must be done
+   * before proceeding, and nothing required them — so the control lied about
+   * itself, and could express only agreement: an agent who saw a breach had
+   * nowhere to put it. Enforcing instead would have invented an obligation TTB
+   * does not impose, and compelled ticks manufacture evidence.
+   */
+  it('asks for nothing', () => {
+    expect(PAGE_HTML).not.toContain('data-advisory')
+    expect(PAGE_HTML).not.toContain('advisoryConfirmed')
+  })
+
+  it('still states the requirements and what was measured', () => {
+    // Dropping the input must not drop the content. The citation and the
+    // figure are the reason the block exists at all.
+    expect(PAGE_HTML).toContain('Formatting requirements, for reference')
+    expect(PAGE_HTML).toContain('advisory-item')
+    expect(PAGE_HTML).toContain('measured')
+  })
+})

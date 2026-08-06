@@ -755,16 +755,17 @@ failures are more specific.
 │                                                                         │
 │  ─────────────────────────────────────────────────────────────────      │
 │                                                                         │
-│  Confirm these by eye. TTB does not routinely review them either:       │
+│  Formatting requirements — for reference, not a checklist.              │
+│  TTB does not routinely review these; the duty is the applicant’s.      │
 │                                                                         │
-│    ☐  "GOVERNMENT WARNING:" is in bold type        16.22(a)(2)          │
-│    ☐  The rest of the warning is NOT in bold       16.22(a)(2)          │
-│    ☐  Type size meets the container minimum        16.22(b)             │
+│     "GOVERNMENT WARNING:" in bold type            16.22(a)(2)           │
+│     Remainder not in bold                         16.22(a)(2)           │
+│     Type size meets the container minimum         16.22(b)              │
 │         estimated 2.03 mm, against the 2 mm minimum                     │
-│    ☐  The warning is separate from other text      16.21                │
-│    ☐  Legible, contrasting, not compressed         16.22(a)(1),(3)-(4)  │
+│     Separate and apart from other information     16.21                 │
+│     Legible, contrasting, not compressed          16.22(a)(1),(3)-(4)   │
 │         estimated 29 characters per inch, against 25                    │
-│    ☐  Cannot be removed without water or solvent   16.22(c)             │
+│     Firmly affixed                                16.22(c)              │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -827,6 +828,131 @@ fill"*, never *"failed"*.
 It happens when the application states no product type, because product type is
 what selection runs on. It reads as an open question rather than a pass — the
 outcome is `CLEAR_CONFIRM_POLICY`, not `CLEAR`.
+
+---
+
+## 7b. Results — The Determination
+
+The three buttons at the foot of the results panel. They were built and never
+specified here, which is how the least documented control on the screen came to
+be the most consequential one.
+
+The system never approves. It presents evidence, states what it would suggest,
+and this is where a person decides — so the recorded outcome is the agent's act,
+stored beside the recommendation they were looking at (D40, §18.5).
+
+### 7b.1 The three, and why not two
+
+| Button | Records | Means |
+|---|---|---|
+| **Approve** | `APPROVED` | The label may be issued a certificate |
+| **Reject** | `REJECTED` | A finding **against the applicant** — the label breaches a regulation |
+| **Return for better artwork** | `RETURNED` | The filing **could not be assessed** — an unreadable scan, artwork cut off. Not a finding against the applicant |
+
+**Return is not a soft Reject, and collapsing the two would destroy the only
+ground truth this system has.** Agreement between the recommendation and the
+decision is the measure of whether the rules are any good, and the evidence any
+future automation must earn its way past. If every unreadable scan recorded as
+the system having been overruled, that measure would be noise.
+
+It is also the human act that matches `UNREADABLE` and `INCOMPLETE`: the system
+says *I could not read this*, and Return is the answer to it.
+
+### 7b.2 What the screen must say
+
+An agent presses these hundreds of times; the labels stay short, and the
+guidance sits under them as a single line:
+
+> Approve or reject the label on what the evidence shows. Return it when the
+> filing could not be assessed — an unreadable scan, artwork cut off — which is
+> not a finding against the applicant. Determinations are recorded here; this
+> prototype sends nothing to the applicant.
+
+The last sentence is not boilerplate. **"Return" reads as an action and this
+prototype performs none** — there is no notification, no webhook, no COLA call,
+because direct COLA integration is excluded by the source (N1). An evaluator who
+reads the button as *send it back* has been misled by the label, and the fix
+belongs on the screen rather than in a document.
+
+### 7b.3 The rest of the panel
+
+- **Who is deciding** — a list, not a free-text box. A typed name could be a
+  colleague, a typo, or nobody, and the record could not tell the three apart.
+  Only registered compliance agents appear, and the server re-checks it (§4.5).
+- **It is not authentication**, and the hint says so rather than letting a
+  dropdown imply a login (§19.5).
+- **A reason** — required only when the decision departs from the
+  recommendation. That row is the most valuable one in the table: it says the
+  rules and a professional parted company, and a blank note makes it unreadable
+  to whoever reviews the rules later.
+- **The formatting requirements** (§7) ask for nothing. They are reference, and
+  the agent's judgement on them is captured by the determination itself rather
+  than by a control beside it (D54) — see below.
+- **A verdict is decided once.** A second press — two tabs, a double click —
+  is refused rather than appended, because approval is a legal act and should
+  not be quietly replaceable. A corrected submission gets a new verdict, which
+  is decidable again.
+
+### 7b.4 Where the confirmation rate comes from
+
+The loop the determination closes, and the reason there is no checklist:
+
+```
+   extraction        the model reads — label and record, blind to each other
+        │
+        ▼
+   checks            rules compare, against versioned reference data
+        │
+        ▼
+   recommendation    an outcome, with a finding per rule and its citation
+        │
+        ▼
+   determination     a person approves, rejects or returns
+        │
+        ▼
+   agreement         decision beside recommended_outcome, per outcome
+        │
+        ▼
+   the signal        where the rules and a professional part company
+```
+
+**What is built, and what is not:**
+
+| Step | Status |
+|---|---|
+| Extraction, checks, recommendation | **Built** |
+| Determination recorded against the recommendation | **Built** — `decision.recommended_outcome` beside `decision.decision` |
+| Agreement measured and served | **Built** — `agreementByOutcome`, over the `decision_by_agreement` index, at `GET /audit/decisions` |
+| §16.22 formatting rules inside the recommendation | **Not built** — see D54 for the entry condition |
+| Using the agreement rate to tune anything | **Not built, and not planned for the prototype** |
+
+The recommendation is stored beside the decision rather than joined from the
+verdict, because a correction supersedes a verdict (UC-3) and a join would then
+report the agent as answering something the system never said.
+
+**The last row is the point of this section.** The signal is *captured* today
+and *acted on* by nobody. No threshold moves because of it, no model is
+retrained, no rule is rewritten automatically — and none of that is in
+prototype scope. What the prototype demonstrates is that the data required to
+do any of it accrues as a by-product of ordinary work, at no extra cost to the
+agent, and is the only labelled record in the system that is not the rules
+marking their own homework. Where it would lead is
+`toward-llm-policy.md` §4 and §5; that document is a plan with stop conditions,
+not a commitment.
+
+**This is the confirmation rate, and it is better than a tick.** A checkbox
+measures whether somebody clicked; agreement measures whether a professional
+reached the same conclusion as the rules on a decision that carries consequences.
+It is also the only labelled data in the system that is not the rules marking
+their own work — which is what any tuning, and any future model-based engine,
+would have to be judged against (`toward-llm-policy.md` §4).
+
+**What is not yet in the loop is the §16.22 formatting rules.** They reach the
+screen as reference and stop there. They join it when a shortfall becomes a
+finding at `severity: advisory`, which lifts the outcome to
+`CLEAR_CONFIRM_POLICY` and puts the question to the agent as part of the
+determination they were making anyway. The entry condition is measurement
+quality, and D54 records why it is not met today.
 
 ---
 
@@ -992,10 +1118,18 @@ Target WCAG 2.1 AA (§5.4).
 | Settings | Nothing a user should be configuring |
 | Onboarding tour | If it needs a tour it has failed NF-U |
 | Confidence percentages | A number invites false precision; *"please double-check this one"* is more actionable |
-| Approve / reject buttons | **N7** — the system informs, it does not decide. Adding them would misrepresent what the tool is |
+| A verdict the system reaches on its own | **N7** — the system informs, it does not decide. No outcome is ever `approved` |
+| Automatic tuning from the agreement rate | The signal is recorded, never acted on (§7b.4). Nothing adjusts itself here |
 
-The last is the most important omission. There is no button that records a
-compliance decision, because that decision is the agent's and is made in COLA.
+**Superseded — approve / reject buttons.** This section used to list them as
+absent, on the grounds that the decision is made in COLA. They exist now (§7b),
+and the distinction that resolves it is worth keeping rather than quietly
+editing away: **the system still reaches no verdict**. It records the one a
+person reached. What was correct in the original entry — no machine-made
+determination — is unchanged; what was wrong was assuming that meant the act
+could not be captured here. Storing it is what gives the system any ground
+truth at all (§18.5), and without it every measure of these rules would be the
+rules marking their own work.
 
 ---
 
