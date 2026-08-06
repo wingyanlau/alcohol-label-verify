@@ -8,6 +8,11 @@ dist/
 .DS_Store
 coverage/
 
+# editor scratch
+*.swp
+*.swo
+*~
+
 # generated build artefacts
 docs/review/*.pdf
 testdata/.build/
