@@ -1,7 +1,11 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
 
-  "name": "alcohol-label-verify",
+  // Staging is the only environment. This was `alcohol-label-verify`, the
+  // production worker — which meant a bare `wrangler deploy`, with no
+  // `--env`, would recreate the deployment that was deleted for serving
+  // ungated. The default target is now the one environment that exists.
+  "name": "alcohol-label-verify-staging",
   "main": "src/index.ts",
 
   // The bundled demonstration corpus. `testdata/` ships as static assets so the
@@ -111,15 +115,15 @@
   // Transient content: submission PDFs and rasterised regions, held for the
   // life of a job and purged on completion (B-D10). The durable record lives
   // in D1 and keeps only the digest.
-  "r2_buckets": [{ "binding": "STAGING", "bucket_name": "alcohol-label-verify-staging" }],
+  "r2_buckets": [{ "binding": "STAGING", "bucket_name": "alcohol-label-verify-content-staging" }],
 
   // The durable record: jobs, submissions, extractions, verdicts, and an
   // append-only hash-chained transaction history (D32).
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "alcohol-label-verify",
-      "database_id": "ac8a691b-3b4b-4518-9539-54fe81203529"
+      "database_name": "alcohol-label-verify-staging",
+      "database_id": "9ac6b347-6668-408f-9c6d-998e27fbdfb1"
     }
   ],
 
@@ -132,10 +136,10 @@
   "browser": { "binding": "BROWSER" },
 
   "queues": {
-    "producers": [{ "binding": "WORK", "queue": "alcohol-label-verify-work" }],
+    "producers": [{ "binding": "WORK", "queue": "alcohol-label-verify-work-staging" }],
     "consumers": [
       {
-        "queue": "alcohol-label-verify-work",
+        "queue": "alcohol-label-verify-work-staging",
         // One submission per invocation. Batching would serialise the two
         // parallel extractions against the 6-connection cap (B-D4).
         "max_batch_size": 1,
@@ -157,7 +161,7 @@
         // already prefers Containers over Browser Rendering for this reason.
         "max_concurrency": 1,
         "max_retries": 8,
-        "dead_letter_queue": "alcohol-label-verify-dlq"
+        "dead_letter_queue": "alcohol-label-verify-dlq-staging"
       }
     ]
   },

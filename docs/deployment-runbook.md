@@ -9,7 +9,7 @@ first and a container later.*
 | Status | Current as of 2026-08-03 |
 | Environments | `staging` only. `production` has been removed — worker, workflow and `env.production` config |
 | Staging | Deployed on every merge to `main`. Address not published — this repository is public and inference is metered |
-| Production | **Deleted 2026-08-06.** It was serving without a gate — no secrets were set, and the gate opens when unconfigured (D49) — while its address sat in a public file. It held no data: the D1 was never migrated. `env.production` and `deploy-production.yml` were removed with it, so nothing can recreate it by accident. Re-creating one means re-adding both — and **setting the gate secrets before the first deploy**, or it returns open |
+| Production | **Deleted 2026-08-06.** It was serving without a gate — no secrets were set, and the gate opens when unconfigured (D49) — while its address sat in a public file. Its resources were deleted with it. `env.production`, `deploy-production.yml` and the `:production` scripts are gone, and the top-level `name` no longer points at it, so neither a push to `prod` nor a bare `wrangler deploy` can bring it back. Re-creating one means re-adding all of that — and **setting the gate secrets before the first deploy**, or it returns open |
 
 ---
 
@@ -22,13 +22,16 @@ commands in §4 and nothing else.*
 |---|---|---|---|
 | Cloudflare account | `Wing.lawrence@gmail.com's Account` | see `wrangler whoami` — deliberately not committed | pre-existing |
 
-**Production — deleted 2026-08-06.** The worker is gone, and with it
-`deploy-production.yml` and `env.production`, so nothing can redeploy it. The
-table below is kept as the record of what was created, and because **three
-resources outlived the worker and are now orphaned**: the D1, both queues and
-the R2 bucket still exist on the account. They are empty or unused — the D1 was
-never migrated — and are left rather than deleted so this history stays
-checkable. Delete them when the account is next tidied:
+**Production — deleted 2026-08-06, resources and all.** The table below is the
+record of what was created, not of what exists; every row in it has been
+removed from the account.
+
+What was in it, checked before deleting rather than assumed: the D1 *had* been
+migrated, to schema v1, and held **one** row — an `audit_event` reading
+`schema.initialised`, written by migration 0001. No job, submission, extraction
+or verdict, and no applicant content. The R2 bucket held zero objects. An
+earlier note here said the database was never migrated; that was inferred from
+a failed query rather than checked, and it was wrong.
 
 | Resource | Name | Identifier | Created |
 |---|---|---|---|
